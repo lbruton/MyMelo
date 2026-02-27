@@ -1,4 +1,18 @@
-const CACHE_NAME = 'melody-v2.3';
+/**
+ * @file My Melody Chat — Service worker for PWA caching.
+ *
+ * Implements app shell caching with stale-while-revalidate for static assets
+ * and network-only for API and data routes. Cache versioning uses melody-vX.Y format.
+ *
+ * @version 2.4.0
+ */
+
+/**
+ * Cache version identifier. Bump on each deploy to invalidate stale assets.
+ * Format: melody-vMAJOR.MINOR (e.g., melody-v2.3).
+ * @type {string}
+ */
+const CACHE_NAME = 'melody-v2.4';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -10,7 +24,16 @@ const APP_SHELL = [
   '/images/icon-512.png'
 ];
 
-// Install — pre-cache app shell
+/**
+ * Handles the install event -- pre-caches the app shell.
+ *
+ * Opens the versioned cache, adds all {@link APP_SHELL} URLs, then calls
+ * {@link ServiceWorkerGlobalScope.skipWaiting skipWaiting} so the new
+ * service worker activates immediately without waiting for existing clients
+ * to close.
+ *
+ * @listens InstallEvent
+ */
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME)
@@ -19,7 +42,15 @@ self.addEventListener('install', (e) => {
   );
 });
 
-// Activate — clean old caches
+/**
+ * Handles the activate event -- purges outdated caches.
+ *
+ * Iterates all cache keys and deletes any that do not match the current
+ * {@link CACHE_NAME}, then calls {@link Clients.claim claim} so this
+ * service worker takes control of all open clients immediately.
+ *
+ * @listens ExtendableEvent
+ */
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then(keys =>
@@ -30,7 +61,20 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Fetch — network-only for API/data, stale-while-revalidate for static
+/**
+ * Handles the fetch event -- routes requests by path prefix.
+ *
+ * - `/api/*` and `/data/*` requests are **network-only** (the handler returns
+ *   without calling {@link FetchEvent.respondWith respondWith}, so the browser
+ *   performs a normal network fetch).
+ * - All other requests use **stale-while-revalidate**: the cached response is
+ *   returned immediately if available while a network fetch runs in the
+ *   background to update the cache. If no cached response exists, the network
+ *   response is awaited. If the network fetch fails, the stale cached copy is
+ *   used as a fallback.
+ *
+ * @listens FetchEvent
+ */
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 

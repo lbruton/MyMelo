@@ -6,3 +6,4 @@ data/
 .mcp.json
 .spec-workflow/
 .claude/
+devops/version.lock

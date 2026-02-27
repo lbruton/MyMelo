@@ -1,3 +1,13 @@
+/**
+ * @file My Melody Chat — Client-side SPA logic.
+ *
+ * Handles chat UI, image gallery, memories display, audio feedback,
+ * PWA install prompt, settings, and first-time welcome flow.
+ * No framework — vanilla JavaScript with DOM manipulation.
+ *
+ * @version 2.4.0
+ */
+
 // ─── DOM refs ───
 const chatArea = document.getElementById('chatArea');
 const messageInput = document.getElementById('messageInput');
@@ -19,6 +29,14 @@ const settingsDropdown = document.getElementById('settingsDropdown');
 const darkModeToggle = document.getElementById('darkModeToggle');
 const replyStyleSelect = document.getElementById('replyStyleSelect');
 const soundToggle = document.getElementById('soundToggle');
+
+// ─── Session ───
+/** @type {string} Unique session ID for conversation buffer (new per tab, persists on refresh). */
+const sessionId = sessionStorage.getItem('melodySessionId') || (() => {
+  const id = crypto.randomUUID();
+  sessionStorage.setItem('melodySessionId', id);
+  return id;
+})();
 
 // ─── State ───
 let pendingImageBase64 = null;
@@ -50,6 +68,11 @@ if (soundEnabled) {
 // ─── Web Audio API Sound Engine ───
 let audioCtx = null;
 
+/**
+ * Get or create the shared AudioContext, resuming it if suspended.
+ *
+ * @returns {AudioContext|null} The active AudioContext, or null if Web Audio is unavailable.
+ */
 function getAudioContext() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -58,6 +81,11 @@ function getAudioContext() {
   return audioCtx;
 }
 
+/**
+ * Play a two-note ascending chime (C5 to E5) when a reply arrives.
+ *
+ * @returns {void}
+ */
 function playReplyChime() {
   if (!soundEnabled) return;
   const ctx = getAudioContext();
@@ -78,6 +106,11 @@ function playReplyChime() {
   });
 }
 
+/**
+ * Play a short A5 blip sound when the typing indicator appears.
+ *
+ * @returns {void}
+ */
 function playTypingTick() {
   if (!soundEnabled) return;
   const ctx = getAudioContext();
@@ -95,6 +128,11 @@ function playTypingTick() {
 }
 
 // Unlock audio on first interaction (Android requirement)
+/**
+ * Unlock the AudioContext on first user interaction (required on Android).
+ *
+ * @returns {void}
+ */
 function unlockAudio() {
   getAudioContext();
   document.removeEventListener('touchstart', unlockAudio);
@@ -113,6 +151,11 @@ window.addEventListener('beforeinstallprompt', (e) => {
   showInstallBanner();
 });
 
+/**
+ * Create and display the PWA install banner in the app container.
+ *
+ * @returns {void}
+ */
 function showInstallBanner() {
   if (document.querySelector('.install-banner')) return;
   const banner = document.createElement('div');
@@ -203,6 +246,18 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 
 // ─── Chat ───
+/**
+ * Append a chat message bubble to the chat area with optional media attachments.
+ *
+ * @param {string} text - The message text content.
+ * @param {string} role - Either "user" or "assistant".
+ * @param {string|null} [imageDataURL] - Base64 data URL of a user-uploaded image.
+ * @param {string|null} [searchImageUrl] - URL of a Brave image search result.
+ * @param {{url: string, title?: string, thumbnail?: string}|null} [videoResult] - Brave video search result object.
+ * @param {Array<{url: string, title?: string}>|null} [sources] - Google Search grounding source links.
+ * @param {{title: string, url: string, wikiName: string}|null} [wikiSource] - Game wiki source card data.
+ * @returns {void}
+ */
 function addMessage(text, role, imageDataURL, searchImageUrl, videoResult, sources, wikiSource) {
   const msg = document.createElement('div');
   msg.className = `message ${role}`;
@@ -335,19 +390,38 @@ function addMessage(text, role, imageDataURL, searchImageUrl, videoResult, sourc
   chatArea.scrollTop = chatArea.scrollHeight;
 }
 
+/**
+ * Show the typing indicator and scroll the chat area to the bottom.
+ *
+ * @returns {void}
+ */
 function showTyping() {
   typingIndicator.classList.add('active');
   chatArea.scrollTop = chatArea.scrollHeight;
 }
 
+/**
+ * Hide the typing indicator.
+ *
+ * @returns {void}
+ */
 function hideTyping() {
   typingIndicator.classList.remove('active');
 }
 
+/**
+ * Parse search tags from an assistant reply, fetch media results, and render the message.
+ *
+ * @param {string} text - Raw reply text potentially containing [IMAGE_SEARCH:], [VIDEO_SEARCH:], [GALLERY_SEARCH:], or [WIKI_SEARCH:] tags.
+ * @param {Array<{url: string, title?: string}>|null} sources - Google Search grounding sources.
+ * @param {{title: string, url: string, wikiName: string}|null} wikiSource - Wiki source metadata from the server.
+ * @returns {Promise<void>}
+ */
 async function processReply(text, sources, wikiSource) {
   const imageSearchMatch = text.match(/\[IMAGE_SEARCH:\s*(.+?)\]/);
   const videoSearchMatch = text.match(/\[VIDEO_SEARCH:\s*(.+?)\]/);
   const gallerySearchMatch = text.match(/\[GALLERY_SEARCH:\s*(.+?)\]/);
+  const reactionMatch = text.match(/\[REACTION:\s*(\w+)\]/);
 
   // Clean tags from display text
   let displayText = text
@@ -355,10 +429,12 @@ async function processReply(text, sources, wikiSource) {
     .replace(/\[VIDEO_SEARCH:\s*.+?\]/g, '')
     .replace(/\[GALLERY_SEARCH:\s*.+?\]/g, '')
     .replace(/\[WIKI_SEARCH:\s*.+?\]/g, '')
+    .replace(/\[REACTION:\s*\w+\]/g, '')
     .trim();
 
   let searchImageUrl = null;
   let videoResult = null;
+  let reactionGifUrl = null;
 
   if (imageSearchMatch) {
     try {
@@ -395,12 +471,57 @@ async function processReply(text, sources, wikiSource) {
     }
   }
 
+  // Render message immediately (don't block on reaction GIF)
   addMessage(displayText, 'assistant', null, searchImageUrl, videoResult, sources, wikiSource);
+
+  // Fetch and append reaction GIF asynchronously (non-blocking)
+  if (reactionMatch) {
+    const emotion = reactionMatch[1].toLowerCase();
+    const categories = REACTION_MAP[emotion];
+    if (categories) {
+      const category = categories[Math.floor(Math.random() * categories.length)];
+      const lastBubble = chatArea.querySelector('.message.assistant:last-child .message-bubble');
+      fetch(`https://nekos.best/api/v2/${category}?amount=1`)
+        .then(r => r.json())
+        .then(data => {
+          const url = data.results?.[0]?.url;
+          if (url && lastBubble) {
+            const gif = document.createElement('img');
+            gif.src = url;
+            gif.alt = 'Reaction';
+            gif.style.cssText = 'max-width:200px;border-radius:8px;margin-top:8px;display:block';
+            gif.addEventListener('error', () => gif.remove());
+            lastBubble.appendChild(gif);
+          }
+        })
+        .catch(() => { /* silently skip */ });
+    }
+  }
 }
+
+// ─── Reaction GIF Mapping ───
+/** @type {Object<string, string[]>} Map emotion keywords to nekos.best API categories. */
+const REACTION_MAP = {
+  happy: ['happy', 'smile', 'dance'],
+  love: ['hug', 'cuddle', 'pat'],
+  shy: ['blush', 'wave', 'wink'],
+  sad: ['cry', 'pout'],
+  think: ['think', 'nod', 'shrug'],
+  playful: ['tickle', 'poke', 'nom'],
+  angry: ['angry', 'facepalm', 'baka'],
+  sassy: ['smug', 'thumbsup', 'yeet'],
+  tired: ['yawn', 'bored', 'sleep'],
+  excited: ['highfive', 'thumbsup', 'dance']
+};
 
 let welcomeActive = false;
 let welcomeResolve = null;
 
+/**
+ * Send the current input (text and/or image) to the chat API or route it to the welcome flow.
+ *
+ * @returns {Promise<void>}
+ */
 async function sendMessage() {
   const text = messageInput.value.trim();
   if (!text && !pendingImageBase64) return;
@@ -419,7 +540,7 @@ async function sendMessage() {
   messageInput.value = '';
   addMessage(text, 'user', pendingImageDataURL);
 
-  const body = { message: text, replyStyle };
+  const body = { message: text, replyStyle, sessionId };
   if (pendingImageBase64) {
     body.imageBase64 = pendingImageBase64;
     body.imageMime = pendingImageMime;
@@ -474,6 +595,12 @@ imageInput.addEventListener('change', (e) => {
   imageInput.value = '';
 });
 
+/**
+ * Compress an image file to max 1024px width JPEG and stage it for upload.
+ *
+ * @param {File} file - The image file selected by the user.
+ * @returns {void}
+ */
 function compressAndStage(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -508,6 +635,11 @@ function compressAndStage(file) {
   reader.readAsDataURL(file);
 }
 
+/**
+ * Clear the staged image data and hide the preview thumbnail.
+ *
+ * @returns {void}
+ */
 function clearImagePreview() {
   pendingImageBase64 = null;
   pendingImageMime = null;
@@ -519,6 +651,12 @@ function clearImagePreview() {
 removeImageBtn.addEventListener('click', clearImagePreview);
 
 // ─── Lightbox ───
+/**
+ * Open the fullscreen lightbox overlay with the given image source.
+ *
+ * @param {string} src - The image URL or data URL to display.
+ * @returns {void}
+ */
 function openLightbox(src) {
   lightboxImg.src = src;
   lightbox.classList.add('active');
@@ -530,6 +668,11 @@ lightbox.addEventListener('click', (e) => {
 });
 
 // ─── Gallery ───
+/**
+ * Fetch saved images from the API and render them in the gallery grid.
+ *
+ * @returns {Promise<void>}
+ */
 async function loadGallery() {
   try {
     const res = await fetch('/api/images');
@@ -572,6 +715,11 @@ async function loadGallery() {
 // ─── Relationship stats ───
 const relationshipStats = document.getElementById('relationshipStats');
 
+/**
+ * Fetch friendship stats and render Days/Chats/Streak cards in the memories tab.
+ *
+ * @returns {Promise<void>}
+ */
 async function loadRelationshipStats() {
   try {
     const res = await fetch('/api/relationship');
@@ -598,6 +746,11 @@ async function loadRelationshipStats() {
 // ─── Memories ───
 refreshMemoriesBtn.addEventListener('click', loadMemories);
 
+/**
+ * Fetch all mem0 memories (friend + melody tracks) and render them as cards with delete buttons.
+ *
+ * @returns {Promise<void>}
+ */
 async function loadMemories() {
   loadRelationshipStats();
   memoryList.innerHTML = '<p class="empty-state">Loading memories...</p>';
@@ -679,6 +832,12 @@ const COLOR_MAP = {
   black: '#5C4155', white: '#FF69B4'
 };
 
+/**
+ * Map a color name to a hex value and apply it as the CSS accent highlight variable.
+ *
+ * @param {string} colorName - A color name to look up in COLOR_MAP (e.g. "pink", "teal").
+ * @returns {void}
+ */
 function applyAccentColor(colorName) {
   if (!colorName) return;
   const key = colorName.toLowerCase().trim();
@@ -694,6 +853,11 @@ const savedAccent = localStorage.getItem('accentColor');
 if (savedAccent) applyAccentColor(savedAccent);
 
 // ─── Welcome Flow ───
+/**
+ * Run the first-time welcome onboarding or show a personalized returning-user greeting.
+ *
+ * @returns {Promise<void>}
+ */
 async function runWelcomeFlow() {
   const welcomeEl = chatArea.querySelector('.welcome-message');
 

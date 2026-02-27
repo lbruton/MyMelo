@@ -1,7 +1,7 @@
 {
   "name": "my-melody-chat",
-  "version": "2.1.0",
-  "description": "My Melody Companion Chat App v2.1 — Gemini 3.1 Pro, Brave Search, dual-track mem0, relationship system",
+  "version": "2.4.0",
+  "description": "My Melody Companion Chat App v2.4.0 — Sanrio universe, conversation buffer, personality tuning, reaction GIFs",
   "type": "module",
   "main": "server.js",
   "scripts": {

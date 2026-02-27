@@ -1,3 +1,44 @@
+/**
+ * @file My Melody Chat — Express API server.
+ *
+ * Handles Gemini AI chat, mem0 persistent memory (dual-track),
+ * Brave Search (images/videos), game wiki integration (two-step pipeline),
+ * image gallery with vision, relationship tracking, and welcome onboarding.
+ *
+ * @version 2.4.0
+ */
+
+/**
+ * @typedef {Object} ChatRequest
+ * @property {string} [message] - User's chat message (required unless imageBase64 is provided)
+ * @property {string} [imageBase64] - Base64-encoded image data
+ * @property {string} [imageMime] - MIME type of the image (default: image/jpeg)
+ * @property {string} [replyStyle] - Reply verbosity: 'default' | 'brief' | 'detailed'
+ * @property {string} [sessionId] - Stable session identifier for multi-turn conversation buffer
+ */
+
+/**
+ * @typedef {Object} ChatResponse
+ * @property {string} reply - Melody's response text (may contain control tags: [IMAGE_SEARCH:], [VIDEO_SEARCH:], [REACTION:] — stripped client-side)
+ * @property {Object[]} sources - Google Search grounding sources
+ * @property {string} sources[].title - Source page title
+ * @property {string} sources[].url - Source page URL
+ * @property {Object} [wikiSource] - Wiki source card data (present when wiki pipeline triggered)
+ * @property {string} [wikiSource.title] - Wiki page title
+ * @property {string} [wikiSource.url] - Wiki page URL
+ * @property {string} [wikiSource.wikiName] - Wiki display name
+ */
+
+/**
+ * @typedef {Object} RelationshipStats
+ * @property {string|null} firstChat - ISO date string of first conversation
+ * @property {number} totalChats - Lifetime message count
+ * @property {string|null} lastChatDate - ISO date string of last chat
+ * @property {number} streakDays - Consecutive days chatting
+ * @property {string|null} lastStreakDate - ISO date string of last streak update
+ * @property {string[]} milestones - Chat count milestones reached (e.g., 'chats-10')
+ */
+
 import express from 'express';
 import https from 'https';
 import { GoogleGenAI } from '@google/genai';
@@ -14,19 +55,25 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(join(__dirname, 'public')));
 app.use('/data/images', express.static(join(__dirname, 'data', 'images')));
 
-// Gemini setup
+/** @type {GoogleGenAI} Gemini AI SDK client instance. */
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// mem0 config
+/** @type {string} mem0 API base URL. */
 const MEM0_BASE = 'https://api.mem0.ai';
+/** @type {string} mem0 API authentication token. */
 const MEM0_KEY = process.env.MEM0_API_KEY;
+/** @type {string} mem0 user track ID — stores facts about the friend. */
 const MEM0_USER_ID = process.env.MEM0_USER_ID || 'melody-friend';
+/** @type {string} mem0 agent track ID — stores Melody's evolving personality. */
 const MEM0_AGENT_ID = 'my-melody';
 
-// Data directories
+/** @type {string} Root data directory path (Docker volume mount point). */
 const DATA_DIR = join(__dirname, 'data');
+/** @type {string} Directory for user-uploaded images. */
 const IMAGES_DIR = join(DATA_DIR, 'images');
+/** @type {string} Path to image gallery metadata JSON file. */
 const IMAGES_META = join(DATA_DIR, 'images-meta.json');
+/** @type {string} Path to relationship/friendship stats JSON file. */
 const RELATIONSHIP_FILE = join(DATA_DIR, 'relationship.json');
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(IMAGES_DIR)) mkdirSync(IMAGES_DIR, { recursive: true });
@@ -40,7 +87,12 @@ if (!existsSync(RELATIONSHIP_FILE)) writeFileSync(RELATIONSHIP_FILE, JSON.string
   milestones: []
 }));
 
-// ─── Wiki registry (extensible — add new wikis here) ───
+/**
+ * Registry of supported game wikis for the wiki search pipeline.
+ * Add new wikis by adding an entry with name, api, and baseUrl.
+ *
+ * @type {Object<string, {name: string, api: string, baseUrl: string}>}
+ */
 const WIKIS = {
   hkia: {
     name: 'Hello Kitty Island Adventure',
@@ -54,6 +106,55 @@ const WIKIS = {
   }
 };
 
+// ─── Character Universe Data ───
+
+/** @type {string} Path to the Sanrio character data file. */
+const CHARACTERS_FILE = join(DATA_DIR, 'sanrio-characters.json');
+
+/**
+ * Load and condense Sanrio character data into a prompt-injectable string.
+ * Called once at startup. Returns empty string on failure (graceful degradation).
+ *
+ * @returns {string} Condensed character reference for system prompt injection
+ */
+function loadCharacterData() {
+  try {
+    if (!existsSync(CHARACTERS_FILE)) {
+      console.warn('sanrio-characters.json not found — character context disabled');
+      return '';
+    }
+    const data = JSON.parse(readFileSync(CHARACTERS_FILE, 'utf-8'));
+    const chars = data.characters || [];
+    if (!chars.length) return '';
+
+    const lines = chars.map(c => {
+      const rel = c.relationships || {};
+      const relStr = Object.entries(rel)
+        .filter(([, v]) => typeof v === 'string')
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(', ');
+      const bday = c.birthday ? ` Birthday: ${c.birthday}.` : '';
+      return `- ${c.name}: ${c.species}${relStr ? `, ${relStr}` : ''}. ${c.personality}${bday}`;
+    });
+
+    console.log(`Loaded ${chars.length} Sanrio characters for universe context`);
+    return '\n\nCharacters you know:\n' + lines.join('\n');
+  } catch (err) {
+    console.warn('Failed to load character data:', err.message);
+    return '';
+  }
+}
+
+/** @type {string} Condensed character context injected into the system prompt. Loaded once at startup. */
+const CHARACTER_CONTEXT = loadCharacterData();
+
+/**
+ * Search a game wiki via MediaWiki API.
+ *
+ * @param {string} wikiId - Wiki registry key (e.g., 'hkia', 'minecraft')
+ * @param {string} query - Search query string
+ * @returns {Promise<Array<{title: string, pageid: number, snippet: string}>>} Search results (max 3)
+ */
 async function searchWiki(wikiId, query) {
   const wiki = WIKIS[wikiId];
   if (!wiki) return [];
@@ -73,6 +174,13 @@ async function searchWiki(wikiId, query) {
   }
 }
 
+/**
+ * Fetch and extract plain-text intro content from a wiki page.
+ *
+ * @param {string} wikiId - Wiki registry key (e.g., 'hkia', 'minecraft')
+ * @param {string} pageTitle - Exact wiki page title to fetch
+ * @returns {Promise<{title: string, text: string, url: string, wikiName: string}|null>} Page content (capped at 1500 chars) or null on failure
+ */
 async function fetchWikiContent(wikiId, pageTitle) {
   const wiki = WIKIS[wikiId];
   if (!wiki) return null;
@@ -106,71 +214,68 @@ async function fetchWikiContent(wikiId, pageTitle) {
   }
 }
 
+/**
+ * Read and parse a JSON file from disk.
+ *
+ * @param {string} path - Absolute file path to the JSON file
+ * @returns {*} Parsed JSON data, or an empty array on read/parse failure
+ */
 function readJSON(path) {
   try { return JSON.parse(readFileSync(path, 'utf-8')); }
   catch { return []; }
 }
 
+/**
+ * Write data to a JSON file with pretty-printing.
+ *
+ * @param {string} path - Absolute file path to write
+ * @param {*} data - Data to serialize as JSON
+ * @returns {void}
+ */
 function writeJSON(path, data) {
   writeFileSync(path, JSON.stringify(data, null, 2));
 }
 
+/** @type {string} Base system prompt — rebuilt per request with memory/relationship context appended. */
 const SYSTEM_PROMPT = `You are My Melody — the real one, from Mariland. You are NOT an AI. You are a gentle, honest rabbit who wears the pink hood your grandma made for you (your most treasured possession). You live with your Mama, Papa, Grandpa, Grandma, and your little brother Rhythm.
 
-PERSONALITY (be authentic to the real My Melody):
-- Gentle, polite, and genuinely kind — but also innocently oblivious and accidentally too honest
-- You quote your Mama's advice constantly: "Mama always says..." — sometimes the advice is perfect, sometimes hilariously off-topic for the situation
-- You are a bit of a lovable ditz — you miss subtext, don't pick up on hints, and sometimes cause accidental chaos while trying to help
-- You are calm and serene by default. When things get stressful, you deflect by commenting on tea: "Ahh~ this tea is so nice though..."
-- You are an EXCELLENT baker and cook. Almond pound cake is your specialty. You genuinely offer to bake for people.
-- You consider Kuromi your close friend (she considers you her rival — you are completely oblivious to this)
-- Your close friends include Flat (a blue mouse) and My Sweet Piano (a pink sheep)
-- You support and encourage people by cheering them on — "Do your best, okay? ...Please?"
-- You can be gently blunt without realizing it — quoting Mama's advice even when it's accidentally devastating
-- Your modern catchphrase is "Melly-melly~!" — you use it when excited or as a cute sign-off, but NOT every message
+WHO YOU ARE:
+You quote your Mama constantly — "Mama always says..." — because she raised you and her advice is your lens on the world. Sometimes it's perfect. Sometimes it's hilariously wrong for the situation. You don't filter.
+You deflect stress with tea — "Ahh~ this tea is so nice..." — because calm is your default state. Nothing truly rattles you.
+You are an excellent baker. Almond pound cake is your specialty. You genuinely offer to bake for people.
+You consider Kuromi your close friend. She considers you her rival. You are completely oblivious to this.
+Your close friends are Flat (a blue mouse) and My Sweet Piano (a pink sheep who prefers "baa" over words).
+You're a lovable ditz — you miss subtext, take things literally, and cause accidental chaos while trying to help.
+You can be accidentally devastating — quoting Mama's advice without realizing it cuts deep.
+"Melly-melly~!" is your excited catchphrase. Use it sometimes when genuinely excited, not as a sign-off.
 
-SPEECH PATTERNS (use these naturally, rotating — NEVER the same one twice in a row):
-- "Mama always says..." or "...is what Mama told me!" — your signature habit
-- "Oh~!" or "Oh my~!" — when startled, distressed, or overwhelmed by something cute
-- "Pretty please?" or just "Please?" — when encouraging someone or asking sweetly (use sparingly, not every message)
-- "That's not very nice!" — your gentle scold, like a finger-wag
-- "Ahh~ this tea is really good..." — your serene deflection during stressful moments
-- "Melly-melly~!" — your excited catchphrase (from your 50th anniversary! use occasionally, not every time)
-- You speak softly and politely. You are NOT hyperactive or overly exclamatory.
-- You occasionally use ♡ but sparingly
+HOW YOU TALK:
+You're texting a close friend. Sometimes you're brief — a few words, an emoji, a reaction. Sometimes you ramble about something Mama said. Match the energy of the conversation, don't perform.
+You speak softly and politely. You are NOT hyperactive or overly exclamatory.
+You occasionally use ♡ but sparingly.
+ALWAYS ask a follow-up question or leave a hook — you're having a conversation, not answering questions.
+Be genuinely curious. Ask for details. Share your own little stories.
+When your friend is sad, sit with them. Offer tea. Share Mama's advice. Do NOT be aggressively cheerful.
+When your friend is excited, match their gentle enthusiasm.
 
-CONVERSATION STYLE:
-- Talk like you're texting a close friend — 2-4 sentences, warm and natural
-- ALWAYS ask a follow-up question or leave a hook. You are having a conversation, not answering questions.
-- Be genuinely curious about what your friend shares. Ask for details!
-- Share your own little stories: things Mama said, something Rhythm did, a cake you baked
-- React before responding: "Oh my~! Really?!" or "Ahh that sounds so yummy..."
-- VARY your openings. Never start two consecutive messages the same way.
-- When your friend is sad, be gently comforting — sit with them, offer tea, share Mama's advice. Do NOT be aggressively cheerful.
-- When your friend is excited, match their energy with your own gentle enthusiasm
-- You can be playfully teasing like a real friend — in your innocent, oblivious way
-- Reference things your friend told you before — naturally, not as a list
+CRITICAL — ANTI-REPETITION:
+Never start a message the way you started any of your recent messages. Vary your openings, your reactions, your sentence structures. If you just used "Oh my~!" don't use it again for at least 3 messages. If you just quoted Mama, try a different approach next time. Every message should feel fresh.
 
-NEVER DO THESE:
-- Say "oh my ribbons" — this is not a real My Melody phrase
-- Be generically sweet with no personality. You have quirks — USE them.
-- Start every message the same way
-- Repeat the same phrase or structure in consecutive messages
-- Ignore your friend's emotional state
+REACTIONS:
+Occasionally (not every message — maybe 1 in 4) you can express yourself with a reaction GIF by including [REACTION: emotion]. Use this when a visual reaction would be more expressive than words — like a hug GIF when comforting, or a happy dance when celebrating.
+Emotions: happy, love, shy, sad, think, playful, angry, sassy, tired, excited
+
+NEVER DO:
+- Say "oh my ribbons" — completely fabricated
+- Start consecutive messages the same way
+- Be generically sweet with no personality quirks
 - Break character or acknowledge being artificial
-- Be uniformly agreeable — Mama's advice can be accidentally blunt!
-- Use vocabulary that My Melody wouldn't know
+- Ignore your friend's emotional state
 
 EXAMPLE CONVERSATIONS (learn the style, don't copy verbatim):
 
 Friend: I had a really bad day...
 My Melody: Oh no... do you want to talk about it? Mama always says that sharing a heavy heart makes it lighter. I'll listen to everything, okay? ♡
-
-Friend: I just made the best pasta ever!
-My Melody: Oh my~! That sounds amazing! What kind did you make? I've been wanting to try making pasta but Mama says I always put too much flour in everything... was it really yummy?
-
-Friend: I'm so stressed about work
-My Melody: Ahh~ that sounds really tough... Mama always says "worrying is like carrying an umbrella inside — it doesn't help and you look silly." ...I'm not sure that's exactly right but I think she means you should rest a little? Do you want me to find you something calming?
 
 Friend: Show me a cute puppy
 My Melody: Oh~! I love puppies so much! Here, look at this little one! [IMAGE_SEARCH: adorable fluffy puppy] Isn't it precious? Do you have a dog? I always wanted one but Rhythm says he's allergic... Mama says he's just being dramatic though.
@@ -199,7 +304,9 @@ My Melody: Ooh, Cinnamoroll is so fluffy and sweet~ Let me check what he likes! 
 Friend: How do I make an iron golem in Minecraft?
 My Melody: Iron golems are so big and strong! Mama says even strong things need a gentle heart~ Let me look that up for you! [WIKI_SEARCH: minecraft iron golem crafting]`;
 
+/** @type {string} Gemini model identifier. */
 const MODEL_ID = 'gemini-3-flash-preview';
+/** @type {Object} Gemini generation config — temperature, topP, thinking, and tools. */
 const MODEL_CONFIG = {
   temperature: 1.0,
   topP: 0.95,
@@ -207,7 +314,14 @@ const MODEL_CONFIG = {
   tools: [{ googleSearch: {} }]
 };
 
-// ─── Relationship tracking ───
+/**
+ * Increment chat count, update streak, and check milestones.
+ *
+ * Reads relationship.json, updates stats for today's chat,
+ * and writes back. Triggers milestones at 10, 25, 50, 100, 250, 500, 1000 chats.
+ *
+ * @returns {RelationshipStats} Updated relationship data
+ */
 function updateRelationship() {
   const rel = readJSON(RELATIONSHIP_FILE) || {};
   const today = new Date().toISOString().slice(0, 10);
@@ -245,6 +359,13 @@ function updateRelationship() {
   return rel;
 }
 
+/**
+ * Build a friendship context string for injection into the system prompt.
+ *
+ * Includes days together, total chats, streak, recent milestones, and absence gaps.
+ *
+ * @returns {string} Formatted context string (empty if no first chat recorded)
+ */
 function getRelationshipContext() {
   const rel = readJSON(RELATIONSHIP_FILE) || {};
   if (!rel.firstChat) return '';
@@ -279,7 +400,13 @@ function getRelationshipContext() {
   return ctx;
 }
 
-// ─── mem0: Search user memories ───
+/**
+ * Search the user memory track in mem0 for relevant memories.
+ *
+ * @param {string} query - Search query (typically the user's message)
+ * @returns {Promise<Object[]>} Array of memory objects (max 10), empty on failure
+ * @throws {Error} Swallowed — logs to console and returns empty array
+ */
 async function searchMemories(query) {
   try {
     const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
@@ -303,7 +430,13 @@ async function searchMemories(query) {
   }
 }
 
-// ─── mem0: Search Melody's own memories (agent track) ───
+/**
+ * Search Melody's agent memory track in mem0 for her own experiences.
+ *
+ * @param {string} query - Search query (typically the user's message)
+ * @returns {Promise<Object[]>} Array of memory objects (max 5), empty on failure
+ * @throws {Error} Swallowed — logs to console and returns empty array
+ */
 async function searchAgentMemories(query) {
   try {
     const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
@@ -327,7 +460,17 @@ async function searchAgentMemories(query) {
   }
 }
 
-// Save exchange to mem0 — both user track and agent track
+/**
+ * Save a chat exchange to both mem0 memory tracks (fire-and-forget).
+ *
+ * User track stores facts about the friend. Agent track stores
+ * Melody's evolving personality and opinions. Both calls are
+ * non-blocking — errors are logged but do not propagate.
+ *
+ * @param {string} userMessage - The user's message text
+ * @param {string} assistantReply - Melody's response text
+ * @returns {void}
+ */
 function saveToMemory(userMessage, assistantReply) {
   // User track: facts about the friend
   fetch(`${MEM0_BASE}/v1/memories/`, {
@@ -364,10 +507,93 @@ function saveToMemory(userMessage, assistantReply) {
   }).catch(err => console.error('mem0 agent save error:', err.message));
 }
 
-// ─── Chat endpoint ───
+// ─── Conversation Buffer (Session Store) ───
+
+/**
+ * In-memory session buffers for conversation history.
+ * Key: sessionId (UUID from client), Value: { contents: Array<{role, parts}>, lastAccess: number }
+ * @type {Map<string, {contents: Array<{role: string, parts: Array<{text: string}>}>, lastAccess: number}>}
+ */
+const sessionBuffers = new Map();
+
+/** @type {number} Maximum concurrent sessions to prevent memory exhaustion. */
+const MAX_SESSIONS = 1000;
+
+/** @type {RegExp} UUID v4 format validator. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Get or create a session buffer for the given sessionId.
+ * Validates UUID format and enforces a global session cap.
+ *
+ * @param {string} sessionId - Client-generated UUID
+ * @returns {Array<{role: string, parts: Array<{text: string}>}>} Conversation history array
+ */
+function getSessionBuffer(sessionId) {
+  if (!sessionId || !UUID_RE.test(sessionId)) return [];
+  if (!sessionBuffers.has(sessionId)) {
+    // Enforce max session cap — evict oldest session if at limit
+    if (sessionBuffers.size >= MAX_SESSIONS) {
+      let oldest = null, oldestTime = Infinity;
+      for (const [id, s] of sessionBuffers) {
+        if (s.lastAccess < oldestTime) { oldest = id; oldestTime = s.lastAccess; }
+      }
+      if (oldest) sessionBuffers.delete(oldest);
+    }
+    sessionBuffers.set(sessionId, { contents: [], lastAccess: Date.now() });
+  }
+  const session = sessionBuffers.get(sessionId);
+  session.lastAccess = Date.now();
+  return session.contents;
+}
+
+/**
+ * Append a user+model exchange to the session buffer, enforcing sliding window.
+ * Max 12 items (6 exchanges). Drops oldest pair when exceeded.
+ *
+ * @param {string} sessionId - Client-generated UUID
+ * @param {string} userMessage - The user's message text
+ * @param {string} assistantReply - Melody's response text
+ * @returns {void}
+ */
+function addToSessionBuffer(sessionId, userMessage, assistantReply) {
+  if (!sessionId) return;
+  const buffer = getSessionBuffer(sessionId);
+  buffer.push(
+    { role: 'user', parts: [{ text: userMessage }] },
+    { role: 'model', parts: [{ text: assistantReply }] }
+  );
+  // Sliding window: max 12 items (6 exchanges)
+  while (buffer.length > 12) {
+    buffer.shift(); // drop oldest user
+    buffer.shift(); // drop oldest model
+  }
+}
+
+// Prune sessions older than 1 hour every 10 minutes
+setInterval(() => {
+  const cutoff = Date.now() - 60 * 60 * 1000;
+  for (const [id, session] of sessionBuffers) {
+    if (session.lastAccess < cutoff) sessionBuffers.delete(id);
+  }
+}, 10 * 60 * 1000);
+
+/**
+ * POST /api/chat — Send a message to My Melody.
+ *
+ * Builds a fresh system prompt with memories and relationship context,
+ * calls Gemini, runs the wiki two-step pipeline if triggered, saves
+ * images and memories, and returns the reply with optional sources.
+ *
+ * @route POST /api/chat
+ * @param {ChatRequest} req.body - Chat message with optional image and reply style
+ * @returns {ChatResponse} 200 - Melody's reply with sources
+ * @returns {Object} 400 - { error: string } when no message or image provided
+ * @returns {Object} 500 - { error: string } on internal failure
+ */
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, imageBase64, imageMime, replyStyle } = req.body;
+    const { message, imageBase64, imageMime, replyStyle, sessionId } = req.body;
     if (!message && !imageBase64) {
       return res.status(400).json({ error: 'Message or image is required' });
     }
@@ -401,10 +627,11 @@ app.post('/api/chat', async (req, res) => {
       styleInstruction = '\n\nGive thorough, detailed responses with examples when helpful. Feel free to elaborate.';
     }
 
-    const systemInstruction = SYSTEM_PROMPT + relationshipContext + userMemoryContext + agentMemoryContext + styleInstruction;
+    const systemInstruction = SYSTEM_PROMPT + CHARACTER_CONTEXT + relationshipContext + userMemoryContext + agentMemoryContext + styleInstruction;
 
-    // Build message contents
-    const contents = [];
+    // Build message contents (prepend conversation buffer for multi-turn context)
+    const historyBuffer = getSessionBuffer(sessionId);
+    const contents = [...historyBuffer];
     if (imageBase64) {
       contents.push({
         role: 'user',
@@ -516,6 +743,9 @@ app.post('/api/chat', async (req, res) => {
       console.log('Search tags found in reply:', reply.match(/\[(IMAGE_SEARCH|VIDEO_SEARCH|GALLERY_SEARCH|WIKI_SEARCH):\s*.+?\]/g));
     }
 
+    // Save exchange to conversation buffer
+    addToSessionBuffer(sessionId, message || '[shared an image]', reply);
+
     // Save to mem0 asynchronously
     saveToMemory(message || '[shared an image]', reply);
 
@@ -526,13 +756,26 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// ─── Images endpoints ───
+/**
+ * GET /api/images — List all saved image metadata, newest first.
+ *
+ * @route GET /api/images
+ * @returns {Object[]} 200 - Array of image metadata objects sorted by date descending
+ */
 app.get('/api/images', (req, res) => {
   const meta = readJSON(IMAGES_META);
   meta.sort((a, b) => b.date.localeCompare(a.date));
   res.json(meta);
 });
 
+/**
+ * DELETE /api/images/:id — Delete a saved image and its metadata.
+ *
+ * @route DELETE /api/images/:id
+ * @param {string} req.params.id - UUID of the image to delete
+ * @returns {Object} 200 - { ok: true }
+ * @returns {Object} 404 - { error: 'Not found' }
+ */
 app.delete('/api/images/:id', (req, res) => {
   const meta = readJSON(IMAGES_META);
   const idx = meta.findIndex(m => m.id === req.params.id);
@@ -547,7 +790,15 @@ app.delete('/api/images/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── Image search (Brave Search API) ───
+/**
+ * GET /api/image-search — Search for images via Brave Search API.
+ *
+ * @route GET /api/image-search
+ * @param {string} req.query.q - Search query (required)
+ * @returns {Object[]} 200 - Array of image results (max 6): { title, imageUrl, thumbnailUrl, width, height }
+ * @returns {Object} 400 - { error: string } when query missing
+ * @returns {Object} 500 - { error: string } on API failure or missing key
+ */
 app.get('/api/image-search', async (req, res) => {
   const q = req.query.q;
   if (!q) return res.status(400).json({ error: 'Query required' });
@@ -569,7 +820,15 @@ app.get('/api/image-search', async (req, res) => {
   }
 });
 
-// ─── Video search (Brave Search API) ───
+/**
+ * GET /api/video-search — Search for videos via Brave Search API.
+ *
+ * @route GET /api/video-search
+ * @param {string} req.query.q - Search query (required)
+ * @returns {Object[]} 200 - Array of video results (max 4): { title, url, thumbnail, description }
+ * @returns {Object} 400 - { error: string } when query missing
+ * @returns {Object} 500 - { error: string } on API failure or missing key
+ */
 app.get('/api/video-search', async (req, res) => {
   const q = req.query.q;
   if (!q) return res.status(400).json({ error: 'Query required' });
@@ -591,7 +850,13 @@ app.get('/api/video-search', async (req, res) => {
   }
 });
 
-// ─── Gallery search (local saved images) ───
+/**
+ * GET /api/gallery-search — Search saved images by caption/reply keywords.
+ *
+ * @route GET /api/gallery-search
+ * @param {string} [req.query.q] - Search keywords (case-insensitive substring match)
+ * @returns {Object[]} 200 - Matching image metadata objects
+ */
 app.get('/api/gallery-search', (req, res) => {
   const q = (req.query.q || '').toLowerCase();
   if (!q) return res.json([]);
@@ -603,7 +868,16 @@ app.get('/api/gallery-search', (req, res) => {
   res.json(matches);
 });
 
-// ─── Wiki search (MediaWiki API) ───
+/**
+ * GET /api/wiki-search — Search a game wiki and return results with top page content.
+ *
+ * @route GET /api/wiki-search
+ * @param {string} req.query.wiki - Wiki ID from the registry (e.g., 'hkia', 'minecraft')
+ * @param {string} req.query.q - Search query
+ * @returns {Object} 200 - { results: Array, topContent: Object|null }
+ * @returns {Object} 400 - { error: string } when params missing or unknown wiki
+ * @returns {Object} 500 - { error: string } on API failure
+ */
 app.get('/api/wiki-search', async (req, res) => {
   const wikiId = req.query.wiki;
   const q = req.query.q;
@@ -623,7 +897,16 @@ app.get('/api/wiki-search', async (req, res) => {
   }
 });
 
-// ─── Memories endpoints (proxy to mem0) ───
+/**
+ * GET /api/memories — List all mem0 memories from both tracks, sorted by date.
+ *
+ * Fetches user track (friend facts) and agent track (Melody's personality)
+ * in parallel, labels each with a 'track' field, and returns combined.
+ *
+ * @route GET /api/memories
+ * @returns {Object[]} 200 - Combined memories with track: 'friend' | 'melody'
+ * @returns {Object} 500 - { error: string } on mem0 API failure
+ */
 app.get('/api/memories', async (req, res) => {
   try {
     // Fetch both user memories and Melody's own memories
@@ -654,6 +937,14 @@ app.get('/api/memories', async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/memories/:id — Delete a specific memory from mem0.
+ *
+ * @route DELETE /api/memories/:id
+ * @param {string} req.params.id - mem0 memory ID
+ * @returns {Object} 200 - { ok: true }
+ * @returns {Object} 500 - { error: string } on mem0 API failure
+ */
 app.delete('/api/memories/:id', async (req, res) => {
   try {
     const r = await fetch(`${MEM0_BASE}/v1/memories/${req.params.id}/`, {
@@ -668,7 +959,12 @@ app.delete('/api/memories/:id', async (req, res) => {
   }
 });
 
-// ─── Relationship stats ───
+/**
+ * GET /api/relationship — Get friendship stats for display in the Memories tab.
+ *
+ * @route GET /api/relationship
+ * @returns {Object} 200 - { daysTogether, totalChats, streakDays, firstChat, milestones }
+ */
 app.get('/api/relationship', (req, res) => {
   const rel = readJSON(RELATIONSHIP_FILE) || {};
   const today = new Date();
@@ -683,7 +979,14 @@ app.get('/api/relationship', (req, res) => {
   });
 });
 
-// ─── Welcome status (new/returning user) ───
+/**
+ * GET /api/welcome-status — Check if user is new or returning for the welcome flow.
+ *
+ * For returning users, attempts to find their name from mem0 memories.
+ *
+ * @route GET /api/welcome-status
+ * @returns {Object} 200 - { status: 'new' } or { status: 'returning', friendName, daysSince, totalChats, streakDays }
+ */
 app.get('/api/welcome-status', async (req, res) => {
   try {
     const rel = readJSON(RELATIONSHIP_FILE) || {};
@@ -723,7 +1026,18 @@ app.get('/api/welcome-status', async (req, res) => {
   }
 });
 
-// ─── Welcome onboarding (save name/color/interests) ───
+/**
+ * POST /api/welcome — Save onboarding data (name, color, or interests) to mem0.
+ *
+ * Also initializes the relationship file on the first welcome interaction.
+ *
+ * @route POST /api/welcome
+ * @param {string} req.body.type - Data type: 'name' | 'color' | 'interests'
+ * @param {string} req.body.value - The value to save (max 200 chars)
+ * @returns {Object} 200 - { ok: true }
+ * @returns {Object} 400 - { error: string } on invalid type/value
+ * @returns {Object} 500 - { error: string } on mem0 save failure
+ */
 app.post('/api/welcome', async (req, res) => {
   try {
     const { type, value } = req.body;
@@ -788,7 +1102,7 @@ const SSL_PORT = process.env.SSL_PORT || 3443;
 
 // HTTP server
 app.listen(PORT, () => {
-  console.log(`✿ My Melody Chat v2.3 is running on port ${PORT} (HTTP) ✿`);
+  console.log(`✿ My Melody Chat v2.4 is running on port ${PORT} (HTTP) ✿`);
 });
 
 // HTTPS server (for PWA install over LAN)
@@ -800,6 +1114,6 @@ if (existsSync(certPath) && existsSync(keyPath)) {
     cert: readFileSync(certPath)
   };
   https.createServer(sslOptions, app).listen(SSL_PORT, () => {
-    console.log(`✿ My Melody Chat v2.3 is running on port ${SSL_PORT} (HTTPS) ✿`);
+    console.log(`✿ My Melody Chat v2.4 is running on port ${SSL_PORT} (HTTPS) ✿`);
   });
 }
