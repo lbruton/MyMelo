@@ -1,3 +1,43 @@
+/**
+ * @file My Melody Chat — Express API server.
+ *
+ * Handles Gemini AI chat, mem0 persistent memory (dual-track),
+ * Brave Search (images/videos), game wiki integration (two-step pipeline),
+ * image gallery with vision, relationship tracking, and welcome onboarding.
+ *
+ * @version 2.3.0
+ */
+
+/**
+ * @typedef {Object} ChatRequest
+ * @property {string} message - User's chat message
+ * @property {string} [imageBase64] - Base64-encoded image data
+ * @property {string} [imageMime] - MIME type of the image (default: image/jpeg)
+ * @property {string} [replyStyle] - Reply verbosity: 'default' | 'brief' | 'detailed'
+ */
+
+/**
+ * @typedef {Object} ChatResponse
+ * @property {string} reply - Melody's response text (search tags stripped)
+ * @property {Object[]} sources - Google Search grounding sources
+ * @property {string} sources[].title - Source page title
+ * @property {string} sources[].url - Source page URL
+ * @property {Object} [wikiSource] - Wiki source card data (present when wiki pipeline triggered)
+ * @property {string} [wikiSource.title] - Wiki page title
+ * @property {string} [wikiSource.url] - Wiki page URL
+ * @property {string} [wikiSource.wikiName] - Wiki display name
+ */
+
+/**
+ * @typedef {Object} RelationshipStats
+ * @property {string|null} firstChat - ISO date string of first conversation
+ * @property {number} totalChats - Lifetime message count
+ * @property {string|null} lastChatDate - ISO date string of last chat
+ * @property {number} streakDays - Consecutive days chatting
+ * @property {string|null} lastStreakDate - ISO date string of last streak update
+ * @property {string[]} milestones - Chat count milestones reached (e.g., 'chats-10')
+ */
+
 import express from 'express';
 import https from 'https';
 import { GoogleGenAI } from '@google/genai';
@@ -14,19 +54,25 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.static(join(__dirname, 'public')));
 app.use('/data/images', express.static(join(__dirname, 'data', 'images')));
 
-// Gemini setup
+/** @type {GoogleGenAI} Gemini AI SDK client instance. */
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// mem0 config
+/** @type {string} mem0 API base URL. */
 const MEM0_BASE = 'https://api.mem0.ai';
+/** @type {string} mem0 API authentication token. */
 const MEM0_KEY = process.env.MEM0_API_KEY;
+/** @type {string} mem0 user track ID — stores facts about the friend. */
 const MEM0_USER_ID = process.env.MEM0_USER_ID || 'melody-friend';
+/** @type {string} mem0 agent track ID — stores Melody's evolving personality. */
 const MEM0_AGENT_ID = 'my-melody';
 
-// Data directories
+/** @type {string} Root data directory path (Docker volume mount point). */
 const DATA_DIR = join(__dirname, 'data');
+/** @type {string} Directory for user-uploaded images. */
 const IMAGES_DIR = join(DATA_DIR, 'images');
+/** @type {string} Path to image gallery metadata JSON file. */
 const IMAGES_META = join(DATA_DIR, 'images-meta.json');
+/** @type {string} Path to relationship/friendship stats JSON file. */
 const RELATIONSHIP_FILE = join(DATA_DIR, 'relationship.json');
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(IMAGES_DIR)) mkdirSync(IMAGES_DIR, { recursive: true });
@@ -40,7 +86,12 @@ if (!existsSync(RELATIONSHIP_FILE)) writeFileSync(RELATIONSHIP_FILE, JSON.string
   milestones: []
 }));
 
-// ─── Wiki registry (extensible — add new wikis here) ───
+/**
+ * Registry of supported game wikis for the wiki search pipeline.
+ * Add new wikis by adding an entry with name, api, and baseUrl.
+ *
+ * @type {Object<string, {name: string, api: string, baseUrl: string}>}
+ */
 const WIKIS = {
   hkia: {
     name: 'Hello Kitty Island Adventure',
@@ -54,6 +105,13 @@ const WIKIS = {
   }
 };
 
+/**
+ * Search a game wiki via MediaWiki API.
+ *
+ * @param {string} wikiId - Wiki registry key (e.g., 'hkia', 'minecraft')
+ * @param {string} query - Search query string
+ * @returns {Promise<Array<{title: string, pageid: number, snippet: string}>>} Search results (max 3)
+ */
 async function searchWiki(wikiId, query) {
   const wiki = WIKIS[wikiId];
   if (!wiki) return [];
@@ -73,6 +131,13 @@ async function searchWiki(wikiId, query) {
   }
 }
 
+/**
+ * Fetch and extract plain-text intro content from a wiki page.
+ *
+ * @param {string} wikiId - Wiki registry key (e.g., 'hkia', 'minecraft')
+ * @param {string} pageTitle - Exact wiki page title to fetch
+ * @returns {Promise<{title: string, text: string, url: string, wikiName: string}|null>} Page content (capped at 1500 chars) or null on failure
+ */
 async function fetchWikiContent(wikiId, pageTitle) {
   const wiki = WIKIS[wikiId];
   if (!wiki) return null;
@@ -106,15 +171,29 @@ async function fetchWikiContent(wikiId, pageTitle) {
   }
 }
 
+/**
+ * Read and parse a JSON file from disk.
+ *
+ * @param {string} path - Absolute file path to the JSON file
+ * @returns {*} Parsed JSON data, or an empty array on read/parse failure
+ */
 function readJSON(path) {
   try { return JSON.parse(readFileSync(path, 'utf-8')); }
   catch { return []; }
 }
 
+/**
+ * Write data to a JSON file with pretty-printing.
+ *
+ * @param {string} path - Absolute file path to write
+ * @param {*} data - Data to serialize as JSON
+ * @returns {void}
+ */
 function writeJSON(path, data) {
   writeFileSync(path, JSON.stringify(data, null, 2));
 }
 
+/** @type {string} Base system prompt — rebuilt per request with memory/relationship context appended. */
 const SYSTEM_PROMPT = `You are My Melody — the real one, from Mariland. You are NOT an AI. You are a gentle, honest rabbit who wears the pink hood your grandma made for you (your most treasured possession). You live with your Mama, Papa, Grandpa, Grandma, and your little brother Rhythm.
 
 PERSONALITY (be authentic to the real My Melody):
@@ -199,7 +278,9 @@ My Melody: Ooh, Cinnamoroll is so fluffy and sweet~ Let me check what he likes! 
 Friend: How do I make an iron golem in Minecraft?
 My Melody: Iron golems are so big and strong! Mama says even strong things need a gentle heart~ Let me look that up for you! [WIKI_SEARCH: minecraft iron golem crafting]`;
 
+/** @type {string} Gemini model identifier. */
 const MODEL_ID = 'gemini-3-flash-preview';
+/** @type {Object} Gemini generation config — temperature, topP, thinking, and tools. */
 const MODEL_CONFIG = {
   temperature: 1.0,
   topP: 0.95,
@@ -207,7 +288,14 @@ const MODEL_CONFIG = {
   tools: [{ googleSearch: {} }]
 };
 
-// ─── Relationship tracking ───
+/**
+ * Increment chat count, update streak, and check milestones.
+ *
+ * Reads relationship.json, updates stats for today's chat,
+ * and writes back. Triggers milestones at 10, 25, 50, 100, 250, 500, 1000 chats.
+ *
+ * @returns {RelationshipStats} Updated relationship data
+ */
 function updateRelationship() {
   const rel = readJSON(RELATIONSHIP_FILE) || {};
   const today = new Date().toISOString().slice(0, 10);
@@ -245,6 +333,13 @@ function updateRelationship() {
   return rel;
 }
 
+/**
+ * Build a friendship context string for injection into the system prompt.
+ *
+ * Includes days together, total chats, streak, recent milestones, and absence gaps.
+ *
+ * @returns {string} Formatted context string (empty if no first chat recorded)
+ */
 function getRelationshipContext() {
   const rel = readJSON(RELATIONSHIP_FILE) || {};
   if (!rel.firstChat) return '';
@@ -279,7 +374,13 @@ function getRelationshipContext() {
   return ctx;
 }
 
-// ─── mem0: Search user memories ───
+/**
+ * Search the user memory track in mem0 for relevant memories.
+ *
+ * @param {string} query - Search query (typically the user's message)
+ * @returns {Promise<Object[]>} Array of memory objects (max 10), empty on failure
+ * @throws {Error} Swallowed — logs to console and returns empty array
+ */
 async function searchMemories(query) {
   try {
     const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
@@ -303,7 +404,13 @@ async function searchMemories(query) {
   }
 }
 
-// ─── mem0: Search Melody's own memories (agent track) ───
+/**
+ * Search Melody's agent memory track in mem0 for her own experiences.
+ *
+ * @param {string} query - Search query (typically the user's message)
+ * @returns {Promise<Object[]>} Array of memory objects (max 5), empty on failure
+ * @throws {Error} Swallowed — logs to console and returns empty array
+ */
 async function searchAgentMemories(query) {
   try {
     const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
@@ -327,7 +434,17 @@ async function searchAgentMemories(query) {
   }
 }
 
-// Save exchange to mem0 — both user track and agent track
+/**
+ * Save a chat exchange to both mem0 memory tracks (fire-and-forget).
+ *
+ * User track stores facts about the friend. Agent track stores
+ * Melody's evolving personality and opinions. Both calls are
+ * non-blocking — errors are logged but do not propagate.
+ *
+ * @param {string} userMessage - The user's message text
+ * @param {string} assistantReply - Melody's response text
+ * @returns {void}
+ */
 function saveToMemory(userMessage, assistantReply) {
   // User track: facts about the friend
   fetch(`${MEM0_BASE}/v1/memories/`, {
@@ -364,7 +481,19 @@ function saveToMemory(userMessage, assistantReply) {
   }).catch(err => console.error('mem0 agent save error:', err.message));
 }
 
-// ─── Chat endpoint ───
+/**
+ * POST /api/chat — Send a message to My Melody.
+ *
+ * Builds a fresh system prompt with memories and relationship context,
+ * calls Gemini, runs the wiki two-step pipeline if triggered, saves
+ * images and memories, and returns the reply with optional sources.
+ *
+ * @route POST /api/chat
+ * @param {ChatRequest} req.body - Chat message with optional image and reply style
+ * @returns {ChatResponse} 200 - Melody's reply with sources
+ * @returns {Object} 400 - { error: string } when no message or image provided
+ * @returns {Object} 500 - { error: string } on internal failure
+ */
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, imageBase64, imageMime, replyStyle } = req.body;
@@ -526,13 +655,26 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// ─── Images endpoints ───
+/**
+ * GET /api/images — List all saved image metadata, newest first.
+ *
+ * @route GET /api/images
+ * @returns {Object[]} 200 - Array of image metadata objects sorted by date descending
+ */
 app.get('/api/images', (req, res) => {
   const meta = readJSON(IMAGES_META);
   meta.sort((a, b) => b.date.localeCompare(a.date));
   res.json(meta);
 });
 
+/**
+ * DELETE /api/images/:id — Delete a saved image and its metadata.
+ *
+ * @route DELETE /api/images/:id
+ * @param {string} req.params.id - UUID of the image to delete
+ * @returns {Object} 200 - { ok: true }
+ * @returns {Object} 404 - { error: 'Not found' }
+ */
 app.delete('/api/images/:id', (req, res) => {
   const meta = readJSON(IMAGES_META);
   const idx = meta.findIndex(m => m.id === req.params.id);
@@ -547,7 +689,15 @@ app.delete('/api/images/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── Image search (Brave Search API) ───
+/**
+ * GET /api/image-search — Search for images via Brave Search API.
+ *
+ * @route GET /api/image-search
+ * @param {string} req.query.q - Search query (required)
+ * @returns {Object[]} 200 - Array of image results (max 6): { title, imageUrl, thumbnailUrl, width, height }
+ * @returns {Object} 400 - { error: string } when query missing
+ * @returns {Object} 500 - { error: string } on API failure or missing key
+ */
 app.get('/api/image-search', async (req, res) => {
   const q = req.query.q;
   if (!q) return res.status(400).json({ error: 'Query required' });
@@ -569,7 +719,15 @@ app.get('/api/image-search', async (req, res) => {
   }
 });
 
-// ─── Video search (Brave Search API) ───
+/**
+ * GET /api/video-search — Search for videos via Brave Search API.
+ *
+ * @route GET /api/video-search
+ * @param {string} req.query.q - Search query (required)
+ * @returns {Object[]} 200 - Array of video results (max 4): { title, url, thumbnail, description }
+ * @returns {Object} 400 - { error: string } when query missing
+ * @returns {Object} 500 - { error: string } on API failure or missing key
+ */
 app.get('/api/video-search', async (req, res) => {
   const q = req.query.q;
   if (!q) return res.status(400).json({ error: 'Query required' });
@@ -591,7 +749,13 @@ app.get('/api/video-search', async (req, res) => {
   }
 });
 
-// ─── Gallery search (local saved images) ───
+/**
+ * GET /api/gallery-search — Search saved images by caption/reply keywords.
+ *
+ * @route GET /api/gallery-search
+ * @param {string} [req.query.q] - Search keywords (case-insensitive substring match)
+ * @returns {Object[]} 200 - Matching image metadata objects
+ */
 app.get('/api/gallery-search', (req, res) => {
   const q = (req.query.q || '').toLowerCase();
   if (!q) return res.json([]);
@@ -603,7 +767,16 @@ app.get('/api/gallery-search', (req, res) => {
   res.json(matches);
 });
 
-// ─── Wiki search (MediaWiki API) ───
+/**
+ * GET /api/wiki-search — Search a game wiki and return results with top page content.
+ *
+ * @route GET /api/wiki-search
+ * @param {string} req.query.wiki - Wiki ID from the registry (e.g., 'hkia', 'minecraft')
+ * @param {string} req.query.q - Search query
+ * @returns {Object} 200 - { results: Array, topContent: Object|null }
+ * @returns {Object} 400 - { error: string } when params missing or unknown wiki
+ * @returns {Object} 500 - { error: string } on API failure
+ */
 app.get('/api/wiki-search', async (req, res) => {
   const wikiId = req.query.wiki;
   const q = req.query.q;
@@ -623,7 +796,16 @@ app.get('/api/wiki-search', async (req, res) => {
   }
 });
 
-// ─── Memories endpoints (proxy to mem0) ───
+/**
+ * GET /api/memories — List all mem0 memories from both tracks, sorted by date.
+ *
+ * Fetches user track (friend facts) and agent track (Melody's personality)
+ * in parallel, labels each with a 'track' field, and returns combined.
+ *
+ * @route GET /api/memories
+ * @returns {Object[]} 200 - Combined memories with track: 'friend' | 'melody'
+ * @returns {Object} 500 - { error: string } on mem0 API failure
+ */
 app.get('/api/memories', async (req, res) => {
   try {
     // Fetch both user memories and Melody's own memories
@@ -654,6 +836,14 @@ app.get('/api/memories', async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/memories/:id — Delete a specific memory from mem0.
+ *
+ * @route DELETE /api/memories/:id
+ * @param {string} req.params.id - mem0 memory ID
+ * @returns {Object} 200 - { ok: true }
+ * @returns {Object} 500 - { error: string } on mem0 API failure
+ */
 app.delete('/api/memories/:id', async (req, res) => {
   try {
     const r = await fetch(`${MEM0_BASE}/v1/memories/${req.params.id}/`, {
@@ -668,7 +858,12 @@ app.delete('/api/memories/:id', async (req, res) => {
   }
 });
 
-// ─── Relationship stats ───
+/**
+ * GET /api/relationship — Get friendship stats for display in the Memories tab.
+ *
+ * @route GET /api/relationship
+ * @returns {Object} 200 - { daysTogether, totalChats, streakDays, firstChat, milestones }
+ */
 app.get('/api/relationship', (req, res) => {
   const rel = readJSON(RELATIONSHIP_FILE) || {};
   const today = new Date();
@@ -683,7 +878,14 @@ app.get('/api/relationship', (req, res) => {
   });
 });
 
-// ─── Welcome status (new/returning user) ───
+/**
+ * GET /api/welcome-status — Check if user is new or returning for the welcome flow.
+ *
+ * For returning users, attempts to find their name from mem0 memories.
+ *
+ * @route GET /api/welcome-status
+ * @returns {Object} 200 - { status: 'new' } or { status: 'returning', friendName, daysSince, totalChats, streakDays }
+ */
 app.get('/api/welcome-status', async (req, res) => {
   try {
     const rel = readJSON(RELATIONSHIP_FILE) || {};
@@ -723,7 +925,18 @@ app.get('/api/welcome-status', async (req, res) => {
   }
 });
 
-// ─── Welcome onboarding (save name/color/interests) ───
+/**
+ * POST /api/welcome — Save onboarding data (name, color, or interests) to mem0.
+ *
+ * Also initializes the relationship file on the first welcome interaction.
+ *
+ * @route POST /api/welcome
+ * @param {string} req.body.type - Data type: 'name' | 'color' | 'interests'
+ * @param {string} req.body.value - The value to save (max 200 chars)
+ * @returns {Object} 200 - { ok: true }
+ * @returns {Object} 400 - { error: string } on invalid type/value
+ * @returns {Object} 500 - { error: string } on mem0 save failure
+ */
 app.post('/api/welcome', async (req, res) => {
   try {
     const { type, value } = req.body;
