@@ -16,12 +16,22 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- User Picker Overlay -->
+  <div id="userPicker" class="user-picker-overlay hidden">
+    <div class="user-picker-title">Who's chatting with Melody?</div>
+    <div class="user-picker-buttons">
+      <button class="user-picker-btn" data-user="amelia">Amelia</button>
+      <button class="user-picker-btn" data-user="lonnie">Lonnie</button>
+      <button class="user-picker-btn" data-user="guest">Guest</button>
+    </div>
+  </div>
+
   <div class="app-container">
     <!-- Header -->
     <header class="chat-header">
       <img src="/images/melody-avatar.png" alt="My Melody" class="header-avatar">
       <div class="header-text">
-        <h1>My Melody</h1>
+        <h1>My Melody<span id="activeUserLabel" class="active-user-label"></span></h1>
         <p class="subtitle">Your Sweet Sanrio Friend ♡</p>
       </div>
       <div class="header-spacer"></div>
@@ -48,6 +58,10 @@
               <option value="brief">Brief</option>
               <option value="detailed">Detailed</option>
             </select>
+          </div>
+          <div class="setting-row">
+            <span>User</span>
+            <button id="switchUserBtn" class="toggle-btn">Switch</button>
           </div>
         </div>
       </div>

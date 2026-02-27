@@ -5,7 +5,7 @@
  * PWA install prompt, settings, and first-time welcome flow.
  * No framework — vanilla JavaScript with DOM manipulation.
  *
- * @version 2.4.0
+ * @version 2.5.0
  */
 
 // ─── DOM refs ───
@@ -42,6 +42,57 @@ const sessionId = sessionStorage.getItem('melodySessionId') || (() => {
 let pendingImageBase64 = null;
 let pendingImageMime = null;
 let pendingImageDataURL = null;
+
+// ─── User Picker ───
+/** @type {Object<string, string>} Map user IDs to display names. */
+const USER_NAMES = { amelia: 'Amelia', lonnie: 'Lonnie', guest: 'Guest' };
+
+const userPicker = document.getElementById('userPicker');
+const activeUserLabel = document.getElementById('activeUserLabel');
+const switchUserBtn = document.getElementById('switchUserBtn');
+
+/** @type {string|null} Currently active user ID from localStorage. */
+let activeUser = localStorage.getItem('melodyActiveUser');
+
+/**
+ * Show the user picker overlay.
+ *
+ * @returns {void}
+ */
+function showUserPicker() {
+  userPicker.classList.remove('hidden');
+}
+
+/**
+ * Select a user, persist the choice, hide the picker, and update the header label.
+ *
+ * @param {string} userId - The user ID to activate (e.g. "amelia", "lonnie", "guest").
+ * @returns {void}
+ */
+function selectUser(userId) {
+  localStorage.setItem('melodyActiveUser', userId);
+  activeUser = userId;
+  userPicker.classList.add('hidden');
+  activeUserLabel.textContent = USER_NAMES[userId] || userId;
+}
+
+// Wire user picker buttons
+userPicker.querySelectorAll('[data-user]').forEach(btn => {
+  btn.addEventListener('click', () => selectUser(btn.dataset.user));
+});
+
+// Wire switch user button in settings
+switchUserBtn.addEventListener('click', () => {
+  settingsDropdown.classList.add('hidden');
+  showUserPicker();
+});
+
+// On load: show picker if no user selected, otherwise update label
+if (!activeUser) {
+  showUserPicker();
+} else {
+  activeUserLabel.textContent = USER_NAMES[activeUser] || activeUser;
+}
 
 // ─── Settings ───
 let replyStyle = localStorage.getItem('replyStyle') || 'default';
@@ -540,7 +591,7 @@ async function sendMessage() {
   messageInput.value = '';
   addMessage(text, 'user', pendingImageDataURL);
 
-  const body = { message: text, replyStyle, sessionId };
+  const body = { message: text, replyStyle, sessionId, userId: activeUser };
   if (pendingImageBase64) {
     body.imageBase64 = pendingImageBase64;
     body.imageMime = pendingImageMime;
@@ -722,7 +773,7 @@ const relationshipStats = document.getElementById('relationshipStats');
  */
 async function loadRelationshipStats() {
   try {
-    const res = await fetch('/api/relationship');
+    const res = await fetch(`/api/relationship${activeUser ? '?userId=' + activeUser : ''}`);
     const stats = await res.json();
     relationshipStats.innerHTML = `
       <div class="stat-card">
@@ -755,7 +806,7 @@ async function loadMemories() {
   loadRelationshipStats();
   memoryList.innerHTML = '<p class="empty-state">Loading memories...</p>';
   try {
-    const res = await fetch('/api/memories');
+    const res = await fetch(`/api/memories${activeUser ? '?userId=' + activeUser : ''}`);
     const memories = await res.json();
 
     if (!memories.length) {
@@ -861,10 +912,11 @@ if (savedAccent) applyAccentColor(savedAccent);
 async function runWelcomeFlow() {
   const welcomeEl = chatArea.querySelector('.welcome-message');
 
-  // Only show personalized welcome if THIS browser completed the welcome flow
-  if (localStorage.getItem('melodyWelcomeDone')) {
+  // Only show personalized welcome if THIS user completed the welcome flow
+  const welcomeKey = activeUser ? `melodyWelcomeDone-${activeUser}` : 'melodyWelcomeDone';
+  if (localStorage.getItem(welcomeKey)) {
     try {
-      const res = await fetch('/api/welcome-status');
+      const res = await fetch(`/api/welcome-status${activeUser ? '?userId=' + activeUser : ''}`);
       const status = await res.json();
 
       if (status.status === 'returning') {
@@ -927,7 +979,7 @@ async function runWelcomeFlow() {
   await fetch('/api/welcome', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'name', value: nameRaw })
+    body: JSON.stringify({ type: 'name', value: nameRaw, userId: activeUser })
   });
 
   await melodyTyping(800);
@@ -945,7 +997,7 @@ async function runWelcomeFlow() {
   await fetch('/api/welcome', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'color', value: colorRaw })
+    body: JSON.stringify({ type: 'color', value: colorRaw, userId: activeUser })
   });
 
   applyAccentColor(color);
@@ -962,7 +1014,7 @@ async function runWelcomeFlow() {
   await fetch('/api/welcome', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'interests', value: interests })
+    body: JSON.stringify({ type: 'interests', value: interests, userId: activeUser })
   });
 
   await melodyTyping(1000);
@@ -971,8 +1023,8 @@ async function runWelcomeFlow() {
   await melodyTyping(600);
   addMessage("I'm so glad we're friends now! You can talk to me about anything, anytime~ I'll always be here with tea and almond pound cake! \u2661", 'assistant');
 
-  // Restore normal chat
-  localStorage.setItem('melodyWelcomeDone', 'true');
+  // Restore normal chat (per-user welcome state)
+  localStorage.setItem(welcomeKey, 'true');
   messageInput.placeholder = "Say something sweet... \u2661";
   imageBtn.style.display = ''; // Restore image button
   welcomeActive = false;

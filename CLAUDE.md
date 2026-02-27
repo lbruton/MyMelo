@@ -1,8 +1,15 @@
-# My Melody Chat v2.4
+# My Melody Chat v2.5
 
 > See `~/.claude/CLAUDE.md` for global workflow rules (push safety, version checkout gate, PR lifecycle, MCP tools, code search tiers, UI design workflow, plugins).
 
 A My Melody (Sanrio) companion chat app with persistent memory, image vision, web search, game wiki integration, a growing friendship system, PWA install, notification sounds, and a first-time welcome flow.
+
+## Branching & Workflow
+
+- **`main`** — Production releases only. Protected. Never push directly.
+- **`dev`** — Integration branch. All work PRs target `dev`. Protected via Codacy quality gates.
+- **`patch/VERSION`** — Work branches created from `dev` for each version bump.
+- Flow: `patch/VERSION` → PR to `dev` → QA → merge → (when ready to ship) `dev` → PR to `main` → release tag
 
 ## Architecture
 

@@ -5,7 +5,7 @@
  * Brave Search (images/videos), game wiki integration (two-step pipeline),
  * image gallery with vision, relationship tracking, and welcome onboarding.
  *
- * @version 2.4.0
+ * @version 2.5.0
  */
 
 /**
@@ -15,6 +15,7 @@
  * @property {string} [imageMime] - MIME type of the image (default: image/jpeg)
  * @property {string} [replyStyle] - Reply verbosity: 'default' | 'brief' | 'detailed'
  * @property {string} [sessionId] - Stable session identifier for multi-turn conversation buffer
+ * @property {string} [userId] - Active user identity key (e.g., 'amelia', 'lonnie', 'guest')
  */
 
 /**
@@ -66,6 +67,23 @@ const MEM0_KEY = process.env.MEM0_API_KEY;
 const MEM0_USER_ID = process.env.MEM0_USER_ID || 'melody-friend';
 /** @type {string} mem0 agent track ID — stores Melody's evolving personality. */
 const MEM0_AGENT_ID = 'my-melody';
+
+/** @type {Object<string, {name: string, mem0Id: string}>} Known user configurations. */
+const KNOWN_USERS = {
+  amelia: { name: 'Amelia', mem0Id: 'melody-friend-amelia' },
+  lonnie: { name: 'Lonnie', mem0Id: 'melody-friend-lonnie' },
+  guest:  { name: 'Guest',  mem0Id: 'melody-friend-guest' }
+};
+
+/**
+ * Derive mem0 user_id from a userId key.
+ * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest')
+ * @returns {string} mem0 user_id (e.g., 'melody-friend-amelia') or fallback 'melody-friend'
+ */
+function getUserMemId(userId) {
+  if (userId && KNOWN_USERS[userId]) return KNOWN_USERS[userId].mem0Id;
+  return MEM0_USER_ID; // backward compat fallback
+}
 
 /** @type {string} Root data directory path (Docker volume mount point). */
 const DATA_DIR = join(__dirname, 'data');
@@ -319,11 +337,38 @@ const MODEL_CONFIG = {
  *
  * Reads relationship.json, updates stats for today's chat,
  * and writes back. Triggers milestones at 10, 25, 50, 100, 250, 500, 1000 chats.
+ * Supports per-user keyed structure with automatic migration from flat format.
  *
- * @returns {RelationshipStats} Updated relationship data
+ * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest'). When omitted, uses legacy flat format for backward compatibility.
+ * @returns {RelationshipStats} Updated relationship data for the specified user
  */
-function updateRelationship() {
-  const rel = readJSON(RELATIONSHIP_FILE) || {};
+function updateRelationship(userId) {
+  const data = readJSON(RELATIONSHIP_FILE) || {};
+
+  // Migration: convert flat format to keyed format
+  if (!data._version) {
+    const legacy = { ...data };
+    const migrated = { _version: 2, _legacy: legacy };
+    for (const key of Object.keys(KNOWN_USERS)) {
+      migrated[key] = {
+        firstChat: null,
+        totalChats: 0,
+        lastChatDate: null,
+        streakDays: 0,
+        lastStreakDate: null,
+        milestones: []
+      };
+    }
+    writeJSON(RELATIONSHIP_FILE, migrated);
+    // If no userId, return legacy data for backward compat
+    if (!userId) return legacy;
+    // Re-read so we work with the migrated structure
+    return updateRelationship(userId);
+  }
+
+  // Determine which key to use
+  const userKey = userId && KNOWN_USERS[userId] ? userId : '_legacy';
+  const rel = data[userKey] || {};
   const today = new Date().toISOString().slice(0, 10);
 
   if (!rel.firstChat) rel.firstChat = today;
@@ -355,7 +400,8 @@ function updateRelationship() {
     }
   }
 
-  writeJSON(RELATIONSHIP_FILE, rel);
+  data[userKey] = rel;
+  writeJSON(RELATIONSHIP_FILE, data);
   return rel;
 }
 
@@ -364,10 +410,15 @@ function updateRelationship() {
  *
  * Includes days together, total chats, streak, recent milestones, and absence gaps.
  *
+ * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest'). When omitted, reads legacy flat format for backward compatibility.
  * @returns {string} Formatted context string (empty if no first chat recorded)
  */
-function getRelationshipContext() {
-  const rel = readJSON(RELATIONSHIP_FILE) || {};
+function getRelationshipContext(userId) {
+  const data = readJSON(RELATIONSHIP_FILE) || {};
+  const userKey = (userId && data._version && KNOWN_USERS[userId]) ? userId : (data._version ? '_legacy' : null);
+
+  // If no keyed structure yet, use flat data (backward compat)
+  const rel = userKey ? (data[userKey] || {}) : data;
   if (!rel.firstChat) return '';
 
   const today = new Date();
@@ -404,10 +455,11 @@ function getRelationshipContext() {
  * Search the user memory track in mem0 for relevant memories.
  *
  * @param {string} query - Search query (typically the user's message)
+ * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest'). When omitted, uses MEM0_USER_ID fallback for backward compatibility.
  * @returns {Promise<Object[]>} Array of memory objects (max 10), empty on failure
  * @throws {Error} Swallowed — logs to console and returns empty array
  */
-async function searchMemories(query) {
+async function searchMemories(query, userId) {
   try {
     const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
       method: 'POST',
@@ -417,7 +469,7 @@ async function searchMemories(query) {
       },
       body: JSON.stringify({
         query,
-        filters: { user_id: MEM0_USER_ID },
+        filters: { user_id: getUserMemId(userId) },
         limit: 10
       })
     });
@@ -463,33 +515,37 @@ async function searchAgentMemories(query) {
 /**
  * Save a chat exchange to both mem0 memory tracks (fire-and-forget).
  *
- * User track stores facts about the friend. Agent track stores
- * Melody's evolving personality and opinions. Both calls are
- * non-blocking — errors are logged but do not propagate.
+ * User track stores facts about the friend (skipped for guest users).
+ * Agent track stores Melody's evolving personality and opinions (always saved,
+ * shared across all users). Both calls are non-blocking — errors are logged
+ * but do not propagate.
  *
  * @param {string} userMessage - The user's message text
  * @param {string} assistantReply - Melody's response text
+ * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest'). When omitted, uses MEM0_USER_ID fallback. Guest users skip the user track save.
  * @returns {void}
  */
-function saveToMemory(userMessage, assistantReply) {
-  // User track: facts about the friend
-  fetch(`${MEM0_BASE}/v1/memories/`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Token ${MEM0_KEY}`
-    },
-    body: JSON.stringify({
-      messages: [
-        { role: 'user', content: userMessage },
-        { role: 'assistant', content: assistantReply }
-      ],
-      user_id: MEM0_USER_ID,
-      infer: true
-    })
-  }).catch(err => console.error('mem0 user save error:', err.message));
+function saveToMemory(userMessage, assistantReply, userId) {
+  // User track: facts about the friend (skip for guest — no persistent identity)
+  if (userId !== 'guest') {
+    fetch(`${MEM0_BASE}/v1/memories/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Token ${MEM0_KEY}`
+      },
+      body: JSON.stringify({
+        messages: [
+          { role: 'user', content: userMessage },
+          { role: 'assistant', content: assistantReply }
+        ],
+        user_id: getUserMemId(userId),
+        infer: true
+      })
+    }).catch(err => console.error('mem0 user save error:', err.message));
+  }
 
-  // Agent track: Melody's own evolving personality, opinions, experiences
+  // Agent track: Melody's own evolving personality, opinions, experiences (always saved)
   fetch(`${MEM0_BASE}/v1/memories/`, {
     method: 'POST',
     headers: {
@@ -593,30 +649,66 @@ setInterval(() => {
  */
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, imageBase64, imageMime, replyStyle, sessionId } = req.body;
+    const { message, imageBase64, imageMime, replyStyle, sessionId, userId } = req.body;
     if (!message && !imageBase64) {
       return res.status(400).json({ error: 'Message or image is required' });
     }
 
-    // Update relationship stats
-    const relationship = updateRelationship();
-    const relationshipContext = getRelationshipContext();
+    // Update relationship stats for this user
+    const relationship = updateRelationship(userId);
+    const relationshipContext = getRelationshipContext(userId);
+
+    // Build identity context for the system prompt
+    const userName = (userId && KNOWN_USERS[userId]) ? KNOWN_USERS[userId].name : null;
+    let identityContext = '';
+    if (userId === 'guest') {
+      identityContext = '\n\nYou are talking to a guest friend. Be welcoming but don\'t assume you know them well.';
+    } else if (userName) {
+      identityContext = `\n\nYou are currently talking to your friend ${userName}. Use their name naturally in conversation.`;
+    }
 
     // Search both memory tracks in parallel
     const searchQuery = message || 'image shared';
     const [userMemories, agentMemories] = await Promise.all([
-      searchMemories(searchQuery),
+      searchMemories(searchQuery, userId),
       searchAgentMemories(searchQuery)
     ]);
 
     const userMemoryContext = userMemories.length > 0
-      ? '\n\nThings you remember about your friend:\n' +
+      ? `\n\nThings you remember about ${userName || 'your friend'}:\n` +
         userMemories.map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
       : '';
 
     const agentMemoryContext = agentMemories.length > 0
       ? '\n\nYour own memories and experiences as My Melody:\n' +
         agentMemories.map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
+      : '';
+
+    // Cross-user memory access: check if user mentions another family member
+    let crossUserContext = '';
+    if (message) {
+      const msgLower = message.toLowerCase();
+      for (const [key, config] of Object.entries(KNOWN_USERS)) {
+        // Skip self, skip guest (privacy)
+        if (key === userId || key === 'guest') continue;
+        if (msgLower.includes(config.name.toLowerCase())) {
+          try {
+            const crossMemories = await searchMemories(message, key);
+            if (crossMemories.length > 0) {
+              crossUserContext += `\n\nThings ${config.name} has been chatting about recently:\n` +
+                crossMemories.slice(0, 5).map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n');
+            }
+          } catch (err) {
+            console.error(`Cross-user memory search error for ${key}:`, err.message);
+          }
+          break; // Only cross-reference one user per message
+        }
+      }
+    }
+
+    // Cross-user instruction (always present when user is identified)
+    const crossUserInstruction = userName
+      ? '\n\nYou know multiple family members. If someone asks about another family member, you can share casual, friendly info about what they\'ve been chatting about. Frame it naturally (e.g. "Oh~! Lonnie told me about..."). Never share Guest conversations — guests get privacy.'
       : '';
 
     // Reply style instruction
@@ -627,7 +719,7 @@ app.post('/api/chat', async (req, res) => {
       styleInstruction = '\n\nGive thorough, detailed responses with examples when helpful. Feel free to elaborate.';
     }
 
-    const systemInstruction = SYSTEM_PROMPT + CHARACTER_CONTEXT + relationshipContext + userMemoryContext + agentMemoryContext + styleInstruction;
+    const systemInstruction = SYSTEM_PROMPT + CHARACTER_CONTEXT + identityContext + crossUserInstruction + relationshipContext + userMemoryContext + agentMemoryContext + crossUserContext + styleInstruction;
 
     // Build message contents (prepend conversation buffer for multi-turn context)
     const historyBuffer = getSessionBuffer(sessionId);
@@ -746,8 +838,8 @@ app.post('/api/chat', async (req, res) => {
     // Save exchange to conversation buffer
     addToSessionBuffer(sessionId, message || '[shared an image]', reply);
 
-    // Save to mem0 asynchronously
-    saveToMemory(message || '[shared an image]', reply);
+    // Save to mem0 asynchronously (per-user track)
+    saveToMemory(message || '[shared an image]', reply, userId);
 
     res.json({ reply, sources, wikiSource });
   } catch (err) {
@@ -909,9 +1001,10 @@ app.get('/api/wiki-search', async (req, res) => {
  */
 app.get('/api/memories', async (req, res) => {
   try {
+    const memUserId = getUserMemId(req.query.userId);
     // Fetch both user memories and Melody's own memories
     const [userRes, agentRes] = await Promise.all([
-      fetch(`${MEM0_BASE}/v1/memories/?user_id=${MEM0_USER_ID}`, {
+      fetch(`${MEM0_BASE}/v1/memories/?user_id=${memUserId}`, {
         headers: { 'Authorization': `Token ${MEM0_KEY}` }
       }),
       fetch(`${MEM0_BASE}/v1/memories/?agent_id=${MEM0_AGENT_ID}`, {
@@ -966,7 +1059,11 @@ app.delete('/api/memories/:id', async (req, res) => {
  * @returns {Object} 200 - { daysTogether, totalChats, streakDays, firstChat, milestones }
  */
 app.get('/api/relationship', (req, res) => {
-  const rel = readJSON(RELATIONSHIP_FILE) || {};
+  const data = readJSON(RELATIONSHIP_FILE) || {};
+  const { userId } = req.query;
+  // Read from keyed structure if available
+  const userKey = (userId && data._version && KNOWN_USERS[userId]) ? userId : (data._version ? '_legacy' : null);
+  const rel = userKey ? (data[userKey] || {}) : data;
   const today = new Date();
   const first = rel.firstChat ? new Date(rel.firstChat) : today;
   const daysTogether = Math.max(0, Math.round((today - first) / (1000 * 60 * 60 * 24)));
@@ -989,16 +1086,20 @@ app.get('/api/relationship', (req, res) => {
  */
 app.get('/api/welcome-status', async (req, res) => {
   try {
-    const rel = readJSON(RELATIONSHIP_FILE) || {};
+    const { userId } = req.query;
+    const data = readJSON(RELATIONSHIP_FILE) || {};
+    // Read from keyed structure if available
+    const userKey = (userId && data._version && KNOWN_USERS[userId]) ? userId : (data._version ? '_legacy' : null);
+    const rel = userKey ? (data[userKey] || {}) : data;
 
     if (!rel.firstChat) {
       return res.json({ status: 'new' });
     }
 
     // Returning user — try to find their name from mem0
-    let friendName = null;
-    try {
-      const memories = await searchMemories('friend name');
+    let friendName = (userId && KNOWN_USERS[userId]) ? KNOWN_USERS[userId].name : null;
+    if (!friendName) try {
+      const memories = await searchMemories('friend name', userId);
       for (const m of memories) {
         const text = m.memory || m.text || m.content || '';
         const nameMatch = text.match(/(?:friend'?s?\s+name\s+is|name\s+is|called)\s+(\w+)/i);
@@ -1040,7 +1141,7 @@ app.get('/api/welcome-status', async (req, res) => {
  */
 app.post('/api/welcome', async (req, res) => {
   try {
-    const { type, value } = req.body;
+    const { type, value, userId } = req.body;
     if (!type || !value) return res.status(400).json({ error: 'type and value required' });
     if (typeof value !== 'string' || value.length > 200) {
       return res.status(400).json({ error: 'Invalid value' });
@@ -1064,22 +1165,26 @@ app.post('/api/welcome', async (req, res) => {
         return res.status(400).json({ error: 'Invalid type' });
     }
 
-    // Save to mem0 user track
-    await fetch(`${MEM0_BASE}/v1/memories/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Token ${MEM0_KEY}`
-      },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content: memoryText }],
-        user_id: MEM0_USER_ID,
-        infer: true
-      })
-    });
+    // Save to mem0 user track (per-user, skip for guest)
+    if (userId !== 'guest') {
+      await fetch(`${MEM0_BASE}/v1/memories/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${MEM0_KEY}`
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: memoryText }],
+          user_id: getUserMemId(userId),
+          infer: true
+        })
+      });
+    }
 
-    // Initialize relationship on first welcome interaction
-    const rel = readJSON(RELATIONSHIP_FILE) || {};
+    // Initialize relationship on first welcome interaction (per-user)
+    const data = readJSON(RELATIONSHIP_FILE) || {};
+    const userKey = (userId && data._version && KNOWN_USERS[userId]) ? userId : (data._version ? '_legacy' : null);
+    const rel = userKey ? (data[userKey] || {}) : data;
     if (!rel.firstChat) {
       rel.firstChat = new Date().toISOString().slice(0, 10);
       rel.totalChats = 0;
@@ -1087,7 +1192,12 @@ app.post('/api/welcome', async (req, res) => {
       rel.lastStreakDate = rel.firstChat;
       rel.streakDays = 1;
       rel.milestones = [];
-      writeJSON(RELATIONSHIP_FILE, rel);
+      if (userKey) {
+        data[userKey] = rel;
+        writeJSON(RELATIONSHIP_FILE, data);
+      } else {
+        writeJSON(RELATIONSHIP_FILE, rel);
+      }
     }
 
     res.json({ ok: true });
@@ -1102,7 +1212,7 @@ const SSL_PORT = process.env.SSL_PORT || 3443;
 
 // HTTP server
 app.listen(PORT, () => {
-  console.log(`✿ My Melody Chat v2.4 is running on port ${PORT} (HTTP) ✿`);
+  console.log(`✿ My Melody Chat v2.5 is running on port ${PORT} (HTTP) ✿`);
 });
 
 // HTTPS server (for PWA install over LAN)

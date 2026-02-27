@@ -1017,3 +1017,56 @@ html, body {
     overflow: hidden;
   }
 }
+
+/* ─── User Picker ─── */
+.user-picker-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 182, 193, 0.97);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  gap: 16px;
+}
+.user-picker-overlay.hidden { display: none; }
+.user-picker-title {
+  font-size: 1.4em;
+  color: #d4447c;
+  margin-bottom: 12px;
+  text-align: center;
+  font-family: 'Quicksand', sans-serif;
+  font-weight: 700;
+}
+.user-picker-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 220px;
+}
+.user-picker-btn {
+  padding: 14px 24px;
+  border-radius: 12px;
+  border: 2px solid #d4447c;
+  background: #fff;
+  color: #d4447c;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 1.1em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.user-picker-btn:hover {
+  background: #d4447c;
+  color: #fff;
+}
+.active-user-label {
+  font-size: 0.75em;
+  opacity: 0.7;
+  margin-left: 8px;
+  font-weight: normal;
+}
