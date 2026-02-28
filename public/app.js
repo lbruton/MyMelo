@@ -5,7 +5,7 @@
  * PWA install prompt, settings, and first-time welcome flow.
  * No framework — vanilla JavaScript with DOM manipulation.
  *
- * @version 2.5.0
+ * @version 2.5.1
  */
 
 // ─── DOM refs ───
@@ -822,10 +822,11 @@ async function loadMemories() {
       const info = document.createElement('div');
       info.className = 'memory-info';
 
-      // Track label
+      // Track label — use actual name for friend track, "Melody's Thoughts" for agent track
       const trackLabel = document.createElement('span');
       trackLabel.className = `memory-track-label ${mem.track || 'friend'}`;
-      trackLabel.textContent = mem.track === 'melody' ? 'Melody' : 'Friend';
+      const friendName = USER_NAMES[activeUser] || 'Friend';
+      trackLabel.textContent = mem.track === 'melody' ? "Melody's Thoughts" : `About ${friendName}`;
       info.appendChild(trackLabel);
 
       const text = document.createElement('div');
@@ -912,34 +913,41 @@ if (savedAccent) applyAccentColor(savedAccent);
 async function runWelcomeFlow() {
   const welcomeEl = chatArea.querySelector('.welcome-message');
 
-  // Only show personalized welcome if THIS user completed the welcome flow
+  // Check server-side status first — the server knows if this is a returning user
+  // even when localStorage is cleared (e.g., new browser, cleared cache)
   const welcomeKey = activeUser ? `melodyWelcomeDone-${activeUser}` : 'melodyWelcomeDone';
-  if (localStorage.getItem(welcomeKey)) {
-    try {
-      const res = await fetch(`/api/welcome-status${activeUser ? '?userId=' + activeUser : ''}`);
-      const status = await res.json();
+  try {
+    const res = await fetch(`/api/welcome-status${activeUser ? '?userId=' + activeUser : ''}`);
+    const status = await res.json();
 
-      if (status.status === 'returning') {
-        let welcomeText;
-        const name = status.friendName || 'friend';
-        if (status.daysSince === 0) {
-          if (status.streakDays > 2) {
-            welcomeText = `Welcome back, ${name}! That's ${status.streakDays} days in a row~ I'm so happy!`;
-          } else {
-            welcomeText = `Hi again, ${name}! I was just having some tea and thinking about you~`;
-          }
-        } else if (status.daysSince === 1) {
-          welcomeText = `${name}! You came back! I was just baking almond pound cake and hoping you'd visit~`;
-        } else if (status.daysSince <= 3) {
-          welcomeText = `${name}~! It's been ${status.daysSince} days! I missed chatting with you... Mama says absence makes the heart grow fonder!`;
+    if (status.status === 'returning') {
+      // Server recognizes this user — set localStorage so future loads are instant
+      localStorage.setItem(welcomeKey, 'true');
+
+      let welcomeText;
+      const name = status.friendName || 'friend';
+      if (status.daysSince === 0) {
+        if (status.streakDays > 2) {
+          welcomeText = `Welcome back, ${name}! That's ${status.streakDays} days in a row~ I'm so happy!`;
         } else {
-          welcomeText = `${name}!! Yaaan~! It's been ${status.daysSince} whole days! I missed you so much... I saved you some tea!`;
+          welcomeText = `Hi again, ${name}! I was just having some tea and thinking about you~`;
         }
-        if (welcomeEl) welcomeEl.querySelector('p').textContent = welcomeText + ' \u2661';
+      } else if (status.daysSince === 1) {
+        welcomeText = `${name}! You came back! I was just baking almond pound cake and hoping you'd visit~`;
+      } else if (status.daysSince <= 3) {
+        welcomeText = `${name}~! It's been ${status.daysSince} days! I missed chatting with you... Mama says absence makes the heart grow fonder!`;
+      } else {
+        welcomeText = `${name}!! Yaaan~! It's been ${status.daysSince} whole days! I missed you so much... I saved you some tea!`;
       }
-    } catch {
-      // Network error — keep default welcome text
+      if (welcomeEl) welcomeEl.querySelector('p').textContent = welcomeText + ' ♡';
+      return;
     }
+  } catch {
+    // Network error — fall through to localStorage check or onboarding
+  }
+
+  // If localStorage says done but server didn't respond, trust localStorage
+  if (localStorage.getItem(welcomeKey)) {
     return;
   }
 

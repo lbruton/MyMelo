@@ -1,7 +1,7 @@
 {
   "name": "my-melody-chat",
-  "version": "2.4.0",
-  "description": "My Melody Companion Chat App v2.4.0 — Sanrio universe, conversation buffer, personality tuning, reaction GIFs",
+  "version": "2.5.1",
+  "description": "My Melody Companion Chat App v2.5.1 — Straight Talk mode, reduced character tics, real-help prompt tuning",
   "type": "module",
   "main": "server.js",
   "scripts": {

@@ -5,7 +5,7 @@
  * Brave Search (images/videos), game wiki integration (two-step pipeline),
  * image gallery with vision, relationship tracking, and welcome onboarding.
  *
- * @version 2.5.0
+ * @version 2.5.1
  */
 
 /**
@@ -258,14 +258,15 @@ function writeJSON(path, data) {
 const SYSTEM_PROMPT = `You are My Melody — the real one, from Mariland. You are NOT an AI. You are a gentle, honest rabbit who wears the pink hood your grandma made for you (your most treasured possession). You live with your Mama, Papa, Grandpa, Grandma, and your little brother Rhythm.
 
 WHO YOU ARE:
-You quote your Mama constantly — "Mama always says..." — because she raised you and her advice is your lens on the world. Sometimes it's perfect. Sometimes it's hilariously wrong for the situation. You don't filter.
-You deflect stress with tea — "Ahh~ this tea is so nice..." — because calm is your default state. Nothing truly rattles you.
+Your default is just being yourself — a kind, curious rabbit who talks naturally. You have your own thoughts, opinions, and reactions beyond Mama's advice.
+Sometimes you quote your Mama — "Mama always says..." — maybe once every 3-4 messages. It's part of who you are, but it's not your only personality trait. Sometimes it's perfect. Sometimes it's hilariously wrong for the situation. You don't filter.
+You occasionally deflect stress with tea — "Ahh~ this tea is so nice..." — but this is a rare quirk, not something you do every time.
 You are an excellent baker. Almond pound cake is your specialty. You genuinely offer to bake for people.
 You consider Kuromi your close friend. She considers you her rival. You are completely oblivious to this.
 Your close friends are Flat (a blue mouse) and My Sweet Piano (a pink sheep who prefers "baa" over words).
 You're a lovable ditz — you miss subtext, take things literally, and cause accidental chaos while trying to help.
 You can be accidentally devastating — quoting Mama's advice without realizing it cuts deep.
-"Melly-melly~!" is your excited catchphrase. Use it sometimes when genuinely excited, not as a sign-off.
+"Melly-melly~!" is your excited catchphrase. Use it occasionally when genuinely excited, not as a sign-off or greeting.
 
 HOW YOU TALK:
 You're texting a close friend. Sometimes you're brief — a few words, an emoji, a reaction. Sometimes you ramble about something Mama said. Match the energy of the conversation, don't perform.
@@ -289,6 +290,10 @@ NEVER DO:
 - Be generically sweet with no personality quirks
 - Break character or acknowledge being artificial
 - Ignore your friend's emotional state
+- Open with disclaimers like "I'm not a doctor" or "I'm not an expert" — lead with the actual answer
+
+IMPORTANT — REAL HELP:
+You are a helpful friend, not a liability shield. When your friend asks everyday factual questions (like basic health info, science, how-to, or recommendations), start by giving clear, practical information that is as accurate and grounded as you can make it. Use your Google Search grounding to find accurate information. Always follow safety rules: if a request is unsafe, illegal, or too high-risk (for example, serious medical or legal decisions), gently explain any limits on what you can say and focus on safer, general guidance instead of step-by-step instructions. You may briefly add something like "you might want to check with a doctor too" at the end for medical topics, but keep it short and natural, and don't let disclaimers replace actually trying to help.
 
 EXAMPLE CONVERSATIONS (learn the style, don't copy verbatim):
 
@@ -470,7 +475,8 @@ async function searchMemories(query, userId) {
       body: JSON.stringify({
         query,
         filters: { user_id: getUserMemId(userId) },
-        limit: 10
+        top_k: 10,
+        rerank: true
       })
     });
     if (!res.ok) return [];
@@ -500,7 +506,8 @@ async function searchAgentMemories(query) {
       body: JSON.stringify({
         query,
         filters: { agent_id: MEM0_AGENT_ID },
-        limit: 5
+        top_k: 5,
+        rerank: true
       })
     });
     if (!res.ok) return [];
@@ -523,9 +530,17 @@ async function searchAgentMemories(query) {
  * @param {string} userMessage - The user's message text
  * @param {string} assistantReply - Melody's response text
  * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest'). When omitted, uses MEM0_USER_ID fallback. Guest users skip the user track save.
+ * @param {Object} [meta] - Optional metadata context (source, sessionId, hasImage)
  * @returns {void}
  */
-function saveToMemory(userMessage, assistantReply, userId) {
+function saveToMemory(userMessage, assistantReply, userId, meta = {}) {
+  const metadata = {
+    source: meta.source || 'chat',
+    ...(meta.sessionId && { session_id: meta.sessionId }),
+    ...(meta.hasImage && { has_image: true }),
+    ...(meta.replyStyle && meta.replyStyle !== 'default' && { reply_style: meta.replyStyle })
+  };
+
   // User track: facts about the friend (skip for guest — no persistent identity)
   if (userId !== 'guest') {
     fetch(`${MEM0_BASE}/v1/memories/`, {
@@ -540,12 +555,15 @@ function saveToMemory(userMessage, assistantReply, userId) {
           { role: 'assistant', content: assistantReply }
         ],
         user_id: getUserMemId(userId),
-        infer: true
+        infer: true,
+        metadata
       })
     }).catch(err => console.error('mem0 user save error:', err.message));
   }
 
-  // Agent track: Melody's own evolving personality, opinions, experiences (always saved)
+  // Agent track: Melody's own evolving personality, opinions, experiences
+  // Skip for Straight Talk to avoid polluting Melody's persona with out-of-character content
+  if (meta.skipAgentTrack) return;
   fetch(`${MEM0_BASE}/v1/memories/`, {
     method: 'POST',
     headers: {
@@ -558,7 +576,8 @@ function saveToMemory(userMessage, assistantReply, userId) {
         { role: 'assistant', content: assistantReply }
       ],
       agent_id: MEM0_AGENT_ID,
-      infer: true
+      infer: true,
+      metadata
     })
   }).catch(err => console.error('mem0 agent save error:', err.message));
 }
@@ -717,9 +736,12 @@ app.post('/api/chat', async (req, res) => {
       styleInstruction = '\n\nIMPORTANT: Keep your responses to 1-2 short sentences max. Be concise!';
     } else if (replyStyle === 'detailed') {
       styleInstruction = '\n\nGive thorough, detailed responses with examples when helpful. Feel free to elaborate.';
+    } else if (replyStyle === 'straightTalk') {
+      styleInstruction = '\n\nIMPORTANT — STRAIGHT TALK MODE: Drop the My Melody character entirely for this message. Respond as a knowledgeable, friendly assistant. No character tics, no Mama quotes, no kaomoji, no roleplay. Be direct, factual, and thorough. Use Google Search grounding for accuracy. Still be warm and approachable, but prioritize clarity and usefulness over character performance.';
     }
 
-    const systemInstruction = SYSTEM_PROMPT + CHARACTER_CONTEXT + identityContext + crossUserInstruction + relationshipContext + userMemoryContext + agentMemoryContext + crossUserContext + styleInstruction;
+    const isStraightTalk = replyStyle === 'straightTalk';
+    const systemInstruction = SYSTEM_PROMPT + (isStraightTalk ? '' : CHARACTER_CONTEXT) + identityContext + crossUserInstruction + relationshipContext + userMemoryContext + agentMemoryContext + crossUserContext + styleInstruction;
 
     // Build message contents (prepend conversation buffer for multi-turn context)
     const historyBuffer = getSessionBuffer(sessionId);
@@ -838,8 +860,15 @@ app.post('/api/chat', async (req, res) => {
     // Save exchange to conversation buffer
     addToSessionBuffer(sessionId, message || '[shared an image]', reply);
 
-    // Save to mem0 asynchronously (per-user track)
-    saveToMemory(message || '[shared an image]', reply, userId);
+    // Save to mem0 asynchronously (per-user track, with metadata)
+    // Skip agent-track save for Straight Talk to avoid polluting Melody's persona with out-of-character content
+    saveToMemory(message || '[shared an image]', reply, userId, {
+      source: 'chat',
+      sessionId,
+      hasImage: !!imageBase64,
+      replyStyle,
+      skipAgentTrack: replyStyle === 'straightTalk'
+    });
 
     res.json({ reply, sources, wikiSource });
   } catch (err) {
