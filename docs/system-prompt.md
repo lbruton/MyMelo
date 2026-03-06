@@ -325,4 +325,4 @@ Based on the `replyStyle` parameter from the request:
 - [Gemini AI Integration](gemini-integration.md)
 - [mem0 Memory System](mem0-memory-system.md)
 - [Conversation Buffer](conversation-buffer.md)
-- [Character System](character-system.md)
+- [Character Guide](character-guide.md)

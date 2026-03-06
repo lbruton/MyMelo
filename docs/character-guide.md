@@ -265,4 +265,4 @@ No other wiring is required — `getCharacter()` falls back to `melody` for any 
 - [Sanrio Universe](sanrio-universe.md) — 46-character universe data injected into system prompt
 - [Relationship Tracking](relationship-tracking.md) — Friendship stats injected into character context
 - [Welcome Flow](welcome-flow.md) — First-time onboarding where Melody introduces herself
-- [Memory System](memory-system.md) — mem0 dual-track memory and per-character agent tracks
+- [mem0 Memory System](mem0-memory-system.md) — mem0 dual-track memory and per-character agent tracks
