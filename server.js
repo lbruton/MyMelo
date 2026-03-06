@@ -786,7 +786,8 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}, character 
     source: meta.source || 'chat',
     ...(meta.sessionId && { session_id: meta.sessionId }),
     ...(meta.hasImage && { has_image: true }),
-    ...(meta.replyStyle && meta.replyStyle !== 'default' && { reply_style: meta.replyStyle })
+    ...(meta.replyStyle && meta.replyStyle !== 'default' && { reply_style: meta.replyStyle }),
+    ...(character && { character_id: character.id })
   };
 
   // User track: facts about the friend (skip for guest — no persistent identity)
@@ -945,7 +946,7 @@ app.post('/api/chat', async (req, res) => {
     ]);
 
     const userMemoryContext = userMemories.length > 0
-      ? `\n\nThings you remember about ${userName || 'your friend'}:\n` +
+      ? `\n\n[IDENTITY LOCK: You are ${character.name}. Any memory below that mentions another character by name refers to a separate conversation with that character — not to you.]\nThings you remember about ${userName || 'your friend'}:\n` +
         userMemories.map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
       : '';
 
