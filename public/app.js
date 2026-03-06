@@ -131,11 +131,7 @@ function selectCharacter(characterId) {
   headerAvatar.alt = config.name;
 
   // Update header title text node (preserves the activeUserLabel span inside h1)
-  headerTitle.childNodes.forEach(node => {
-    if (node.nodeType === Node.TEXT_NODE) node.textContent = config.name;
-  });
-  // If no text node found (edge case), set it more directly
-  if (!Array.from(headerTitle.childNodes).some(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim())) {
+  if (headerTitle.firstChild?.nodeType === Node.TEXT_NODE) {
     headerTitle.firstChild.textContent = config.name;
   }
 
@@ -161,6 +157,11 @@ function selectCharacter(characterId) {
 // Wire header avatar click to open character picker
 headerAvatar.addEventListener('click', () => {
   characterPicker.classList.remove('hidden');
+});
+
+// Wire character picker buttons via delegation (no inline onclick needed)
+characterPicker.querySelectorAll('.character-picker-btn').forEach(btn => {
+  btn.addEventListener('click', () => selectCharacter(btn.dataset.character));
 });
 
 // ─── Settings ───
@@ -888,7 +889,7 @@ async function loadMemories() {
     const memories = await res.json();
 
     if (!memories.length) {
-      memoryList.innerHTML = '<p class="empty-state">No memories stored yet! Chat with My Melody to create some \u2661</p>';
+      memoryList.innerHTML = `<p class="empty-state">No memories stored yet! Chat with ${_charName} to create some \u2661</p>`;
       return;
     }
 
@@ -900,11 +901,12 @@ async function loadMemories() {
       const info = document.createElement('div');
       info.className = 'memory-info';
 
-      // Track label — use actual name for friend track, "Melody's Thoughts" for agent track
+      // Track label — use actual name for friend track, character name for agent track
       const trackLabel = document.createElement('span');
       trackLabel.className = `memory-track-label ${mem.track || 'friend'}`;
       const friendName = USER_NAMES[activeUser] || 'Friend';
-      trackLabel.textContent = mem.track === 'melody' ? "Melody's Thoughts" : `About ${friendName}`;
+      const trackCharConfig = CHARACTER_CONFIG[mem.track];
+      trackLabel.textContent = trackCharConfig ? `${trackCharConfig.name}'s Thoughts` : `About ${friendName}`;
       info.appendChild(trackLabel);
 
       const text = document.createElement('div');
