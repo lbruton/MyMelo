@@ -253,7 +253,7 @@ To add a fourth character:
 1. **Server** — Add an entry to the `CHARACTERS` object in `server.js` with `id`, `name`, `agentId`, `color`, `avatarFile`, and `getPrompt`.
 2. **Server** — Define a `NAME_SYSTEM_PROMPT` constant above the registry.
 3. **Client** — Add a matching entry to `CHARACTER_CONFIG` in `public/app.js`.
-4. **HTML** — Add a picker button in `index.html` with `data-character="<id>"` and the class `character-picker-btn`.
+4. **HTML** — Add a picker button in `index.html` with `data-character="<id>"` and the class `character-picker-btn`. The event listener in `app.js` wires it automatically via `querySelectorAll('.character-picker-btn')` — no inline `onclick` needed.
 5. **Assets** — Place the avatar PNG at `public/images/<avatarFile>`.
 
 No other wiring is required — `getCharacter()` falls back to `melody` for any unrecognised ID, and `selectCharacter()` reads dynamically from `CHARACTER_CONFIG`.
