@@ -711,6 +711,7 @@ function addMessage(text, role, imageDataURL, searchImageUrl, videoResult, sourc
   msg.appendChild(bubble);
   chatArea.appendChild(msg);
   chatArea.scrollTop = chatArea.scrollHeight;
+  return bubble;
 }
 
 /**
@@ -837,7 +838,8 @@ async function processReply(text, sources, wikiSource) {
   }
 
   // Render message immediately (don't block on reaction GIF)
-  addMessage(displayText, 'assistant', null, searchImageUrl, videoResult, sources, wikiSource);
+  const lastBubble = addMessage(displayText, 'assistant', null, searchImageUrl, videoResult, sources, wikiSource);
+  if (!lastBubble) return;
 
   // Fetch and append reaction GIF asynchronously (non-blocking)
   // Extra gate: even when the model emits [REACTION:], only show ~25% of the time
@@ -846,7 +848,6 @@ async function processReply(text, sources, wikiSource) {
     const categories = REACTION_MAP[emotion];
     if (categories) {
       const category = categories[Math.floor(Math.random() * categories.length)];
-      const lastBubble = chatArea.querySelector('.message.assistant:last-child .message-bubble');
       fetch(`https://nekos.best/api/v2/${category}?amount=1`)
         .then(r => r.json())
         .then(data => {
@@ -855,7 +856,7 @@ async function processReply(text, sources, wikiSource) {
             const gif = document.createElement('img');
             gif.src = url;
             gif.alt = 'Reaction';
-            gif.style.cssText = 'max-width:200px;border-radius:8px;margin-top:8px;display:block';
+            gif.className = 'reaction-gif';
             gif.addEventListener('error', () => gif.remove());
             lastBubble.appendChild(gif);
           }
@@ -866,7 +867,6 @@ async function processReply(text, sources, wikiSource) {
 
   // ─── New API Tag Processing ───
   // Append cards to the last message bubble (non-blocking, silent failures)
-  const lastBubble = chatArea.querySelector('.message.assistant:last-child .message-bubble');
   if (lastBubble) {
     // Dog pic
     if (dogPicMatch || randomDogMatch) {
@@ -988,6 +988,15 @@ async function processReply(text, sources, wikiSource) {
             ingDiv.appendChild(ul);
             body.appendChild(ingDiv);
           }
+          if (data.sourceUrl) {
+            const link = document.createElement('a');
+            link.href = data.sourceUrl;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.className = 'recipe-source-link';
+            link.textContent = 'View full recipe';
+            body.appendChild(link);
+          }
           card.appendChild(body);
           lastBubble.appendChild(card);
           chatArea.scrollTop = chatArea.scrollHeight;
@@ -1035,6 +1044,15 @@ async function processReply(text, sources, wikiSource) {
             });
             ingDiv.appendChild(ul);
             body.appendChild(ingDiv);
+          }
+          if (data.sourceUrl) {
+            const link = document.createElement('a');
+            link.href = data.sourceUrl;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.className = 'recipe-source-link';
+            link.textContent = 'View full recipe';
+            body.appendChild(link);
           }
           card.appendChild(body);
           lastBubble.appendChild(card);
@@ -1095,6 +1113,12 @@ async function processReply(text, sources, wikiSource) {
           temp.className = 'weather-card-temp';
           temp.textContent = `${data.temp}\u00B0${data.unit || 'F'}`;
           card.appendChild(temp);
+          if (data.feelsLike !== undefined) {
+            const feels = document.createElement('div');
+            feels.className = 'weather-card-feels';
+            feels.textContent = `Feels like ${data.feelsLike}\u00B0${data.unit || 'F'}`;
+            card.appendChild(feels);
+          }
           const desc = document.createElement('div');
           desc.className = 'weather-card-desc';
           desc.textContent = data.description || '';
@@ -1190,6 +1214,23 @@ async function processReply(text, sources, wikiSource) {
         if (data.question) {
           const card = document.createElement('div');
           card.className = 'api-card trivia-card';
+          if (data.category || data.difficulty) {
+            const meta = document.createElement('div');
+            meta.className = 'trivia-meta';
+            if (data.category) {
+              const cat = document.createElement('span');
+              cat.className = 'trivia-category';
+              cat.textContent = data.category;
+              meta.appendChild(cat);
+            }
+            if (data.difficulty) {
+              const diff = document.createElement('span');
+              diff.className = 'trivia-difficulty ' + data.difficulty;
+              diff.textContent = data.difficulty;
+              meta.appendChild(diff);
+            }
+            card.appendChild(meta);
+          }
           const question = document.createElement('div');
           question.className = 'trivia-question';
           question.textContent = data.question;
@@ -1218,6 +1259,17 @@ async function processReply(text, sources, wikiSource) {
                 if (b.dataset.correct === 'true') b.classList.add('correct');
               });
               if (!answer.correct) btn.classList.add('wrong');
+              // Fire-and-forget character reaction to trivia result
+              const resultMsg = answer.correct
+                ? `[TRIVIA_RESULT: correct, category="${data.category}", answer="${data.correctAnswer}"]`
+                : `[TRIVIA_RESULT: wrong, category="${data.category}", correctAnswer="${data.correctAnswer}", theirAnswer="${answer.text}"]`;
+              fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: resultMsg, characterId: activeCharacter, sessionId, userId: activeUser })
+              }).then(r => r.json()).then(res => {
+                if (res.reply) addMessage(res.reply, 'assistant');
+              }).catch(() => {});
             });
             answersDiv.appendChild(btn);
           });

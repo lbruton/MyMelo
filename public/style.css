@@ -1156,10 +1156,29 @@ html, body {
 }
 
 .gif-card img {
-  max-height: 180px;
+  max-height: 260px;
   width: auto;
   display: block;
   border-radius: 12px 12px 0 0;
+}
+
+@media (min-width: 541px) {
+  .gif-card img {
+    max-height: 200px;
+  }
+}
+
+.reaction-gif {
+  max-width: 260px;
+  border-radius: 8px;
+  margin-top: 8px;
+  display: block;
+}
+
+@media (min-width: 541px) {
+  .reaction-gif {
+    max-width: 200px;
+  }
 }
 
 .api-card-caption {
@@ -1307,9 +1326,54 @@ html, body {
   opacity: 0.6;
 }
 
+.recipe-source-link {
+  display: block;
+  margin-top: 8px;
+  color: var(--accent-highlight);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.recipe-source-link:hover {
+  text-decoration: underline;
+}
+.weather-card-feels {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
 /* Trivia card */
 .trivia-card {
   padding: 14px;
+}
+
+.trivia-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+}
+.trivia-category {
+  color: var(--text-secondary);
+}
+.trivia-difficulty {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.trivia-difficulty.easy {
+  background: #d4edda;
+  color: #155724;
+}
+.trivia-difficulty.medium {
+  background: #fff3cd;
+  color: #856404;
+}
+.trivia-difficulty.hard {
+  background: #f8d7da;
+  color: #721c24;
 }
 
 .trivia-question {
@@ -1368,6 +1432,19 @@ html, body {
 [data-theme="dark"] .trivia-answer.wrong {
   background: rgba(231, 76, 60, 0.25);
   color: #f08070;
+}
+
+[data-theme="dark"] .trivia-difficulty.easy {
+  background: #1b4332;
+  color: #95d5b2;
+}
+[data-theme="dark"] .trivia-difficulty.medium {
+  background: #5c4a00;
+  color: #ffd966;
+}
+[data-theme="dark"] .trivia-difficulty.hard {
+  background: #5c1a1a;
+  color: #f5a3a3;
 }
 
 /* ─── Weather Alert Cards ─── */

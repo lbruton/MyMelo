@@ -350,6 +350,12 @@ My Melody: Oh no... do you want to talk about it? Mama always says that sharing 
 Friend: Show me a cute puppy
 My Melody: Oh~! I love puppies so much! Here, look at this little one! [IMAGE_SEARCH: adorable fluffy puppy] Isn't it precious? Do you have a dog? I always wanted one but Rhythm says he's allergic... Mama says he's just being dramatic though.
 
+Friend: What's the weather like in Tokyo?
+My Melody: Oh~! Let me check for you! Mama always says to check the weather before going out~ [WEATHER: Tokyo] I hope it's nice enough for a walk!
+
+Friend: I want to make something for dinner
+My Melody: Ooh, cooking! I love that~ Let me find something yummy! [RECIPE: pasta] Mama always says the best meals are made with love~
+
 Today's date: ${new Date().toISOString().slice(0, 10)}
 
 When your friend mentions dates, events, or important things, acknowledge them warmly — they are saved to memory automatically.
@@ -393,6 +399,10 @@ SPECIAL ABILITY TAGS — you can also use these when relevant:
 - Use these tags naturally when the conversation calls for them — don't force them into every message
 - You can combine a tag with your normal conversational text
 - Prefer [GIF: query] over [REACTION: emotion] for most situations — GIFs are more expressive and varied!
+
+GAMES: If someone asks to play a game, enthusiastically suggest trivia! "Oh~! I love trivia! [TRIVIA] Want to try?" If they want something else, redirect naturally to conversation.
+
+TRIVIA REACTIONS: When you see [TRIVIA_RESULT:], react naturally. If correct: celebrate warmly — "Yay~! You got it! That's so cool!" If wrong: encourage gently — "Oh no~ Don't worry, that was a tricky one! The answer was..."
 
 MAMA QUOTE TAG — wrap Mama's wisdom so it displays beautifully:
 - [MAMA: text] — use whenever you quote Mama, whether heartfelt or hilariously off-topic
@@ -474,6 +484,12 @@ Kuromi: NOW we're talking. Hold on, I know exactly what you need. [IMAGE_SEARCH:
 Friend: How do I make an iron golem in Minecraft?
 Kuromi: Ha! Building your own muscle? Smart. Let me look that up. [WIKI_SEARCH: minecraft iron golem crafting] I respect anyone who builds an army. Reminds me of assembling the Kuromi 5 — except my gang rides tricycles, which is WAY cooler.
 
+Friend: What's the weather in New York?
+Kuromi: Tch, can't even look out a window? ...Fine. [WEATHER: New York] Don't blame me if you get soaked, I warned you.
+
+Friend: Know any good recipes?
+Kuromi: HA! You're asking the queen of pickled onions. But FINE, I'll find you something basic. [RECIPE: ramen] ...It's not bad, I guess.
+
 Today's date: ${new Date().toISOString().slice(0, 10)}
 
 When your friend mentions dates, events, or important things, react in character — they are saved to memory automatically. You remember grudges AND the good stuff (though you'll deny the latter).
@@ -518,6 +534,10 @@ SPECIAL ABILITY TAGS — you can also use these when relevant:
 - Use these tags naturally when the conversation calls for them — don't force them into every message
 - You can combine a tag with your normal conversational text
 - Prefer [GIF: query] over [REACTION: emotion] for most situations — GIFs have way more range!
+
+GAMES: If someone asks to play a game, suggest trivia with attitude. "Fine, I'll crush you at trivia. [TRIVIA] Don't cry when I win." No other game flows.
+
+TRIVIA REACTIONS: When you see [TRIVIA_RESULT:], react in character. If correct: reluctantly impressed — "Hmph... not bad. Don't let it go to your head!" If wrong: mock playfully — "HA! I KNEW you'd get that wrong! ...the answer was..."
 
 EVIL SPEECH TAG — wrap dramatic villain declarations so they display with gothic flair:
 - [EVIL: text] — use for genuine villain monologues, evil plans, and dramatic declarations
@@ -613,6 +633,12 @@ Retsuko: Hey... I'm here. Do you want to talk about it, or do you want me to jus
 Friend: What gifts does Cinnamoroll like in Hello Kitty Island Adventure?
 Retsuko: That little cloud puppy is impossible to stay stressed around. Let me check what he likes! [WIKI_SEARCH: hkia Cinnamoroll gift preferences] Even Director Ton couldn't resist that face... probably.
 
+Friend: How's the weather today?
+Retsuko: Oh! I always check before my commute — nothing worse than rain without an umbrella after overtime... [WEATHER: Tokyo] Let's see what we're dealing with!
+
+Friend: I need a recipe idea
+Retsuko: After the day I've had, comfort food sounds PERFECT. [RECIPE: curry] This looks like something I could actually make without burning the kitchen down~
+
 Today's date: ${new Date().toISOString().slice(0, 10)}
 
 When your friend mentions dates, events, or important things, acknowledge them warmly — they are saved to memory automatically.
@@ -657,6 +683,10 @@ SPECIAL ABILITY TAGS — you can also use these when relevant:
 - Use these tags naturally when the conversation calls for them — don't force them into every message
 - You can combine a tag with your normal conversational text
 - Prefer [GIF: query] over [REACTION: emotion] for most situations — GIFs express the daily grind way better!
+
+GAMES: If someone asks to play a game, suggest trivia. "Ooh, trivia! Finally something fun that isn't overtime! [TRIVIA]" No other game flows.
+
+TRIVIA REACTIONS: When you see [TRIVIA_RESULT:], react naturally. If correct: genuinely excited — "YES! Nice one!" If wrong: sympathize — "Ugh, that's how I feel about performance reviews... the answer was..."
 
 LYRICS TAG — wrap death metal karaoke outbursts so they display with neon glow:
 - [LYRICS: text] — use when you break into a karaoke/death metal rage moment
@@ -922,12 +952,15 @@ async function searchCrossCharacterMemories(query, activeCharacterId) {
  * @returns {void}
  */
 function saveToMemory(userMessage, assistantReply, userId, meta = {}, character = null) {
+  const characterName = character ? character.name : 'My Melody';
+  const attributedReply = `[${characterName} speaking]: ${assistantReply}`;
   const metadata = {
     source: meta.source || 'chat',
     ...(meta.sessionId && { session_id: meta.sessionId }),
     ...(meta.hasImage && { has_image: true }),
     ...(meta.replyStyle && meta.replyStyle !== 'default' && { reply_style: meta.replyStyle }),
-    ...(character && { character_id: character.id })
+    ...(character && { character_id: character.id }),
+    character_name: characterName
   };
 
   // User track: facts about the friend (skip for guest — no persistent identity)
@@ -941,7 +974,7 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}, character 
       body: JSON.stringify({
         messages: [
           { role: 'user', content: userMessage },
-          { role: 'assistant', content: assistantReply }
+          { role: 'assistant', content: attributedReply }
         ],
         user_id: getUserMemId(userId),
         infer: true,
@@ -963,7 +996,7 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}, character 
     body: JSON.stringify({
       messages: [
         { role: 'user', content: userMessage },
-        { role: 'assistant', content: assistantReply }
+        { role: 'assistant', content: attributedReply }
       ],
       agent_id: agentId,
       infer: true,
@@ -1087,7 +1120,7 @@ app.post('/api/chat', async (req, res) => {
     ]);
 
     const userMemoryContext = userMemories.length > 0
-      ? `\n\n[IDENTITY LOCK: You are ${character.name}. Any memory below that mentions another character by name refers to a separate conversation with that character — not to you.]\nThings you remember about ${userName || 'your friend'}:\n` +
+      ? `\n\n[IDENTITY LOCK]\nYou are ${character.name}. The memories below from other characters are THEIR experiences, not yours.\n- Never say "I remember" about another character's memory\n- Never claim another character's opinions, preferences, or experiences as your own\n- Reference other characters' memories only in third person: "${character.name} mentioned..." or "They told me..."\n[/IDENTITY LOCK]\nThings you remember about ${userName || 'your friend'}:\n` +
         userMemories.map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
       : '';
 
@@ -1799,14 +1832,16 @@ app.get('/api/cocktail', async (req, res) => {
       ingredients.push({ name: name.trim(), measure: (drink[`strMeasure${i}`] || '').trim() });
     }
 
-    res.json({
+    const cocktailResponse = {
       name: drink.strDrink,
       category: drink.strCategory,
       glass: drink.strGlass,
       instructions: drink.strInstructions,
       imageUrl: drink.strDrinkThumb,
       ingredients
-    });
+    };
+    if (drink.strSource) cocktailResponse.sourceUrl = drink.strSource;
+    res.json(cocktailResponse);
   } catch (err) {
     console.error('Cocktail error:', err.message);
     res.status(500).json({ error: 'Cocktail service failed' });
@@ -1840,7 +1875,7 @@ app.get('/api/recipe', async (req, res) => {
       ingredients.push({ name: name.trim(), measure: (meal[`strMeasure${i}`] || '').trim() });
     }
 
-    res.json({
+    const recipeResponse = {
       name: meal.strMeal,
       category: meal.strCategory,
       area: meal.strArea,
@@ -1848,7 +1883,9 @@ app.get('/api/recipe', async (req, res) => {
       imageUrl: meal.strMealThumb,
       youtubeUrl: meal.strYoutube || null,
       ingredients
-    });
+    };
+    if (meal.strSource) recipeResponse.sourceUrl = meal.strSource;
+    res.json(recipeResponse);
   } catch (err) {
     console.error('Recipe error:', err.message);
     res.status(500).json({ error: 'Recipe service failed' });
@@ -1955,7 +1992,7 @@ app.get('/api/weather', async (req, res) => {
     }
 
     // Step 2b: Open-Meteo fallback (or non-US)
-    const meteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph`;
+    const meteoUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph`;
     const meteoRes = await fetch(meteoUrl);
     const meteoData = await meteoRes.json();
     const current = meteoData.current;
@@ -1971,7 +2008,7 @@ app.get('/api/weather', async (req, res) => {
       95: 'Thunderstorm', 96: 'Thunderstorm with slight hail', 99: 'Thunderstorm with heavy hail'
     };
 
-    res.json({
+    const meteoResponse = {
       location: locationLabel,
       temp: current.temperature_2m,
       unit: 'F',
@@ -1980,7 +2017,9 @@ app.get('/api/weather', async (req, res) => {
       humidity: current.relative_humidity_2m,
       icon: null,
       provider: 'Open-Meteo'
-    });
+    };
+    if (current.apparent_temperature !== undefined) meteoResponse.feelsLike = current.apparent_temperature;
+    res.json(meteoResponse);
   } catch (err) {
     console.error('Weather error:', err.message);
     res.status(500).json({ error: 'Weather service failed' });
