@@ -710,7 +710,8 @@ async function processReply(text, sources, wikiSource) {
   addMessage(displayText, 'assistant', null, searchImageUrl, videoResult, sources, wikiSource);
 
   // Fetch and append reaction GIF asynchronously (non-blocking)
-  if (reactionMatch) {
+  // Extra gate: even when the model emits [REACTION:], only show ~25% of the time
+  if (reactionMatch && Math.random() < 0.25) {
     const emotion = reactionMatch[1].toLowerCase();
     const categories = REACTION_MAP[emotion];
     if (categories) {
