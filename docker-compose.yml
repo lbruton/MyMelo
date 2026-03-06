@@ -9,6 +9,10 @@ services:
       - MEM0_API_KEY=${MEM0_API_KEY}
       - BRAVE_API_KEY=${BRAVE_API_KEY}
       - GIPHY_API_KEY=${GIPHY_API_KEY}
+      - DEFAULT_LAT=${DEFAULT_LAT}
+      - DEFAULT_LON=${DEFAULT_LON}
+      - NWS_RADAR_STATION=${NWS_RADAR_STATION}
+      - NWS_OFFICE=${NWS_OFFICE}
     volumes:
       - melody-data:/app/data
     restart: unless-stopped

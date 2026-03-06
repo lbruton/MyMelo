@@ -768,6 +768,8 @@ async function processReply(text, sources, wikiSource) {
   const funFactMatch = text.match(/\[FUN_FACT\]/);
   const quoteMatch = text.match(/\[QUOTE\]/);
   const gifMatch = text.match(/\[GIF:\s*(.+?)\]/);
+  const radarMatch = text.match(/\[RADAR\]/);
+  const stormStreamMatch = text.match(/\[STORM_STREAM\]/);
 
   // Clean tags from display text
   let displayText = text
@@ -796,6 +798,8 @@ async function processReply(text, sources, wikiSource) {
     .replace(/\[FUN_FACT\]/g, '')
     .replace(/\[QUOTE\]/g, '')
     .replace(/\[GIF:\s*.+?\]/g, '')
+    .replace(/\[RADAR\]/g, '')
+    .replace(/\[STORM_STREAM\]/g, '')
     .trim();
 
   let searchImageUrl = null;
@@ -1410,6 +1414,97 @@ async function processReply(text, sources, wikiSource) {
           }
         }).catch(() => {});
     }
+
+    // Weather Radar (HKF-34)
+    if (radarMatch) {
+      fetch('/api/radar').then(r => r.json()).then(data => {
+        if (!data.nwsGif) return;
+        const card = document.createElement('div');
+        card.className = 'api-card radar-card';
+
+        const header = document.createElement('div');
+        header.className = 'radar-card-header';
+        const radarIcon = document.createElement('span');
+        radarIcon.className = 'radar-icon';
+        radarIcon.textContent = '\u{1F4E1}';
+        header.appendChild(radarIcon);
+        header.appendChild(document.createTextNode(` Live Radar \u2014 ${data.station}`));
+        card.appendChild(header);
+
+        const img = document.createElement('img');
+        img.src = data.nwsGif;
+        img.alt = `NWS Radar Loop - ${data.station}`;
+        img.className = 'radar-gif';
+        img.loading = 'lazy';
+        img.addEventListener('error', () => {
+          img.style.display = 'none';
+          const fallback = document.createElement('div');
+          fallback.className = 'radar-fallback';
+          const fbLink = document.createElement('a');
+          fbLink.href = 'https://radar.weather.gov/?settings=v1_eyJhZ2VuZGEiOnsiaWQiOm51bGwsImNlbnRlciI6Wy05NS45OSozNi4xNV0sInpvb20iOjh9fQ%3D%3D';
+          fbLink.target = '_blank';
+          fbLink.rel = 'noopener noreferrer';
+          fbLink.textContent = 'View radar on weather.gov \u2197';
+          fallback.appendChild(fbLink);
+          card.appendChild(fallback);
+        });
+        card.appendChild(img);
+
+        const footer = document.createElement('div');
+        footer.className = 'radar-card-footer';
+        const footerLink = document.createElement('a');
+        footerLink.href = 'https://radar.weather.gov';
+        footerLink.target = '_blank';
+        footerLink.rel = 'noopener noreferrer';
+        footerLink.textContent = 'NWS Radar \u2197';
+        footer.appendChild(footerLink);
+        card.appendChild(footer);
+
+        lastBubble.appendChild(card);
+        chatArea.scrollTop = chatArea.scrollHeight;
+      }).catch(() => {});
+    }
+
+    // Storm Stream (HKF-34)
+    if (stormStreamMatch) {
+      fetch('/api/storm-stream').then(r => r.json()).then(data => {
+        const card = document.createElement('div');
+        card.className = 'api-card storm-stream-card';
+
+        const header = document.createElement('div');
+        header.className = 'storm-stream-header';
+        const stormIcon = document.createElement('span');
+        stormIcon.className = 'storm-icon';
+        stormIcon.textContent = '\u{1F4FA}';
+        header.appendChild(stormIcon);
+        header.appendChild(document.createTextNode(` ${data.channel} `));
+        if (data.isLive) {
+          const badge = document.createElement('span');
+          badge.className = 'live-badge';
+          badge.textContent = 'LIVE';
+          header.appendChild(badge);
+        }
+        card.appendChild(header);
+
+        const desc = document.createElement('div');
+        desc.className = 'storm-stream-desc';
+        desc.textContent = data.isLive
+          ? 'Severe weather coverage is live right now!'
+          : 'Local severe weather coverage — check for live updates during storms.';
+        card.appendChild(desc);
+
+        const link = document.createElement('a');
+        link.href = data.liveUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'storm-stream-link';
+        link.textContent = data.isLive ? '\u{25B6}\u{FE0F} Watch Live Stream' : '\u{1F4FA} Open Weather Channel';
+        card.appendChild(link);
+
+        lastBubble.appendChild(card);
+        chatArea.scrollTop = chatArea.scrollHeight;
+      }).catch(() => {});
+    }
   }
 }
 
@@ -1909,73 +2004,148 @@ async function runWelcomeFlow() {
  * @returns {Promise<void>}
  */
 async function checkWeatherAlerts() {
-  if (!navigator.geolocation) return;
+  // Try browser geolocation first, fall back to server default location
+  const fetchAlerts = async (lat, lon) => {
+    const url = lat && lon
+      ? `/api/weather-alerts?lat=${lat}&lon=${lon}`
+      : '/api/weather-alerts';
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.alerts || !data.alerts.length) return;
 
-  navigator.geolocation.getCurrentPosition(async (pos) => {
-    try {
-      const { latitude, longitude } = pos.coords;
-      const res = await fetch(`/api/weather-alerts?lat=${latitude}&lon=${longitude}`);
-      const data = await res.json();
-      if (!data.alerts || !data.alerts.length) return;
+    const severe = data.alerts.filter(a =>
+      a.severity === 'Extreme' || a.severity === 'Severe'
+    );
+    if (!severe.length) return;
 
-      // Only show Severe/Extreme alerts automatically
-      const severe = data.alerts.filter(a =>
-        a.severity === 'Extreme' || a.severity === 'Severe'
-      );
-      if (!severe.length) return;
+    const charConfig = CHARACTER_CONFIG[activeCharacter] || CHARACTER_CONFIG.melody;
+    const charName = charConfig.name;
 
-      // Build alert card
-      const charName = (CHARACTER_CONFIG[activeCharacter] || CHARACTER_CONFIG.melody).name;
-      severe.forEach(alert => {
-        const card = document.createElement('div');
-        card.className = `weather-alert-card severity-${alert.severity.toLowerCase()}`;
+    // Show alert cards
+    severe.forEach(alert => {
+      const card = document.createElement('div');
+      card.className = `weather-alert-card severity-${alert.severity.toLowerCase()}`;
 
-        const icon = alert.event.toLowerCase().includes('tornado') ? '\u{1F32A}\u{FE0F}' :
-                     alert.event.toLowerCase().includes('thunder') ? '\u{26A1}' :
-                     alert.event.toLowerCase().includes('flood') ? '\u{1F30A}' :
-                     alert.event.toLowerCase().includes('winter') ? '\u{2744}\u{FE0F}' :
-                     alert.event.toLowerCase().includes('heat') ? '\u{1F525}' : '\u{26A0}\u{FE0F}';
+      const icon = alert.event.toLowerCase().includes('tornado') ? '\u{1F32A}\u{FE0F}' :
+                   alert.event.toLowerCase().includes('thunder') ? '\u{26A1}' :
+                   alert.event.toLowerCase().includes('flood') ? '\u{1F30A}' :
+                   alert.event.toLowerCase().includes('winter') ? '\u{2744}\u{FE0F}' :
+                   alert.event.toLowerCase().includes('heat') ? '\u{1F525}' : '\u{26A0}\u{FE0F}';
 
-        card.innerHTML = `
-          <div class="alert-header">
-            <span class="alert-icon">${icon}</span>
-            <span class="alert-event">${alert.event}</span>
-            <span class="alert-severity">${alert.severity}</span>
-          </div>
-          <div class="alert-headline">${alert.headline || ''}</div>
-          ${alert.instruction ? `<div class="alert-instruction">${alert.instruction}</div>` : ''}
-        `;
-        chatArea.appendChild(card);
-      });
+      const alertHeader = document.createElement('div');
+      alertHeader.className = 'alert-header';
+      const alertIcon = document.createElement('span');
+      alertIcon.className = 'alert-icon';
+      alertIcon.textContent = icon;
+      const alertEvent = document.createElement('span');
+      alertEvent.className = 'alert-event';
+      alertEvent.textContent = alert.event;
+      const alertSev = document.createElement('span');
+      alertSev.className = 'alert-severity';
+      alertSev.textContent = alert.severity;
+      alertHeader.append(alertIcon, alertEvent, alertSev);
+      card.appendChild(alertHeader);
 
-      // Character comments on the alert
-      const topAlert = severe[0];
-      const alertComment = document.createElement('div');
-      alertComment.className = 'message assistant';
-      const avatar = document.createElement('div');
-      avatar.className = 'message-avatar';
-      const avatarImg = document.createElement('img');
-      avatarImg.src = (CHARACTER_CONFIG[activeCharacter] || CHARACTER_CONFIG.melody).avatar;
-      avatarImg.alt = charName;
-      avatarImg.className = 'message-avatar-img';
-      avatar.appendChild(avatarImg);
-      const bubble = document.createElement('div');
-      bubble.className = 'message-bubble';
-      bubble.textContent = activeCharacter === 'kuromi'
-        ? `Hey! There's a ${topAlert.event} alert for your area. Even I know when to take cover — stay safe, got it?!`
-        : activeCharacter === 'retsuko'
-        ? `Hey... there's a ${topAlert.event} alert right now. Please be careful and stay safe! I worry about you.`
-        : `Oh no~! There's a ${topAlert.event} alert for your area! Mama always says safety comes first — please be careful! \u2661`;
-      alertComment.appendChild(avatar);
-      alertComment.appendChild(bubble);
-      chatArea.appendChild(alertComment);
-      chatArea.scrollTop = chatArea.scrollHeight;
-    } catch {
-      // Silently fail — alerts are a nice-to-have
+      if (alert.headline) {
+        const headline = document.createElement('div');
+        headline.className = 'alert-headline';
+        headline.textContent = alert.headline;
+        card.appendChild(headline);
+      }
+      if (alert.instruction) {
+        const instruction = document.createElement('div');
+        instruction.className = 'alert-instruction';
+        instruction.textContent = alert.instruction;
+        card.appendChild(instruction);
+      }
+      chatArea.appendChild(card);
+    });
+
+    // Character comment with radar + stream offers
+    const topAlert = severe[0];
+    const alertComment = document.createElement('div');
+    alertComment.className = 'message assistant';
+    const avatar = document.createElement('div');
+    avatar.className = 'message-avatar';
+    const avatarImg = document.createElement('img');
+    avatarImg.src = charConfig.avatar;
+    avatarImg.alt = charName;
+    avatarImg.className = 'message-avatar-img';
+    avatar.appendChild(avatarImg);
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.textContent = activeCharacter === 'kuromi'
+      ? `Hey! There's a ${topAlert.event} alert. Even I know when to take cover. I pulled up the radar and the local news is streaming — don't say I never did anything nice for you!`
+      : activeCharacter === 'retsuko'
+      ? `Hey... there's a ${topAlert.event} alert right now. I pulled up the radar so you can see what's coming, and the local weather team is streaming. Please stay safe! I worry about you.`
+      : `Oh no~! There's a ${topAlert.event} alert! Mama always says safety comes first! I brought up the radar so you can watch the storm, and the local news is covering it live. Please be careful! \u2661`;
+    alertComment.appendChild(avatar);
+    alertComment.appendChild(bubble);
+
+    // Fetch radar and storm stream in parallel, append to bubble
+    const [radarData, streamData] = await Promise.all([
+      fetch('/api/radar').then(r => r.json()).catch(() => null),
+      fetch('/api/storm-stream').then(r => r.json()).catch(() => null)
+    ]);
+
+    // Radar card inside the bubble
+    if (radarData?.nwsGif) {
+      const radarCard = document.createElement('div');
+      radarCard.className = 'api-card radar-card';
+      radarCard.innerHTML = `
+        <div class="radar-card-header"><span class="radar-icon">\u{1F4E1}</span> Live Radar \u2014 ${radarData.station}</div>
+      `;
+      const radarImg = document.createElement('img');
+      radarImg.src = radarData.nwsGif;
+      radarImg.alt = `NWS Radar Loop - ${radarData.station}`;
+      radarImg.className = 'radar-gif';
+      radarImg.loading = 'lazy';
+      radarImg.addEventListener('error', () => radarImg.remove());
+      radarCard.appendChild(radarImg);
+      const radarFooter = document.createElement('div');
+      radarFooter.className = 'radar-card-footer';
+      radarFooter.innerHTML = `<a href="https://radar.weather.gov" target="_blank" rel="noopener">NWS Radar \u2197</a>`;
+      radarCard.appendChild(radarFooter);
+      bubble.appendChild(radarCard);
     }
-  }, () => {
-    // Geolocation denied — skip alerts silently
-  }, { timeout: 5000 });
+
+    // Storm stream card inside the bubble
+    if (streamData) {
+      const streamCard = document.createElement('div');
+      streamCard.className = 'api-card storm-stream-card';
+      const liveIndicator = streamData.isLive ? '<span class="live-badge">LIVE</span>' : '';
+      streamCard.innerHTML = `
+        <div class="storm-stream-header"><span class="storm-icon">\u{1F4FA}</span> ${streamData.channel} ${liveIndicator}</div>
+        <div class="storm-stream-desc">${streamData.isLive ? 'Severe weather coverage is live right now!' : 'Local weather coverage \u2014 check for live updates during storms.'}</div>
+      `;
+      const streamLink = document.createElement('a');
+      streamLink.href = streamData.liveUrl;
+      streamLink.target = '_blank';
+      streamLink.rel = 'noopener';
+      streamLink.className = 'storm-stream-link';
+      streamLink.textContent = streamData.isLive ? '\u{25B6}\u{FE0F} Watch Live Stream' : '\u{1F4FA} Open Weather Channel';
+      streamCard.appendChild(streamLink);
+      bubble.appendChild(streamCard);
+    }
+
+    alertComment.appendChild(bubble);
+    chatArea.appendChild(alertComment);
+    chatArea.scrollTop = chatArea.scrollHeight;
+  };
+
+  try {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => fetchAlerts(pos.coords.latitude, pos.coords.longitude).catch(() => {}),
+        () => fetchAlerts().catch(() => {}),
+        { timeout: 5000 }
+      );
+    } else {
+      await fetchAlerts();
+    }
+  } catch {
+    // Silently fail — alerts are a nice-to-have
+  }
 }
 
 // ─── Init ───

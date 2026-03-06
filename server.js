@@ -396,9 +396,12 @@ SPECIAL ABILITY TAGS — you can also use these when relevant:
 - Show today's space picture: [SPACE_PIC] ("Oh my~ the stars are so pretty!")
 - Share an inspirational quote: [QUOTE] (perfect for cheering someone up)
 - Show a fun GIF: [GIF: search query] (great for reactions, celebrations, or when words aren't enough~ pick a descriptive query!)
+- Show live weather radar: [RADAR] (use when someone is worried about storms, asks about rain, or severe weather is happening — "Let me check the radar for you~!")
+- Show live storm coverage stream: [STORM_STREAM] (use during active severe weather when someone is scared or wants live updates — "Here's the local weather team, they'll keep you safe~!")
 - Use these tags naturally when the conversation calls for them — don't force them into every message
 - You can combine a tag with your normal conversational text
 - Prefer [GIF: query] over [REACTION: emotion] for most situations — GIFs are more expressive and varied!
+- During storms or severe weather: be extra caring and proactive. Offer [RADAR] to show the radar, and [STORM_STREAM] for live coverage. Comfort and reassure.
 
 GAMES: If someone asks to play a game, enthusiastically suggest trivia! "Oh~! I love trivia! [TRIVIA] Want to try?" If they want something else, redirect naturally to conversation.
 
@@ -531,9 +534,12 @@ SPECIAL ABILITY TAGS — you can also use these when relevant:
 - Show today's space picture: [SPACE_PIC]
 - Share an inspirational quote: [QUOTE] (deliver it with your own snarky commentary)
 - Show a GIF: [GIF: search query] (use for dramatic reactions, sarcastic slow claps, or evil cackles — pick a descriptive query!)
+- Show live weather radar: [RADAR] (use when storms come up — "Ugh, FINE, let me pull up the radar so you stop worrying...")
+- Show live storm coverage: [STORM_STREAM] (use during severe weather — "Here, watch the news people. They get paid to freak out about this stuff.")
 - Use these tags naturally when the conversation calls for them — don't force them into every message
 - You can combine a tag with your normal conversational text
 - Prefer [GIF: query] over [REACTION: emotion] for most situations — GIFs have way more range!
+- During storms: drop the tough act slightly. You still care even if you won't admit it. Offer [RADAR] and [STORM_STREAM] while pretending you're not worried.
 
 GAMES: If someone asks to play a game, suggest trivia with attitude. "Fine, I'll crush you at trivia. [TRIVIA] Don't cry when I win." No other game flows.
 
@@ -680,9 +686,12 @@ SPECIAL ABILITY TAGS — you can also use these when relevant:
 - Show today's space picture: [SPACE_PIC] ("At least the universe is beautiful, even if my job isn't")
 - Share an inspirational quote: [QUOTE] (you genuinely need encouragement sometimes)
 - Show a GIF: [GIF: search query] (perfect for dramatic reactions, exhausted face-plants, or rage moments — pick a descriptive query!)
+- Show live weather radar: [RADAR] (use when weather comes up — "Let me check the radar real quick — I do NOT want to be stuck at work in a storm...")
+- Show live storm coverage: [STORM_STREAM] (use during severe weather — "Here, the local weather team is covering it live. Stay safe, okay? I worry about you.")
 - Use these tags naturally when the conversation calls for them — don't force them into every message
 - You can combine a tag with your normal conversational text
 - Prefer [GIF: query] over [REACTION: emotion] for most situations — GIFs express the daily grind way better!
+- During storms: you genuinely worry. Drop the work complaints and be caring. Offer [RADAR] and [STORM_STREAM]. You know what it's like to be scared.
 
 GAMES: If someone asks to play a game, suggest trivia. "Ooh, trivia! Finally something fun that isn't overtime! [TRIVIA]" No other game flows.
 
@@ -1707,7 +1716,9 @@ app.get('/api/capabilities', (req, res) => {
     { id: 'space_pic', name: 'Space Picture', description: 'NASA Astronomy Picture of the Day', tag: '[SPACE_PIC]' },
     { id: 'fun_fact', name: 'Fun Facts', description: 'Random useless facts', tag: '[FUN_FACT]' },
     { id: 'quote', name: 'Quotes', description: 'Inspirational quotes', tag: '[QUOTE]' },
-    { id: 'gif', name: 'GIF Search', description: 'Search for GIFs via Giphy', tag: '[GIF: search query]' }
+    { id: 'gif', name: 'GIF Search', description: 'Search for GIFs via Giphy', tag: '[GIF: search query]' },
+    { id: 'radar', name: 'Weather Radar', description: 'Live animated radar loop for local area', tag: '[RADAR]' },
+    { id: 'storm_stream', name: 'Storm Stream', description: 'Live local severe weather coverage', tag: '[STORM_STREAM]' }
   ]);
 });
 
@@ -2259,8 +2270,9 @@ app.get('/api/gif', async (req, res) => {
  * @returns {Object} 500 - { error: string }
  */
 app.get('/api/weather-alerts', async (req, res) => {
-  const { lat, lon } = req.query;
-  if (!lat || !lon) return res.status(400).json({ error: 'lat and lon required' });
+  const lat = req.query.lat || process.env.DEFAULT_LAT;
+  const lon = req.query.lon || process.env.DEFAULT_LON;
+  if (!lat || !lon) return res.status(400).json({ error: 'lat and lon required (set DEFAULT_LAT/DEFAULT_LON in .env as fallback)' });
 
   try {
     const url = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
@@ -2286,6 +2298,139 @@ app.get('/api/weather-alerts', async (req, res) => {
   } catch (err) {
     console.error('Weather alerts error:', err.message);
     res.status(500).json({ error: 'Weather alerts service failed' });
+  }
+});
+
+// --- Storm / Radar APIs (HKF-34) ---
+
+/**
+ * GET /api/radar — Live NWS radar loop GIF + RainViewer tile data.
+ *
+ * Returns the animated radar GIF URL from the nearest NWS station
+ * and RainViewer API timestamps for tile-based animation.
+ *
+ * @route GET /api/radar
+ * @returns {Object} 200 - { nwsGif, station, rainviewer }
+ */
+app.get('/api/radar', async (req, res) => {
+  const station = process.env.NWS_RADAR_STATION || 'KINX';
+  const lat = process.env.DEFAULT_LAT || '36.1540';
+  const lon = process.env.DEFAULT_LON || '-95.9928';
+
+  try {
+    // RainViewer free API — get available radar timestamps
+    const rvRes = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const rvData = rvRes.ok ? await rvRes.json() : null;
+
+    const past = rvData?.radar?.past || [];
+    const nowcast = rvData?.radar?.nowcast || [];
+    const frames = [...past, ...nowcast].map(f => ({
+      time: f.time,
+      path: f.path
+    }));
+
+    res.json({
+      nwsGif: `https://radar.weather.gov/ridge/standard/${station}_loop.gif`,
+      station,
+      lat: parseFloat(lat),
+      lon: parseFloat(lon),
+      rainviewer: {
+        host: rvData?.host || 'https://tilecache.rainviewer.com',
+        frames
+      }
+    });
+  } catch (err) {
+    // Fallback to just the NWS GIF if RainViewer fails
+    res.json({
+      nwsGif: `https://radar.weather.gov/ridge/standard/${station}_loop.gif`,
+      station,
+      lat: parseFloat(lat),
+      lon: parseFloat(lon),
+      rainviewer: null
+    });
+  }
+});
+
+/**
+ * GET /api/storm-stream — Local severe weather live stream info.
+ *
+ * Returns YouTube channel and embed URL for local weather coverage.
+ * Checks if a live stream is currently active.
+ *
+ * @route GET /api/storm-stream
+ * @returns {Object} 200 - { channel, channelUrl, liveUrl, isLive }
+ */
+app.get('/api/storm-stream', async (req, res) => {
+  const channelUrl = 'https://www.youtube.com/@NewsOn6Weather';
+  const liveUrl = `${channelUrl}/live`;
+
+  // Try to detect if a live stream is active by fetching the /live page
+  let isLive = false;
+  try {
+    const r = await fetch(liveUrl, {
+      headers: { 'User-Agent': 'HelloKittyFriends/1.0' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(5000)
+    });
+    if (r.ok) {
+      const html = await r.text();
+      // YouTube's /live page contains "isLiveBroadcast" in JSON-LD when streaming
+      isLive = html.includes('"isLiveBroadcast"') || html.includes('"isLive":true');
+    }
+  } catch {
+    // Can't check — assume not live
+  }
+
+  res.json({
+    channel: 'News On 6 Weather',
+    channelUrl,
+    liveUrl,
+    isLive
+  });
+});
+
+/**
+ * GET /api/nws-discussion — Latest NWS forecast discussion for local office.
+ *
+ * Fetches the Area Forecast Discussion from NWS Tulsa (TSA).
+ *
+ * @route GET /api/nws-discussion
+ * @returns {Object} 200 - { title, text, updated }
+ */
+app.get('/api/nws-discussion', async (req, res) => {
+  const office = process.env.NWS_OFFICE || 'TSA';
+  try {
+    const r = await fetch(`https://api.weather.gov/products/types/AFD/locations/${office}`, {
+      headers: { 'User-Agent': 'HelloKittyFriends/1.0', Accept: 'application/geo+json' }
+    });
+    if (!r.ok) return res.json({ title: '', text: 'No discussion available', updated: null });
+    const data = await r.json();
+
+    const latest = data['@graph']?.[0];
+    if (!latest?.['@id']) return res.json({ title: '', text: 'No discussion available', updated: null });
+
+    // Fetch the full product text
+    const prodRes = await fetch(latest['@id'], {
+      headers: { 'User-Agent': 'HelloKittyFriends/1.0', Accept: 'application/geo+json' }
+    });
+    if (!prodRes.ok) return res.json({ title: '', text: 'No discussion available', updated: null });
+    const prod = await prodRes.json();
+
+    // Truncate to ~1500 chars at a sentence boundary
+    const fullText = prod.productText || '';
+    let synopsis = fullText.slice(0, 1500);
+    const lastPeriod = synopsis.lastIndexOf('.');
+    if (lastPeriod > 1000) synopsis = synopsis.slice(0, lastPeriod + 1);
+
+    res.json({
+      title: `NWS ${office} Forecast Discussion`,
+      text: synopsis,
+      updated: prod.issuanceTime || null,
+      office
+    });
+  } catch (err) {
+    console.error('NWS discussion error:', err.message);
+    res.json({ title: '', text: 'Discussion unavailable', updated: null });
   }
 });
 

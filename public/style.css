@@ -878,6 +878,7 @@ html, body {
 
 [data-theme="dark"] .message.user .message-bubble {
   background: linear-gradient(135deg, color-mix(in srgb, var(--char-primary) 80%, #000), color-mix(in srgb, var(--char-secondary) 70%, #000));
+  color: #F0E0F0;
 }
 
 [data-theme="dark"] #messageInput {
@@ -1517,12 +1518,174 @@ html, body {
   50% { opacity: 0.7; }
 }
 
+[data-theme="dark"] .weather-alert-card {
+  color: #F0E0F0;
+}
+
 [data-theme="dark"] .weather-alert-card.severity-extreme {
-  background: rgba(231, 76, 60, 0.2);
+  background: rgba(231, 76, 60, 0.25);
 }
 
 [data-theme="dark"] .weather-alert-card.severity-severe {
-  background: rgba(230, 126, 34, 0.15);
+  background: rgba(230, 126, 34, 0.2);
+}
+
+/* ─── Radar & Storm Stream Cards (HKF-34) ─── */
+
+.radar-card {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 1px solid rgba(100, 149, 237, 0.3);
+  border-radius: 12px;
+  padding: 0;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.radar-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px 6px;
+  font-weight: 600;
+  font-size: 0.9em;
+  color: #e0e0ff;
+}
+
+.radar-icon {
+  font-size: 1.1em;
+}
+
+.radar-gif {
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  display: block;
+  background: #0a0a1a;
+}
+
+.radar-fallback {
+  padding: 20px;
+  text-align: center;
+  color: #8888cc;
+}
+
+.radar-fallback a {
+  color: #6495ed;
+  text-decoration: none;
+}
+
+.radar-card-footer {
+  padding: 6px 12px 10px;
+  font-size: 0.75em;
+  text-align: right;
+}
+
+.radar-card-footer a {
+  color: #6495ed;
+  text-decoration: none;
+  opacity: 0.7;
+}
+
+.storm-stream-card {
+  background: linear-gradient(135deg, #2d1117 0%, #3b1520 100%);
+  border: 1px solid rgba(255, 80, 80, 0.3);
+  border-radius: 12px;
+  padding: 12px;
+  margin-top: 8px;
+}
+
+.storm-stream-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 0.95em;
+  color: #ffe0e0;
+  margin-bottom: 6px;
+}
+
+.storm-icon {
+  font-size: 1.1em;
+}
+
+.live-badge {
+  background: #ff3333;
+  color: white;
+  font-size: 0.7em;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  animation: livePulse 2s ease-in-out infinite;
+}
+
+@keyframes livePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.storm-stream-desc {
+  font-size: 0.85em;
+  color: #ccaaaa;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.storm-stream-link {
+  display: inline-block;
+  background: rgba(255, 80, 80, 0.2);
+  color: #ff8888;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.9em;
+  font-weight: 600;
+  border: 1px solid rgba(255, 80, 80, 0.3);
+  transition: background 0.2s;
+}
+
+.storm-stream-link:hover {
+  background: rgba(255, 80, 80, 0.35);
+}
+
+/* Light mode overrides for radar/storm cards */
+html:not([data-theme="dark"]) .radar-card {
+  background: linear-gradient(135deg, #eef2ff 0%, #e8eeff 100%);
+  border-color: rgba(100, 149, 237, 0.4);
+}
+
+html:not([data-theme="dark"]) .radar-card-header {
+  color: #2a2a5a;
+}
+
+html:not([data-theme="dark"]) .radar-card-footer a {
+  color: #4169e1;
+}
+
+html:not([data-theme="dark"]) .storm-stream-card {
+  background: linear-gradient(135deg, #fff0f0 0%, #ffe8e8 100%);
+  border-color: rgba(200, 60, 60, 0.3);
+}
+
+html:not([data-theme="dark"]) .storm-stream-header {
+  color: #5a1a1a;
+}
+
+html:not([data-theme="dark"]) .storm-stream-desc {
+  color: #774444;
+}
+
+html:not([data-theme="dark"]) .storm-stream-link {
+  background: rgba(200, 60, 60, 0.1);
+  color: #cc3333;
+  border-color: rgba(200, 60, 60, 0.3);
+}
+
+@media (min-width: 541px) {
+  .radar-gif {
+    max-height: 250px;
+  }
 }
 
 /* ─── Special Message Blocks ─── */
