@@ -587,14 +587,40 @@ function addMessage(text, role, imageDataURL, searchImageUrl, videoResult, sourc
       bubble.appendChild(p);
     }
   } else if (role === 'assistant') {
-    // Render basic markdown: **bold**, *italic*, bullet lists
-    const formatted = text
+    // Render special character blocks, then basic markdown
+    const formatText = raw => raw
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.+?)\*/g, '<em>$1</em>')
       .replace(/\n\s*[\*\-]\s+/g, '<br>• ')
       .replace(/\n/g, '<br>');
-    bubble.innerHTML = formatted;
+
+    // Split on special tags, preserving them as block elements
+    const formatted = text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      // Retsuko metal lyrics — Bebas Neue, neon red glow
+      .replace(/\[LYRICS:\s*([\s\S]+?)\]/g, (_, lyrics) => {
+        const lines = lyrics.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+        const html = lines.trim().replace(/\s*\/\s*/g, '<br>');
+        return `</p><div class="lyrics-block">${html}</div><p>`;
+      })
+      // Melody Mama Says — italic pink quote block
+      .replace(/\[MAMA:\s*([\s\S]+?)\]/g, (_, quote) => {
+        const html = formatText(quote.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim());
+        return `</p><div class="mama-quote">${html}</div><p>`;
+      })
+      // Kuromi villain declaration — gothic purple block
+      .replace(/\[EVIL:\s*([\s\S]+?)\]/g, (_, speech) => {
+        const html = formatText(speech.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim());
+        return `</p><div class="evil-speech">${html}</div><p>`;
+      })
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/\n\s*[\*\-]\s+/g, '<br>• ')
+      .replace(/\n/g, '<br>');
+
+    bubble.innerHTML = `<p>${formatted}</p>`.replace(/<p><\/p>/g, '').replace(/<p><br>/g, '<p>');
+
   } else {
     bubble.textContent = text;
   }
