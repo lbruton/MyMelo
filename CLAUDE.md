@@ -6,10 +6,28 @@ A My Melody (Sanrio) companion chat app with persistent memory, image vision, we
 
 ## Branching & Workflow
 
-- **`main`** — Production releases only. Protected. Never push directly.
-- **`dev`** — Integration branch. All work PRs target `dev`. Protected via Codacy quality gates.
-- **`patch/VERSION`** — Work branches created from `dev` for each version bump.
-- Flow: `patch/VERSION` → PR to `dev` → QA → merge → (when ready to ship) `dev` → PR to `main` → release tag
+- **`main`** — Protected via Codacy PR gate. Never push directly.
+- **`fix/` or `feat/` branches** — Created from `main` for each change.
+- Flow: feature branch → develop + test in Docker locally → push → PR to `main` → Codacy → merge → rebuild Docker
+
+### Project Workflow Overrides (vs global CLAUDE.md)
+
+This is a small personal project running on local Docker. These global rules are **relaxed**:
+
+- **No `dev` branch** — `main` only. PRs target `main` directly.
+- **No version lock** — `/release patch` and `/start-patch` do NOT apply.
+- **Worktrees optional** — A simple `git checkout -b fix/xxx` from `main` is fine. Worktrees are available but not mandatory.
+- **No Browserbase tests** — Manual testing in Docker (`docker-compose up --build`).
+- **No deploy-verify** — Local Docker only, no Fly.io.
+
+### What DOES apply (non-negotiable)
+
+- **Linear issue for every code change** — No cowboy coding.
+- **Spec-workflow for features** — Requirements → Design → Tasks → Implementation with dashboard approvals. Bug fixes with clear root cause may skip the spec.
+- **PR gate** — All code reaches `main` via PR. Codacy quality gate enforced.
+- **Implementation logging** — `log-implementation` before marking tasks `[x]`.
+- **Wiki updates** — `/wiki-update` for changes affecting documented behavior.
+- **Test in Docker before pushing** — `docker-compose down && docker-compose up --build -d` then verify.
 
 ## Architecture
 

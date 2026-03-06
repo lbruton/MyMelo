@@ -8,6 +8,7 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - MEM0_API_KEY=${MEM0_API_KEY}
       - BRAVE_API_KEY=${BRAVE_API_KEY}
+      - GIPHY_API_KEY=${GIPHY_API_KEY}
     volumes:
       - melody-data:/app/data
     restart: unless-stopped
