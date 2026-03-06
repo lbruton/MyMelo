@@ -878,6 +878,7 @@ html, body {
 
 [data-theme="dark"] .message.user .message-bubble {
   background: linear-gradient(135deg, color-mix(in srgb, var(--char-primary) 80%, #000), color-mix(in srgb, var(--char-secondary) 70%, #000));
+  color: #F0E0F0;
 }
 
 [data-theme="dark"] #messageInput {
