@@ -5,7 +5,7 @@
  * PWA install prompt, settings, and first-time welcome flow.
  * No framework — vanilla JavaScript with DOM manipulation.
  *
- * @version 2.5.1
+ * @version 2.6.0
  */
 
 // ─── DOM refs ───
@@ -93,6 +93,76 @@ if (!activeUser) {
 } else {
   activeUserLabel.textContent = USER_NAMES[activeUser] || activeUser;
 }
+
+// ─── Character Picker ───
+/**
+ * Configuration for each selectable companion character.
+ * @type {Object<string, {name: string, avatar: string, color: string}>}
+ */
+const CHARACTER_CONFIG = {
+  melody:  { name: 'My Melody',  avatar: '/images/melody-avatar.png',  color: '#FF69B4' },
+  kuromi:  { name: 'Kuromi',      avatar: '/images/kuromi-avatar.png',   color: '#FF1493' },
+  retsuko: { name: 'Aggretsuko',  avatar: '/images/retsuko-avatar.png',  color: '#FF4500' }
+};
+
+/** @type {string} Currently active character ID, persisted in localStorage. */
+let activeCharacter = localStorage.getItem('activeCharacter') || 'melody';
+
+const characterPicker = document.getElementById('characterPicker');
+const headerAvatar = document.querySelector('.header-avatar');
+const headerTitle = document.querySelector('.header-text h1');
+
+/**
+ * Select a companion character, persist the choice, update the header,
+ * apply the character's accent color, and close the picker.
+ *
+ * @param {string} characterId - The character ID to activate (e.g. "melody", "kuromi", "retsuko").
+ * @returns {void}
+ */
+function selectCharacter(characterId) {
+  const config = CHARACTER_CONFIG[characterId];
+  if (!config) return;
+
+  activeCharacter = characterId;
+  localStorage.setItem('activeCharacter', characterId);
+
+  // Update header avatar
+  headerAvatar.src = config.avatar;
+  headerAvatar.alt = config.name;
+
+  // Update header title text node (preserves the activeUserLabel span inside h1)
+  if (headerTitle.firstChild?.nodeType === Node.TEXT_NODE) {
+    headerTitle.firstChild.textContent = config.name;
+  }
+
+  // Apply character accent color (takes priority over user color)
+  document.documentElement.style.setProperty('--accent-highlight', config.color);
+
+  // Update active highlight on picker buttons
+  characterPicker.querySelectorAll('.character-picker-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.character === characterId);
+  });
+
+  // Update typing indicator avatar
+  const typingAvatar = document.querySelector('.typing-indicator img') || document.querySelector('#typingIndicator img');
+  if (typingAvatar) {
+    typingAvatar.src = config.avatar;
+    typingAvatar.alt = config.name;
+  }
+
+  // Hide picker
+  characterPicker.classList.add('hidden');
+}
+
+// Wire header avatar click to open character picker
+headerAvatar.addEventListener('click', () => {
+  characterPicker.classList.remove('hidden');
+});
+
+// Wire character picker buttons via delegation (no inline onclick needed)
+characterPicker.querySelectorAll('.character-picker-btn').forEach(btn => {
+  btn.addEventListener('click', () => selectCharacter(btn.dataset.character));
+});
 
 // ─── Settings ───
 let replyStyle = localStorage.getItem('replyStyle') || 'default';
@@ -318,8 +388,9 @@ function addMessage(text, role, imageDataURL, searchImageUrl, videoResult, sourc
 
   if (role === 'assistant') {
     const avatarImg = document.createElement('img');
-    avatarImg.src = '/images/melody-avatar.png';
-    avatarImg.alt = 'My Melody';
+    const _char = CHARACTER_CONFIG[activeCharacter] ? activeCharacter : 'melody';
+    avatarImg.src = CHARACTER_CONFIG[_char].avatar;
+    avatarImg.alt = CHARACTER_CONFIG[_char].name;
     avatarImg.className = 'message-avatar-img';
     avatar.appendChild(avatarImg);
   } else {
@@ -591,7 +662,7 @@ async function sendMessage() {
   messageInput.value = '';
   addMessage(text, 'user', pendingImageDataURL);
 
-  const body = { message: text, replyStyle, sessionId, userId: activeUser };
+  const body = { message: text, replyStyle, sessionId, userId: activeUser, characterId: activeCharacter || 'melody' };
   if (pendingImageBase64) {
     body.imageBase64 = pendingImageBase64;
     body.imageMime = pendingImageMime;
@@ -804,13 +875,21 @@ refreshMemoriesBtn.addEventListener('click', loadMemories);
  */
 async function loadMemories() {
   loadRelationshipStats();
+  // Update the memories tab header to reflect the active character
+  const memoriesTabHeader = document.querySelector('#tabMemories .tab-header h2');
+  if (memoriesTabHeader) {
+    const _charName = (CHARACTER_CONFIG[activeCharacter] || CHARACTER_CONFIG.melody).name;
+    memoriesTabHeader.textContent = `${_charName}'s Memories`;
+  }
   memoryList.innerHTML = '<p class="empty-state">Loading memories...</p>';
   try {
-    const res = await fetch(`/api/memories${activeUser ? '?userId=' + activeUser : ''}`);
+    const _charId = CHARACTER_CONFIG[activeCharacter] ? activeCharacter : 'melody';
+    const _memoriesUrl = `/api/memories?characterId=${_charId}${activeUser ? '&userId=' + activeUser : ''}`;
+    const res = await fetch(_memoriesUrl);
     const memories = await res.json();
 
     if (!memories.length) {
-      memoryList.innerHTML = '<p class="empty-state">No memories stored yet! Chat with My Melody to create some \u2661</p>';
+      memoryList.innerHTML = `<p class="empty-state">No memories stored yet! Chat with ${_charName} to create some \u2661</p>`;
       return;
     }
 
@@ -822,11 +901,12 @@ async function loadMemories() {
       const info = document.createElement('div');
       info.className = 'memory-info';
 
-      // Track label — use actual name for friend track, "Melody's Thoughts" for agent track
+      // Track label — use actual name for friend track, character name for agent track
       const trackLabel = document.createElement('span');
       trackLabel.className = `memory-track-label ${mem.track || 'friend'}`;
       const friendName = USER_NAMES[activeUser] || 'Friend';
-      trackLabel.textContent = mem.track === 'melody' ? "Melody's Thoughts" : `About ${friendName}`;
+      const trackCharConfig = CHARACTER_CONFIG[mem.track];
+      trackLabel.textContent = trackCharConfig ? `${trackCharConfig.name}'s Thoughts` : `About ${friendName}`;
       info.appendChild(trackLabel);
 
       const text = document.createElement('div');
@@ -900,9 +980,12 @@ function applyAccentColor(colorName) {
   }
 }
 
-// Restore saved accent color
+// Restore saved accent color (user preference)
 const savedAccent = localStorage.getItem('accentColor');
 if (savedAccent) applyAccentColor(savedAccent);
+
+// Apply stored character — runs after user accent so character color takes priority
+selectCharacter(activeCharacter);
 
 // ─── Welcome Flow ───
 /**

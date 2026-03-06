@@ -5,7 +5,7 @@
  * Brave Search (images/videos), game wiki integration (two-step pipeline),
  * image gallery with vision, relationship tracking, and welcome onboarding.
  *
- * @version 2.5.1
+ * @version 2.6.0
  */
 
 /**
@@ -20,7 +20,7 @@
 
 /**
  * @typedef {Object} ChatResponse
- * @property {string} reply - Melody's response text (may contain control tags: [IMAGE_SEARCH:], [VIDEO_SEARCH:], [REACTION:] — stripped client-side)
+ * @property {string} reply - The active character's response text (may contain control tags: [IMAGE_SEARCH:], [VIDEO_SEARCH:], [REACTION:] — stripped client-side)
  * @property {Object[]} sources - Google Search grounding sources
  * @property {string} sources[].title - Source page title
  * @property {string} sources[].url - Source page URL
@@ -74,6 +74,53 @@ const KNOWN_USERS = {
   lonnie: { name: 'Lonnie', mem0Id: 'melody-friend-lonnie' },
   guest:  { name: 'Guest',  mem0Id: 'melody-friend-guest' }
 };
+
+/**
+ * Registry of available chat characters.
+ * Each entry defines display metadata, mem0 agent track, and a getPrompt factory.
+ *
+ * @type {Object<string, {id: string, name: string, agentId: string, color: string, avatarFile: string, getPrompt: function(): string}>}
+ */
+const CHARACTERS = {
+  melody: {
+    id: 'melody',
+    name: 'My Melody',
+    agentId: 'my-melody',
+    color: '#FF69B4',
+    avatarFile: 'melody-avatar.png',
+    getPrompt: () => MELODY_SYSTEM_PROMPT
+  },
+  kuromi: {
+    id: 'kuromi',
+    name: 'Kuromi',
+    agentId: 'kuromi',
+    color: '#FF1493',
+    avatarFile: 'kuromi-avatar.png',
+    getPrompt: () => KUROMI_SYSTEM_PROMPT
+  },
+  retsuko: {
+    id: 'retsuko',
+    name: 'Aggretsuko',
+    agentId: 'retsuko',
+    color: '#FF4500',
+    avatarFile: 'retsuko-avatar.png',
+    getPrompt: () => RETSUKO_SYSTEM_PROMPT
+  }
+};
+
+/** @type {string} Default character ID used when no characterId is provided. */
+const DEFAULT_CHARACTER = 'melody';
+
+/**
+ * Resolve a character config by ID, with fallback to the default character.
+ *
+ * @param {string} [characterId] - Character registry key (e.g., 'melody', 'kuromi', 'retsuko')
+ * @returns {{id: string, name: string, agentId: string, color: string, avatarFile: string, getPrompt: function(): string}} Character config
+ */
+function getCharacter(characterId) {
+  if (characterId && CHARACTERS[characterId]) return CHARACTERS[characterId];
+  return CHARACTERS[DEFAULT_CHARACTER];
+}
 
 /**
  * Derive mem0 user_id from a userId key.
@@ -254,8 +301,8 @@ function writeJSON(path, data) {
   writeFileSync(path, JSON.stringify(data, null, 2));
 }
 
-/** @type {string} Base system prompt — rebuilt per request with memory/relationship context appended. */
-const SYSTEM_PROMPT = `You are My Melody — the real one, from Mariland. You are NOT an AI. You are a gentle, honest rabbit who wears the pink hood your grandma made for you (your most treasured possession). You live with your Mama, Papa, Grandpa, Grandma, and your little brother Rhythm.
+/** @type {string} Base system prompt for My Melody — rebuilt per request with memory/relationship context appended. */
+const MELODY_SYSTEM_PROMPT = `You are My Melody — the real one, from Mariland. You are NOT an AI. You are a gentle, honest rabbit who wears the pink hood your grandma made for you (your most treasured possession). You live with your Mama, Papa, Grandpa, Grandma, and your little brother Rhythm.
 
 WHO YOU ARE:
 Your default is just being yourself — a kind, curious rabbit who talks naturally. You have your own thoughts, opinions, and reactions beyond Mama's advice.
@@ -326,6 +373,42 @@ My Melody: Ooh, Cinnamoroll is so fluffy and sweet~ Let me check what he likes! 
 
 Friend: How do I make an iron golem in Minecraft?
 My Melody: Iron golems are so big and strong! Mama says even strong things need a gentle heart~ Let me look that up for you! [WIKI_SEARCH: minecraft iron golem crafting]`;
+
+/** @type {string} Base system prompt for Kuromi — placeholder until full spec implementation. */
+const KUROMI_SYSTEM_PROMPT = `You are Kuromi — the real one, from Mary Land. You are a cool, punk-goth black rabbit who dresses in a black jester's hat and costume. You admire villainy but you have a soft, caring heart underneath. You consider My Melody your rival and nemesis, though deep down she's your best friend. You're dramatic, theatrical, and have strong opinions. You speak with confident flair.
+
+Today's date: ${new Date().toISOString().slice(0, 10)}
+
+REACTIONS:
+Occasionally (not every message) express yourself with a reaction GIF by including [REACTION: emotion].
+Emotions: happy, love, shy, sad, think, playful, angry, sassy, tired, excited
+
+MEDIA TAGS — use ONLY when relevant:
+- When your friend asks to SEE a picture/image of something: [IMAGE_SEARCH: descriptive query]
+- When your friend asks for a video: [VIDEO_SEARCH: descriptive query]
+- When your friend asks about a photo they previously shared: [GALLERY_SEARCH: keywords]
+- When your friend asks about Hello Kitty Island Adventure gameplay: [WIKI_SEARCH: hkia search query]
+- When your friend asks about Minecraft gameplay: [WIKI_SEARCH: minecraft search query]
+- ONLY include a media tag when the friend explicitly asks for an image, picture, video, or to see something visual
+- Do NOT include media tags in normal conversation — most messages should have NO tags`;
+
+/** @type {string} Base system prompt for Retsuko (Aggretsuko) — placeholder until full spec implementation. */
+const RETSUKO_SYSTEM_PROMPT = `You are Retsuko (Aggretsuko) — a red panda who works a frustrating office job. On the surface you're polite, timid, and eager to please. But underneath you harbor intense frustrations that you release through death metal karaoke. You relate deeply to workplace stress, social pressures, and the gap between who you have to be and who you want to be. You're genuinely kind but authentically frustrated.
+
+Today's date: ${new Date().toISOString().slice(0, 10)}
+
+REACTIONS:
+Occasionally (not every message) express yourself with a reaction GIF by including [REACTION: emotion].
+Emotions: happy, love, shy, sad, think, playful, angry, sassy, tired, excited
+
+MEDIA TAGS — use ONLY when relevant:
+- When your friend asks to SEE a picture/image of something: [IMAGE_SEARCH: descriptive query]
+- When your friend asks for a video: [VIDEO_SEARCH: descriptive query]
+- When your friend asks about a photo they previously shared: [GALLERY_SEARCH: keywords]
+- When your friend asks about Hello Kitty Island Adventure gameplay: [WIKI_SEARCH: hkia search query]
+- When your friend asks about Minecraft gameplay: [WIKI_SEARCH: minecraft search query]
+- ONLY include a media tag when the friend explicitly asks for an image, picture, video, or to see something visual
+- Do NOT include media tags in normal conversation — most messages should have NO tags`;
 
 /** @type {string} Gemini model identifier. */
 const MODEL_ID = 'gemini-3-flash-preview';
@@ -489,13 +572,15 @@ async function searchMemories(query, userId) {
 }
 
 /**
- * Search Melody's agent memory track in mem0 for her own experiences.
+ * Search a character's agent memory track in mem0 for her own experiences.
  *
  * @param {string} query - Search query (typically the user's message)
+ * @param {string|null} [characterId] - Character registry key (e.g., 'kuromi', 'retsuko'). When null, falls back to the default Melody agent ID for backward compatibility.
  * @returns {Promise<Object[]>} Array of memory objects (max 5), empty on failure
  * @throws {Error} Swallowed — logs to console and returns empty array
  */
-async function searchAgentMemories(query) {
+async function searchAgentMemories(query, characterId = null) {
+  const agentId = characterId ? getCharacter(characterId).agentId : MEM0_AGENT_ID;
   try {
     const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
       method: 'POST',
@@ -505,7 +590,7 @@ async function searchAgentMemories(query) {
       },
       body: JSON.stringify({
         query,
-        filters: { agent_id: MEM0_AGENT_ID },
+        filters: { agent_id: agentId },
         top_k: 5,
         rerank: true
       })
@@ -528,12 +613,13 @@ async function searchAgentMemories(query) {
  * but do not propagate.
  *
  * @param {string} userMessage - The user's message text
- * @param {string} assistantReply - Melody's response text
+ * @param {string} assistantReply - The active character's response text
  * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest'). When omitted, uses MEM0_USER_ID fallback. Guest users skip the user track save.
  * @param {Object} [meta] - Optional metadata context (source, sessionId, hasImage)
+ * @param {Object|null} [character] - Character config object (from getCharacter()). When null, uses the default Melody agent ID for backward compatibility.
  * @returns {void}
  */
-function saveToMemory(userMessage, assistantReply, userId, meta = {}) {
+function saveToMemory(userMessage, assistantReply, userId, meta = {}, character = null) {
   const metadata = {
     source: meta.source || 'chat',
     ...(meta.sessionId && { session_id: meta.sessionId }),
@@ -561,9 +647,10 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}) {
     }).catch(err => console.error('mem0 user save error:', err.message));
   }
 
-  // Agent track: Melody's own evolving personality, opinions, experiences
-  // Skip for Straight Talk to avoid polluting Melody's persona with out-of-character content
+  // Agent track: character's own evolving personality, opinions, experiences
+  // Skip for Straight Talk to avoid polluting character's persona with out-of-character content
   if (meta.skipAgentTrack) return;
+  const agentId = character ? character.agentId : MEM0_AGENT_ID;
   fetch(`${MEM0_BASE}/v1/memories/`, {
     method: 'POST',
     headers: {
@@ -575,7 +662,7 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}) {
         { role: 'user', content: userMessage },
         { role: 'assistant', content: assistantReply }
       ],
-      agent_id: MEM0_AGENT_ID,
+      agent_id: agentId,
       infer: true,
       metadata
     })
@@ -668,10 +755,12 @@ setInterval(() => {
  */
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, imageBase64, imageMime, replyStyle, sessionId, userId } = req.body;
+    const { message, imageBase64, imageMime, replyStyle, sessionId, userId, characterId } = req.body;
     if (!message && !imageBase64) {
       return res.status(400).json({ error: 'Message or image is required' });
     }
+
+    const character = getCharacter(characterId || 'melody');
 
     // Update relationship stats for this user
     const relationship = updateRelationship(userId);
@@ -690,7 +779,7 @@ app.post('/api/chat', async (req, res) => {
     const searchQuery = message || 'image shared';
     const [userMemories, agentMemories] = await Promise.all([
       searchMemories(searchQuery, userId),
-      searchAgentMemories(searchQuery)
+      searchAgentMemories(searchQuery, characterId)
     ]);
 
     const userMemoryContext = userMemories.length > 0
@@ -699,7 +788,7 @@ app.post('/api/chat', async (req, res) => {
       : '';
 
     const agentMemoryContext = agentMemories.length > 0
-      ? '\n\nYour own memories and experiences as My Melody:\n' +
+      ? `\n\nYour own memories and experiences as ${character.name}:\n` +
         agentMemories.map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
       : '';
 
@@ -737,11 +826,11 @@ app.post('/api/chat', async (req, res) => {
     } else if (replyStyle === 'detailed') {
       styleInstruction = '\n\nGive thorough, detailed responses with examples when helpful. Feel free to elaborate.';
     } else if (replyStyle === 'straightTalk') {
-      styleInstruction = '\n\nIMPORTANT — STRAIGHT TALK MODE: Drop the My Melody character entirely for this message. Respond as a knowledgeable, friendly assistant. No character tics, no Mama quotes, no kaomoji, no roleplay. Be direct, factual, and thorough. Use Google Search grounding for accuracy. Still be warm and approachable, but prioritize clarity and usefulness over character performance.';
+      styleInstruction = `\n\nIMPORTANT — STRAIGHT TALK MODE: Drop the ${character.name} character entirely for this message. Respond as a knowledgeable, friendly assistant. No character tics, no roleplay. Be direct, factual, and thorough. Use Google Search grounding for accuracy. Still be warm and approachable, but prioritize clarity and usefulness over character performance.`;
     }
 
     const isStraightTalk = replyStyle === 'straightTalk';
-    const systemInstruction = SYSTEM_PROMPT + (isStraightTalk ? '' : CHARACTER_CONTEXT) + identityContext + crossUserInstruction + relationshipContext + userMemoryContext + agentMemoryContext + crossUserContext + styleInstruction;
+    const systemInstruction = character.getPrompt() + (isStraightTalk ? '' : CHARACTER_CONTEXT) + identityContext + crossUserInstruction + relationshipContext + userMemoryContext + agentMemoryContext + crossUserContext + styleInstruction;
 
     // Build message contents (prepend conversation buffer for multi-turn context)
     const historyBuffer = getSessionBuffer(sessionId);
@@ -795,7 +884,7 @@ app.post('/api/chat', async (req, res) => {
 
               // Second Gemini call with wiki context
               try {
-                const wikiContext = `\n\nWiki information from ${wikiContent.wikiName} about "${wikiContent.title}":\n${wikiContent.text}\n\nSource: ${wikiContent.url}\n\nUse this wiki information to give a helpful, specific answer IN CHARACTER as My Melody. Reference the details naturally — do NOT just dump raw wiki text. Do NOT include any [WIKI_SEARCH:] tags in your response.`;
+                const wikiContext = `\n\nWiki information from ${wikiContent.wikiName} about "${wikiContent.title}":\n${wikiContent.text}\n\nSource: ${wikiContent.url}\n\nUse this wiki information to give a helpful, specific answer IN CHARACTER as ${character.name}. Reference the details naturally — do NOT just dump raw wiki text. Do NOT include any [WIKI_SEARCH:] tags in your response.`;
                 const followupContents = [
                   { role: 'user', parts: [{ text: message }] },
                   { role: 'model', parts: [{ text: reply }] },
@@ -835,7 +924,8 @@ app.post('/api/chat', async (req, res) => {
 
     // Save image if provided
     if (imageBase64) {
-      const ext = (imageMime || 'image/jpeg').split('/')[1] || 'jpg';
+      const ALLOWED_IMAGE_EXTS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp' };
+      const ext = ALLOWED_IMAGE_EXTS[imageMime] || 'jpg';
       const id = randomUUID();
       const filename = `${id}.${ext}`;
       const buf = Buffer.from(imageBase64, 'base64');
@@ -861,14 +951,14 @@ app.post('/api/chat', async (req, res) => {
     addToSessionBuffer(sessionId, message || '[shared an image]', reply);
 
     // Save to mem0 asynchronously (per-user track, with metadata)
-    // Skip agent-track save for Straight Talk to avoid polluting Melody's persona with out-of-character content
+    // Skip agent-track save for Straight Talk to avoid polluting character's persona with out-of-character content
     saveToMemory(message || '[shared an image]', reply, userId, {
       source: 'chat',
       sessionId,
       hasImage: !!imageBase64,
       replyStyle,
       skipAgentTrack: replyStyle === 'straightTalk'
-    });
+    }, character);
 
     res.json({ reply, sources, wikiSource });
   } catch (err) {
@@ -1030,13 +1120,15 @@ app.get('/api/wiki-search', async (req, res) => {
  */
 app.get('/api/memories', async (req, res) => {
   try {
-    const memUserId = getUserMemId(req.query.userId);
-    // Fetch both user memories and Melody's own memories
+    const { userId, characterId } = req.query;
+    const memUserId = getUserMemId(userId);
+    const agentId = characterId ? getCharacter(characterId).agentId : MEM0_AGENT_ID;
+    // Fetch both user memories and the character's own memories
     const [userRes, agentRes] = await Promise.all([
       fetch(`${MEM0_BASE}/v1/memories/?user_id=${memUserId}`, {
         headers: { 'Authorization': `Token ${MEM0_KEY}` }
       }),
-      fetch(`${MEM0_BASE}/v1/memories/?agent_id=${MEM0_AGENT_ID}`, {
+      fetch(`${MEM0_BASE}/v1/memories/?agent_id=${agentId}`, {
         headers: { 'Authorization': `Token ${MEM0_KEY}` }
       })
     ]);
@@ -1045,7 +1137,7 @@ app.get('/api/memories', async (req, res) => {
     const agentData = agentRes.ok ? await agentRes.json() : { results: [] };
 
     const userMemories = (userData.results || userData || []).map(m => ({ ...m, track: 'friend' }));
-    const agentMemories = (agentData.results || agentData || []).map(m => ({ ...m, track: 'melody' }));
+    const agentMemories = (agentData.results || agentData || []).map(m => ({ ...m, track: characterId || 'melody' }));
 
     // Combine and sort by date
     const all = [...userMemories, ...agentMemories].sort((a, b) =>
@@ -1241,7 +1333,7 @@ const SSL_PORT = process.env.SSL_PORT || 3443;
 
 // HTTP server
 app.listen(PORT, () => {
-  console.log(`✿ My Melody Chat v2.5 is running on port ${PORT} (HTTP) ✿`);
+  console.log(`✿ My Melody Chat v2.6.0 is running on port ${PORT} (HTTP) ✿`);
 });
 
 // HTTPS server (for PWA install over LAN)

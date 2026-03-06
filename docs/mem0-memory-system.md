@@ -1,14 +1,16 @@
 # mem0 Memory System
 
-> **Last verified:** 2026-02-27
-> **Source files:** `server.js` (lines 62-69, 71-86, 462-564, 992-1053)
+> **Last verified:** 2026-03-06
+> **Source files:** `server.js` (lines 62-69, 71-86, 84-120, 512-640)
 > **Known gaps:** None
 
 ---
 
 ## Overview
 
-My Melody Chat uses [mem0](https://mem0.ai) for persistent long-term memory. The system operates on a dual-track architecture: one track stores facts about the user (friend), and one stores Melody's own evolving personality. Both tracks are searched and injected into the system prompt on every chat request.
+My Melody Chat uses [mem0](https://mem0.ai) for persistent long-term memory. The system operates on a dual-track architecture: one track stores facts about the user (friend), and one stores the active character's own evolving personality. Both tracks are searched and injected into the system prompt on every chat request.
+
+The user track is **shared across all characters** — the same friend facts apply regardless of who you are chatting with. The agent track is **per-character** — each character has an isolated memory namespace so their personalities evolve independently.
 
 ## Dual-Track Architecture
 
@@ -18,23 +20,40 @@ My Melody Chat uses [mem0](https://mem0.ai) for persistent long-term memory. The
 │                  api.mem0.ai                             │
 ├───────────────────────┬─────────────────────────────────┤
 │    User Track         │    Agent Track                  │
-│    (Friend Facts)     │    (Melody's Personality)       │
+│    (Friend Facts)     │    (Character Personality)      │
 ├───────────────────────┼─────────────────────────────────┤
 │ Filter:               │ Filter:                         │
-│   user_id: per-user   │   agent_id: 'my-melody'         │
-│   (melody-friend-*)   │   (shared across all users)     │
+│   user_id: per-user   │   agent_id: per-character       │
+│   (melody-friend-*)   │   (see Character Agent IDs)     │
+│                       │                                 │
+│ Scope:                │ Scope:                          │
+│   SHARED across all   │   ISOLATED per character        │
+│   characters          │                                 │
 │                       │                                 │
 │ Contains:             │ Contains:                       │
-│ - Friend's name       │ - Melody's opinions             │
+│ - Friend's name       │ - Character's opinions          │
 │ - Preferences         │ - Experiences                   │
 │ - Life events         │ - Evolving personality          │
 │ - Interests           │ - Learned behaviors             │
 │ - Favorite color      │                                 │
 ├───────────────────────┼─────────────────────────────────┤
 │ Search limit: 10      │ Search limit: 5                 │
-│ Save: skip for guest  │ Save: always                    │
+│ Save: skip for guest  │ Save: always (unless            │
+│                       │   skipAgentTrack set)           │
 └───────────────────────┴─────────────────────────────────┘
 ```
+
+## Character Agent IDs
+
+Each character in the `CHARACTERS` registry has its own isolated `agentId` in mem0:
+
+| Character key | Display name | mem0 `agent_id` |
+|---------------|-------------|-----------------|
+| `melody` | My Melody | `my-melody` |
+| `kuromi` | Kuromi | `kuromi` |
+| `retsuko` | Aggretsuko | `retsuko` |
+
+The `MEM0_AGENT_ID` constant (`'my-melody'`) is the backward-compatibility fallback used when no character is passed. It is also the hardcoded default for any code path that does not yet pass a character object.
 
 ## Per-User Memory Isolation
 
@@ -73,9 +92,9 @@ The fallback `MEM0_USER_ID` defaults to `'melody-friend'` and can be overridden 
 
 | Operation | mem0 Endpoint | Method | Notes |
 |-----------|---------------|--------|-------|
-| Search memories | `/v2/memories/search/` | POST | Semantic search with filters |
-| List memories | `/v1/memories/?user_id=X` | GET | List all for a track |
-| List memories | `/v1/memories/?agent_id=X` | GET | List all for agent track |
+| Search memories | `/v2/memories/search/` | POST | Semantic search with filters, `rerank: true` |
+| List memories | `/v1/memories/?user_id=X` | GET | List all for a user track |
+| List memories | `/v1/memories/?agent_id=X` | GET | List all for an agent track |
 | Save memories | `/v1/memories/` | POST | With `infer: true` |
 | Delete memory | `/v1/memories/:id/` | DELETE | By mem0 ID |
 
@@ -95,7 +114,8 @@ On every chat request, both tracks are searched in parallel:
 │                                        │
 │  Promise.all([                         │
 │    searchMemories(query, userId),      │
-│    searchAgentMemories(query)          │
+│    searchAgentMemories(query,          │
+│                        characterId)    │
 │  ])                                    │
 │                                        │
 │  ┌──────────────┐ ┌──────────────────┐ │
@@ -106,8 +126,8 @@ On every chat request, both tracks are searched in parallel:
 │  │              │ │                  │ │
 │  │ filter:      │ │ filter:          │ │
 │  │  user_id     │ │  agent_id:       │ │
-│  │  (per-user)  │ │  'my-melody'     │ │
-│  │ limit: 10    │ │ limit: 5         │ │
+│  │  (per-user)  │ │  (per-character) │ │
+│  │ top_k: 10    │ │ top_k: 5        │ │
 │  └──────┬───────┘ └────────┬─────────┘ │
 │         │                  │           │
 │         └────────┬─────────┘           │
@@ -118,63 +138,76 @@ On every chat request, both tracks are searched in parallel:
 
 ### searchMemories(query, userId)
 
-Searches the user track (friend facts):
+Searches the user track (friend facts). User track is shared across all characters.
 
 ```js
 body: JSON.stringify({
   query,
   filters: { user_id: getUserMemId(userId) },
-  limit: 10
+  top_k: 10,
+  rerank: true
 })
 ```
 
 Returns `data.results || data || []`. Returns empty array on any error.
 
-### searchAgentMemories(query)
+### searchAgentMemories(query, characterId?)
 
-Searches the agent track (Melody's personality):
+Searches the active character's agent track (character personality). Resolves `agentId` from the `CHARACTERS` registry via `getCharacter(characterId).agentId`. Falls back to `MEM0_AGENT_ID` env var when `characterId` is `null` or omitted.
 
 ```js
-body: JSON.stringify({
-  query,
-  filters: { agent_id: MEM0_AGENT_ID },
-  limit: 5
-})
+async function searchAgentMemories(query, characterId = null) {
+  const agentId = characterId ? getCharacter(characterId).agentId : MEM0_AGENT_ID;
+  // ...
+  body: JSON.stringify({
+    query,
+    filters: { agent_id: agentId },
+    top_k: 5,
+    rerank: true
+  })
+}
 ```
+
+| `characterId` | Resolved `agent_id` |
+|---------------|---------------------|
+| `'melody'` | `'my-melody'` |
+| `'kuromi'` | `'kuromi'` |
+| `'retsuko'` | `'retsuko'` |
+| `null` / omitted | `MEM0_AGENT_ID` (`'my-melody'`) |
 
 Same return pattern and error handling as the user track search.
 
 ## Memory Save Flow
 
-After every chat exchange, both tracks are saved to in a fire-and-forget pattern (non-blocking):
+After every chat exchange, both tracks are saved to in a fire-and-forget pattern (non-blocking). The `character` parameter determines which agent track receives the save.
 
 ```js
-function saveToMemory(userMessage, assistantReply, userId) {
-  // User track (skipped for guest users)
+function saveToMemory(userMessage, assistantReply, userId, meta = {}, character = null) {
+  // User track: facts about the friend (skip for guest — no persistent identity)
   if (userId !== 'guest') {
     fetch(`${MEM0_BASE}/v1/memories/`, {
-      method: 'POST',
+      // ...
       body: JSON.stringify({
-        messages: [
-          { role: 'user', content: userMessage },
-          { role: 'assistant', content: assistantReply }
-        ],
+        messages: [ { role: 'user', content: userMessage },
+                    { role: 'assistant', content: assistantReply } ],
         user_id: getUserMemId(userId),
-        infer: true
+        infer: true,
+        metadata
       })
     }).catch(err => console.error('mem0 user save error:', err.message));
   }
 
-  // Agent track (always saved, shared across users)
+  // Agent track: character's own evolving personality
+  if (meta.skipAgentTrack) return;
+  const agentId = character ? character.agentId : MEM0_AGENT_ID;
   fetch(`${MEM0_BASE}/v1/memories/`, {
-    method: 'POST',
+    // ...
     body: JSON.stringify({
-      messages: [
-        { role: 'user', content: userMessage },
-        { role: 'assistant', content: assistantReply }
-      ],
-      agent_id: MEM0_AGENT_ID,
-      infer: true
+      messages: [ { role: 'user', content: userMessage },
+                  { role: 'assistant', content: assistantReply } ],
+      agent_id: agentId,
+      infer: true,
+      metadata
     })
   }).catch(err => console.error('mem0 agent save error:', err.message));
 }
@@ -182,10 +215,26 @@ function saveToMemory(userMessage, assistantReply, userId) {
 
 Key behaviors:
 - The `infer: true` flag tells mem0 to extract and store structured facts automatically
-- Both tracks receive the full `[user, assistant]` message pair
+- Both tracks receive the full `[user, assistant]` message pair plus optional `metadata` (source, sessionId, hasImage, replyStyle)
 - Guest users (`userId === 'guest'`) skip the user track save entirely
-- Agent track is always saved regardless of user identity (it is shared)
+- When `meta.skipAgentTrack` is `true` the agent track save is skipped entirely (used by Straight Talk mode to avoid polluting character persona with out-of-character content)
+- Agent track `agentId` is resolved from `character.agentId` when a character object is passed; falls back to `MEM0_AGENT_ID` when `character` is `null`
+- User track is always shared — the same friend facts persist regardless of which character is active
 - Errors are caught and logged but never propagate to the caller
+
+### Function Signature
+
+```js
+saveToMemory(userMessage, assistantReply, userId, meta?, character?)
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `userMessage` | `string` | Yes | User's message text |
+| `assistantReply` | `string` | Yes | Character's response text |
+| `userId` | `string` | Yes | User key (`'amelia'`, `'lonnie'`, `'guest'`) |
+| `meta` | `Object` | No | `{ source, sessionId, hasImage, replyStyle, skipAgentTrack }` |
+| `character` | `Object\|null` | No | Character config from `getCharacter()`. When `null`, uses `MEM0_AGENT_ID` fallback. |
 
 ## Memory Injection into System Prompt
 
@@ -211,7 +260,7 @@ The memory field accessor chain (`m.memory || m.text || m.content || JSON.string
 
 ## Cross-User Memory Access
 
-When a known user mentions another known user's name in their message, the server searches that user's memory track to enable Melody to share casual cross-user information:
+When a known user mentions another known user's name in their message, the server searches that user's memory track to enable the character to share casual cross-user information:
 
 ```js
 for (const [key, config] of Object.entries(KNOWN_USERS)) {
@@ -233,8 +282,8 @@ for (const [key, config] of Object.entries(KNOWN_USERS)) {
 | Operation | Guest behavior |
 |-----------|---------------|
 | Memory search | Searches `melody-friend-guest` track |
-| Memory save (user track) | **Skipped** -- no persistent identity |
-| Memory save (agent track) | Saved (Melody still learns from guest conversations) |
+| Memory save (user track) | **Skipped** — no persistent identity |
+| Memory save (agent track) | Saved (character still learns from guest conversations) |
 | Cross-user access | Never shared (guest privacy protected) |
 | Welcome onboarding | User track save skipped |
 
@@ -289,6 +338,8 @@ Chat always works even when mem0 is completely unavailable. The system prompt si
 |----------|----------|---------|---------|
 | `MEM0_API_KEY` | Yes | -- | mem0.ai API authentication token |
 | `MEM0_USER_ID` | No | `'melody-friend'` | Default user track ID (fallback) |
+
+> **Note:** `MEM0_AGENT_ID` is not an environment variable — it is hardcoded as `'my-melody'` in `server.js` and serves only as the backward-compatibility fallback when no character is passed to `searchAgentMemories` or `saveToMemory`. Character-specific agent IDs are defined in the `CHARACTERS` registry.
 
 ---
 

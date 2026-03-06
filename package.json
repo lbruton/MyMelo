@@ -1,7 +1,7 @@
 {
   "name": "my-melody-chat",
-  "version": "2.5.1",
-  "description": "My Melody Companion Chat App v2.5.1 — Straight Talk mode, reduced character tics, real-help prompt tuning",
+  "version": "2.6.0",
+  "description": "My Melody Chat v2.6.0 — Multi-character architecture (Melody, Kuromi, Aggretsuko)",
   "type": "module",
   "main": "server.js",
   "scripts": {

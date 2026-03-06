@@ -1,6 +1,6 @@
 # PWA & Service Worker
 
-> **Last verified:** 2026-02-27
+> **Last verified:** 2026-03-06
 > **Source files:** `public/sw.js`, `public/manifest.json`, `public/index.html` (registration), `public/app.js` (install prompt)
 > **Known gaps:** None
 
@@ -96,10 +96,10 @@ File: `public/sw.js`
 ### Cache Name
 
 ```js
-const CACHE_NAME = 'melody-v2.5';
+const CACHE_NAME = 'melody-v2.6.0';
 ```
 
-Format: `melody-vMAJOR.MINOR`. Bump this value on every deploy to invalidate stale assets.
+Format: `melody-vMAJOR.MINOR.PATCH`. Bump this value on every deploy to invalidate stale assets.
 
 ### App Shell (Pre-cached on Install)
 
@@ -111,12 +111,14 @@ const APP_SHELL = [
   '/app.js',
   '/manifest.json',
   '/images/melody-avatar.png',
+  '/images/kuromi-avatar.png',
+  '/images/retsuko-avatar.png',
   '/images/icon-192.png',
   '/images/icon-512.png'
 ];
 ```
 
-These 8 resources are cached during the `install` event before the service worker activates.
+These 10 resources are cached during the `install` event before the service worker activates. The Kuromi and Retsuko character avatars were added in v2.6.0 alongside multi-character support.
 
 ### Strategy by Route Type
 
@@ -185,7 +187,7 @@ activate → enumerate cache keys → delete any key !== CACHE_NAME → clients.
 
 ### Cache Invalidation on Deploy
 
-1. Bump `CACHE_NAME` in `sw.js` (e.g., `melody-v2.5` to `melody-v2.6`)
+1. Bump `CACHE_NAME` in `sw.js` (e.g., `melody-v2.5.1` to `melody-v2.6.0`)
 2. Deploy updated `sw.js`
 3. Browser detects byte-level change in service worker file
 4. New service worker installs, pre-caches new app shell

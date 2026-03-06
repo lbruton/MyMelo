@@ -1,6 +1,6 @@
 # API Reference
 
-> **Last verified:** 2026-02-27 — audited from `server.js` v2.5.0
+> **Last verified:** 2026-03-06 — audited from `server.js` feat-multi-character
 > **Source files:** `server.js`
 > **Known gaps:** None
 
@@ -12,18 +12,29 @@ All endpoints are served by a single Express server on port 3000 (HTTP) and opti
 
 ---
 
+## Character Routing
+
+Several endpoints accept a `characterId` parameter. This value selects:
+
+1. **System prompt** — Each character (`melody`, `kuromi`, `retsuko`) has a distinct personality and speech-pattern prompt loaded via `getCharacter(characterId)`.
+2. **mem0 agent track** — Each character has its own `agent_id` in mem0, so memories are isolated per character. The agent track is searched and saved independently for each character.
+
+When `characterId` is omitted the server defaults to `melody`, preserving full backward compatibility.
+
+---
+
 ## Endpoint Summary
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/api/chat` | Send a message to My Melody |
+| POST | `/api/chat` | Send a message to a character |
 | GET | `/api/images` | List saved image metadata |
 | DELETE | `/api/images/:id` | Delete a saved image |
 | GET | `/api/image-search?q=` | Search images via Brave |
 | GET | `/api/video-search?q=` | Search videos via Brave |
 | GET | `/api/gallery-search?q=` | Search saved images by keyword |
 | GET | `/api/wiki-search?wiki=&q=` | Search a game wiki (MediaWiki) |
-| GET | `/api/memories?userId=` | List all mem0 memories (dual-track) |
+| GET | `/api/memories?userId=&characterId=` | List all mem0 memories (dual-track) |
 | DELETE | `/api/memories/:id` | Delete a specific memory |
 | GET | `/api/relationship?userId=` | Get friendship stats |
 | GET | `/api/welcome-status?userId=` | Check new vs returning user |
@@ -33,7 +44,7 @@ All endpoints are served by a single Express server on port 3000 (HTTP) and opti
 
 ## POST /api/chat
 
-Send a message (and/or image) to My Melody. Triggers the full pipeline: memory search, Gemini call, wiki interception, image save, memory save.
+Send a message (and/or image) to a character. Triggers the full pipeline: memory search, Gemini call, wiki interception, image save, memory save.
 
 ### Request Body
 
@@ -45,6 +56,7 @@ Send a message (and/or image) to My Melody. Triggers the full pipeline: memory s
 | `replyStyle` | `string` | No | Reply verbosity: `default`, `brief`, or `detailed` |
 | `sessionId` | `string` | No | UUID v4 for conversation buffer continuity across requests |
 | `userId` | `string` | No | Active user identity key: `amelia`, `lonnie`, or `guest` |
+| `characterId` | `string` | No | Character to chat with (`melody` \| `kuromi` \| `retsuko`). Default: `melody`. Routes to the correct system prompt and mem0 agent track. |
 
 ### Response (200)
 
@@ -64,7 +76,7 @@ Send a message (and/or image) to My Melody. Triggers the full pipeline: memory s
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `reply` | `string` | Melody's response text. May contain control tags (`[IMAGE_SEARCH:]`, `[VIDEO_SEARCH:]`, `[REACTION:]`, `[GALLERY_SEARCH:]`) that the client parses and strips. Wiki tags are intercepted server-side and never reach the client. |
+| `reply` | `string` | Character's response text. May contain control tags (`[IMAGE_SEARCH:]`, `[VIDEO_SEARCH:]`, `[REACTION:]`, `[GALLERY_SEARCH:]`) that the client parses and strips. Wiki tags are intercepted server-side and never reach the client. |
 | `sources` | `Object[]` | Google Search grounding sources extracted from Gemini response metadata. Empty array if no grounding. |
 | `sources[].title` | `string` | Source page title |
 | `sources[].url` | `string` | Source page URL |
@@ -87,7 +99,8 @@ Send a message (and/or image) to My Melody. Triggers the full pipeline: memory s
   "message": "What gifts does Cinnamoroll like?",
   "replyStyle": "default",
   "sessionId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
-  "userId": "amelia"
+  "userId": "amelia",
+  "characterId": "melody"
 }
 ```
 
@@ -97,7 +110,7 @@ Send a message (and/or image) to My Melody. Triggers the full pipeline: memory s
 - Updates streak tracking
 - Saves exchange to in-memory session buffer (sliding window, max 6 exchanges)
 - Saves to mem0 user track (fire-and-forget, skipped for guest)
-- Saves to mem0 agent track (fire-and-forget, always)
+- Saves to mem0 agent track for the selected character (fire-and-forget, always)
 - If `imageBase64` provided: saves image file to `data/images/` and appends metadata to `images-meta.json`
 
 ---
@@ -125,7 +138,7 @@ List all saved image metadata, sorted newest first.
 | `id` | `string` | UUID of the image |
 | `filename` | `string` | Filename on disk (`{uuid}.{ext}`) |
 | `caption` | `string` | User's message when the image was shared |
-| `reply` | `string` | Melody's reply (truncated to 200 chars) |
+| `reply` | `string` | Character's reply (truncated to 200 chars) |
 | `date` | `string` | ISO 8601 timestamp |
 
 Image files are served at `/data/images/{filename}` via Express static middleware.
@@ -343,6 +356,7 @@ List all mem0 memories from both tracks (user + agent), sorted by most recently 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
 | `userId` | `string` | No | User key (`amelia`, `lonnie`, `guest`). Determines which user track to query. Falls back to `MEM0_USER_ID` env var if omitted. |
+| `characterId` | `string` | No | Character whose agent memories to fetch (`melody` \| `kuromi` \| `retsuko`). Default: `melody`. Routes to that character's mem0 agent track. |
 
 ### Response (200)
 
@@ -371,7 +385,7 @@ List all mem0 memories from both tracks (user + agent), sorted by most recently 
 | `memory` | `string` | Memory content text |
 | `created_at` | `string` | ISO 8601 creation timestamp |
 | `updated_at` | `string` | ISO 8601 last update timestamp |
-| `track` | `string` | `friend` (user track) or `melody` (agent track) |
+| `track` | `string` | `friend` (user track) or `melody` (agent track — label is always `melody` regardless of character) |
 
 ### Error Responses
 
