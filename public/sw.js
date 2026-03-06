@@ -12,7 +12,7 @@
  * Format: melody-vMAJOR.MINOR.PATCH (e.g., melody-v2.5.1).
  * @type {string}
  */
-const CACHE_NAME = 'melody-v2.5.1';
+const CACHE_NAME = 'melody-v2.6.0';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -20,6 +20,8 @@ const APP_SHELL = [
   '/app.js',
   '/manifest.json',
   '/images/melody-avatar.png',
+  '/images/kuromi-avatar.png',
+  '/images/retsuko-avatar.png',
   '/images/icon-192.png',
   '/images/icon-512.png'
 ];

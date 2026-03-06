@@ -26,6 +26,25 @@
     </div>
   </div>
 
+  <!-- Character Picker Overlay -->
+  <div id="characterPicker" class="user-picker-overlay hidden">
+    <div class="user-picker-title">Choose your companion</div>
+    <div class="character-picker-buttons">
+      <button class="character-picker-btn" data-character="melody" onclick="selectCharacter('melody')">
+        <img src="/images/melody-avatar.png" alt="My Melody" class="character-picker-avatar">
+        <span>My Melody</span>
+      </button>
+      <button class="character-picker-btn" data-character="kuromi" onclick="selectCharacter('kuromi')">
+        <img src="/images/kuromi-avatar.png" alt="Kuromi" class="character-picker-avatar">
+        <span>Kuromi</span>
+      </button>
+      <button class="character-picker-btn" data-character="retsuko" onclick="selectCharacter('retsuko')">
+        <img src="/images/retsuko-avatar.png" alt="Aggretsuko" class="character-picker-avatar">
+        <span>Aggretsuko</span>
+      </button>
+    </div>
+  </div>
+
   <div class="app-container">
     <!-- Header -->
     <header class="chat-header">

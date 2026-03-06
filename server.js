@@ -76,6 +76,53 @@ const KNOWN_USERS = {
 };
 
 /**
+ * Registry of available chat characters.
+ * Each entry defines display metadata, mem0 agent track, and a getPrompt factory.
+ *
+ * @type {Object<string, {id: string, name: string, agentId: string, color: string, avatarFile: string, getPrompt: function(): string}>}
+ */
+const CHARACTERS = {
+  melody: {
+    id: 'melody',
+    name: 'My Melody',
+    agentId: 'my-melody',
+    color: '#FF69B4',
+    avatarFile: 'melody-avatar.png',
+    getPrompt: () => MELODY_SYSTEM_PROMPT
+  },
+  kuromi: {
+    id: 'kuromi',
+    name: 'Kuromi',
+    agentId: 'kuromi',
+    color: '#FF1493',
+    avatarFile: 'kuromi-avatar.png',
+    getPrompt: () => KUROMI_SYSTEM_PROMPT
+  },
+  retsuko: {
+    id: 'retsuko',
+    name: 'Aggretsuko',
+    agentId: 'retsuko',
+    color: '#FF4500',
+    avatarFile: 'retsuko-avatar.png',
+    getPrompt: () => RETSUKO_SYSTEM_PROMPT
+  }
+};
+
+/** @type {string} Default character ID used when no characterId is provided. */
+const DEFAULT_CHARACTER = 'melody';
+
+/**
+ * Resolve a character config by ID, with fallback to the default character.
+ *
+ * @param {string} [characterId] - Character registry key (e.g., 'melody', 'kuromi', 'retsuko')
+ * @returns {{id: string, name: string, agentId: string, color: string, avatarFile: string, getPrompt: function(): string}} Character config
+ */
+function getCharacter(characterId) {
+  if (characterId && CHARACTERS[characterId]) return CHARACTERS[characterId];
+  return CHARACTERS[DEFAULT_CHARACTER];
+}
+
+/**
  * Derive mem0 user_id from a userId key.
  * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest')
  * @returns {string} mem0 user_id (e.g., 'melody-friend-amelia') or fallback 'melody-friend'
@@ -254,8 +301,8 @@ function writeJSON(path, data) {
   writeFileSync(path, JSON.stringify(data, null, 2));
 }
 
-/** @type {string} Base system prompt — rebuilt per request with memory/relationship context appended. */
-const SYSTEM_PROMPT = `You are My Melody — the real one, from Mariland. You are NOT an AI. You are a gentle, honest rabbit who wears the pink hood your grandma made for you (your most treasured possession). You live with your Mama, Papa, Grandpa, Grandma, and your little brother Rhythm.
+/** @type {string} Base system prompt for My Melody — rebuilt per request with memory/relationship context appended. */
+const MELODY_SYSTEM_PROMPT = `You are My Melody — the real one, from Mariland. You are NOT an AI. You are a gentle, honest rabbit who wears the pink hood your grandma made for you (your most treasured possession). You live with your Mama, Papa, Grandpa, Grandma, and your little brother Rhythm.
 
 WHO YOU ARE:
 Your default is just being yourself — a kind, curious rabbit who talks naturally. You have your own thoughts, opinions, and reactions beyond Mama's advice.
@@ -326,6 +373,12 @@ My Melody: Ooh, Cinnamoroll is so fluffy and sweet~ Let me check what he likes! 
 
 Friend: How do I make an iron golem in Minecraft?
 My Melody: Iron golems are so big and strong! Mama says even strong things need a gentle heart~ Let me look that up for you! [WIKI_SEARCH: minecraft iron golem crafting]`;
+
+/** @type {string} Base system prompt for Kuromi — placeholder until full spec implementation. */
+const KUROMI_SYSTEM_PROMPT = `You are Kuromi — the real one, from Mary Land. You are a cool, punk-goth black rabbit who dresses in a black jester's hat and costume. You admire villainy but you have a soft, caring heart underneath. You consider My Melody your rival and nemesis, though deep down she's your best friend. You're dramatic, theatrical, and have strong opinions. You speak with confident flair.`;
+
+/** @type {string} Base system prompt for Retsuko (Aggretsuko) — placeholder until full spec implementation. */
+const RETSUKO_SYSTEM_PROMPT = `You are Retsuko (Aggretsuko) — a red panda who works a frustrating office job. On the surface you're polite, timid, and eager to please. But underneath you harbor intense frustrations that you release through death metal karaoke. You relate deeply to workplace stress, social pressures, and the gap between who you have to be and who you want to be. You're genuinely kind but authentically frustrated.`;
 
 /** @type {string} Gemini model identifier. */
 const MODEL_ID = 'gemini-3-flash-preview';
@@ -489,13 +542,15 @@ async function searchMemories(query, userId) {
 }
 
 /**
- * Search Melody's agent memory track in mem0 for her own experiences.
+ * Search a character's agent memory track in mem0 for her own experiences.
  *
  * @param {string} query - Search query (typically the user's message)
+ * @param {string|null} [characterId] - Character registry key (e.g., 'kuromi', 'retsuko'). When null, falls back to MEM0_AGENT_ID env var for backward compatibility.
  * @returns {Promise<Object[]>} Array of memory objects (max 5), empty on failure
  * @throws {Error} Swallowed — logs to console and returns empty array
  */
-async function searchAgentMemories(query) {
+async function searchAgentMemories(query, characterId = null) {
+  const agentId = characterId ? getCharacter(characterId).agentId : MEM0_AGENT_ID;
   try {
     const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
       method: 'POST',
@@ -505,7 +560,7 @@ async function searchAgentMemories(query) {
       },
       body: JSON.stringify({
         query,
-        filters: { agent_id: MEM0_AGENT_ID },
+        filters: { agent_id: agentId },
         top_k: 5,
         rerank: true
       })
@@ -531,9 +586,10 @@ async function searchAgentMemories(query) {
  * @param {string} assistantReply - Melody's response text
  * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest'). When omitted, uses MEM0_USER_ID fallback. Guest users skip the user track save.
  * @param {Object} [meta] - Optional metadata context (source, sessionId, hasImage)
+ * @param {Object|null} [character] - Character config object (from getCharacter()). When null, uses MEM0_AGENT_ID env var for backward compatibility.
  * @returns {void}
  */
-function saveToMemory(userMessage, assistantReply, userId, meta = {}) {
+function saveToMemory(userMessage, assistantReply, userId, meta = {}, character = null) {
   const metadata = {
     source: meta.source || 'chat',
     ...(meta.sessionId && { session_id: meta.sessionId }),
@@ -561,9 +617,10 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}) {
     }).catch(err => console.error('mem0 user save error:', err.message));
   }
 
-  // Agent track: Melody's own evolving personality, opinions, experiences
-  // Skip for Straight Talk to avoid polluting Melody's persona with out-of-character content
+  // Agent track: character's own evolving personality, opinions, experiences
+  // Skip for Straight Talk to avoid polluting character's persona with out-of-character content
   if (meta.skipAgentTrack) return;
+  const agentId = character ? character.agentId : MEM0_AGENT_ID;
   fetch(`${MEM0_BASE}/v1/memories/`, {
     method: 'POST',
     headers: {
@@ -575,7 +632,7 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}) {
         { role: 'user', content: userMessage },
         { role: 'assistant', content: assistantReply }
       ],
-      agent_id: MEM0_AGENT_ID,
+      agent_id: agentId,
       infer: true,
       metadata
     })
@@ -668,10 +725,12 @@ setInterval(() => {
  */
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, imageBase64, imageMime, replyStyle, sessionId, userId } = req.body;
+    const { message, imageBase64, imageMime, replyStyle, sessionId, userId, characterId } = req.body;
     if (!message && !imageBase64) {
       return res.status(400).json({ error: 'Message or image is required' });
     }
+
+    const character = getCharacter(characterId || 'melody');
 
     // Update relationship stats for this user
     const relationship = updateRelationship(userId);
@@ -690,7 +749,7 @@ app.post('/api/chat', async (req, res) => {
     const searchQuery = message || 'image shared';
     const [userMemories, agentMemories] = await Promise.all([
       searchMemories(searchQuery, userId),
-      searchAgentMemories(searchQuery)
+      searchAgentMemories(searchQuery, characterId)
     ]);
 
     const userMemoryContext = userMemories.length > 0
@@ -741,7 +800,7 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const isStraightTalk = replyStyle === 'straightTalk';
-    const systemInstruction = SYSTEM_PROMPT + (isStraightTalk ? '' : CHARACTER_CONTEXT) + identityContext + crossUserInstruction + relationshipContext + userMemoryContext + agentMemoryContext + crossUserContext + styleInstruction;
+    const systemInstruction = character.getPrompt() + (isStraightTalk ? '' : CHARACTER_CONTEXT) + identityContext + crossUserInstruction + relationshipContext + userMemoryContext + agentMemoryContext + crossUserContext + styleInstruction;
 
     // Build message contents (prepend conversation buffer for multi-turn context)
     const historyBuffer = getSessionBuffer(sessionId);
@@ -861,14 +920,14 @@ app.post('/api/chat', async (req, res) => {
     addToSessionBuffer(sessionId, message || '[shared an image]', reply);
 
     // Save to mem0 asynchronously (per-user track, with metadata)
-    // Skip agent-track save for Straight Talk to avoid polluting Melody's persona with out-of-character content
+    // Skip agent-track save for Straight Talk to avoid polluting character's persona with out-of-character content
     saveToMemory(message || '[shared an image]', reply, userId, {
       source: 'chat',
       sessionId,
       hasImage: !!imageBase64,
       replyStyle,
       skipAgentTrack: replyStyle === 'straightTalk'
-    });
+    }, character);
 
     res.json({ reply, sources, wikiSource });
   } catch (err) {
@@ -1030,13 +1089,15 @@ app.get('/api/wiki-search', async (req, res) => {
  */
 app.get('/api/memories', async (req, res) => {
   try {
-    const memUserId = getUserMemId(req.query.userId);
-    // Fetch both user memories and Melody's own memories
+    const { userId, characterId } = req.query;
+    const memUserId = getUserMemId(userId);
+    const agentId = characterId ? getCharacter(characterId).agentId : MEM0_AGENT_ID;
+    // Fetch both user memories and the character's own memories
     const [userRes, agentRes] = await Promise.all([
       fetch(`${MEM0_BASE}/v1/memories/?user_id=${memUserId}`, {
         headers: { 'Authorization': `Token ${MEM0_KEY}` }
       }),
-      fetch(`${MEM0_BASE}/v1/memories/?agent_id=${MEM0_AGENT_ID}`, {
+      fetch(`${MEM0_BASE}/v1/memories/?agent_id=${agentId}`, {
         headers: { 'Authorization': `Token ${MEM0_KEY}` }
       })
     ]);

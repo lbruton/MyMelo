@@ -55,6 +55,7 @@ html, body {
   border: 2px solid rgba(255, 255, 255, 0.6);
   object-fit: contain;
   padding: 2px;
+  cursor: pointer;
 }
 
 .header-text h1 {
@@ -1069,4 +1070,58 @@ html, body {
   opacity: 0.7;
   margin-left: 8px;
   font-weight: normal;
+}
+
+/* ─── Character Picker ─── */
+.character-picker-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 0 16px;
+}
+
+.character-picker-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  border-radius: 16px;
+  border: 2px solid #d4447c;
+  background: #fff;
+  color: #d4447c;
+  font-family: 'Quicksand', sans-serif;
+  font-size: 0.95em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  min-width: 90px;
+}
+
+.character-picker-btn:hover {
+  background: #d4447c;
+  color: #fff;
+}
+
+.character-picker-btn.active {
+  background: #d4447c;
+  color: #fff;
+  border-color: #d4447c;
+}
+
+.character-picker-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  object-fit: contain;
+  border: 2px solid rgba(212, 68, 124, 0.3);
+  padding: 3px;
+}
+
+.character-picker-btn:hover .character-picker-avatar,
+.character-picker-btn.active .character-picker-avatar {
+  border-color: rgba(255, 255, 255, 0.5);
 }
