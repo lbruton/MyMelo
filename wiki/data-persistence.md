@@ -27,6 +27,8 @@ All server-side data lives under `/app/data/` inside the container, mounted as t
 | `relationship.json` | Friendship stats (per-user keyed) | Server startup (if missing) |
 | `images-meta.json` | Image gallery metadata array | Server startup (if missing, initialized as `[]`) |
 | `sanrio-characters.json` | Sanrio character universe data (46 characters) | Manual deployment via `docker cp` |
+| `core-memory/` | Core memory block JSON files (`{userId}_{characterId}.json`) | On first write |
+| `summaries/` | Rolling conversation summary JSON files (`{userId}_{characterId}.json`) | On first summary generation |
 | `images/` | User-uploaded image files (UUID filenames) | Server startup (`mkdir -p`) |
 
 ### relationship.json

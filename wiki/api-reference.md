@@ -34,6 +34,8 @@ When `characterId` is omitted the server defaults to `melody`, preserving full b
 | GET | `/api/video-search?q=` | Search videos via Brave |
 | GET | `/api/gallery-search?q=` | Search saved images by keyword |
 | GET | `/api/wiki-search?wiki=&q=` | Search a game wiki (MediaWiki) |
+| GET | `/api/summaries?userId=&characterId=` | List rolling conversation summaries |
+| DELETE | `/api/summaries/:index?userId=&characterId=` | Delete a conversation summary |
 | GET | `/api/memories?userId=&characterId=` | List all mem0 memories (dual-track) |
 | DELETE | `/api/memories/:id` | Delete a specific memory |
 | GET | `/api/relationship?userId=` | Get friendship stats |
@@ -344,6 +346,78 @@ Search a game wiki via MediaWiki API and return results with the top page's cont
 | 400 | `{ "error": "wiki and q params required" }` | Missing `wiki` or `q` |
 | 400 | `{ "error": "Unknown wiki: X. Available: hkia, minecraft" }` | Invalid wiki ID |
 | 500 | `{ "error": "Wiki search failed" }` | MediaWiki API error |
+
+---
+
+## GET /api/summaries
+
+List rolling conversation summaries for a user+character pair, sorted newest first.
+
+### Query Parameters
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `userId` | `string` | Yes | User key (`amelia`, `lonnie`, `guest`) |
+| `characterId` | `string` | Yes | Character key (`melody`, `kuromi`, `retsuko`) |
+
+### Response (200)
+
+```json
+[
+  {
+    "date": "2026-03-07T05:00:00.000Z",
+    "exchangeCount": 5,
+    "summary": "The conversation covered baking tips and Hello Kitty Island Adventure...",
+    "sessionId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+    "characterId": "melody"
+  }
+]
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `date` | `string` | ISO 8601 timestamp when the summary was generated |
+| `exchangeCount` | `number` | Number of user-model exchanges in the summarized session |
+| `summary` | `string` | Narrative summary of the conversation (2-3 paragraphs) |
+| `sessionId` | `string` | UUID of the original session that was summarized |
+| `characterId` | `string` | Character the conversation was with |
+
+### Error Responses
+
+| Status | Body | Condition |
+|--------|------|-----------|
+| 400 | `{ "error": "userId and characterId are required" }` | Missing required params |
+| 400 | `{ "error": "Invalid userId" }` | Unknown user key |
+| 400 | `{ "error": "Invalid characterId" }` | Unknown character key |
+| 500 | `{ "error": "Failed to read summaries" }` | File system error |
+
+---
+
+## DELETE /api/summaries/:index
+
+Delete a single conversation summary by its zero-based index (in stored order, oldest-first).
+
+### Parameters
+
+| Param | Location | Type | Description |
+|-------|----------|------|-------------|
+| `index` | URL path | `number` | Zero-based index of the summary to delete |
+| `userId` | Query string | `string` | User key (required) |
+| `characterId` | Query string | `string` | Character key (required) |
+
+### Response (200)
+
+```json
+{ "ok": true }
+```
+
+### Error Responses
+
+| Status | Body | Condition |
+|--------|------|-----------|
+| 400 | `{ "error": "userId and characterId are required" }` | Missing required params |
+| 400 | `{ "error": "Index must be a number" }` | Non-numeric index |
+| 404 | `{ "error": "Summary not found" }` | Index out of range |
 
 ---
 

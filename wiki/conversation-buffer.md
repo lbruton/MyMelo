@@ -152,13 +152,19 @@ When the limit is reached, the oldest session (by `lastAccess` timestamp) is evi
 
 ## Session Cleanup
 
-An interval timer prunes expired sessions every 10 minutes:
+An interval timer prunes expired sessions every 10 minutes. Before deleting a session, the prune hook generates a rolling conversation summary (fire-and-forget) if the session has at least 3 exchanges and has `userId`/`characterId` attached:
 
 ```js
 setInterval(() => {
   const cutoff = Date.now() - 60 * 60 * 1000;  // 1 hour ago
   for (const [id, session] of sessionBuffers) {
-    if (session.lastAccess < cutoff) sessionBuffers.delete(id);
+    if (session.lastAccess < cutoff) {
+      // Generate summary before pruning (fire-and-forget)
+      if (session.contents.length >= 6 && session.userId && session.characterId) {
+        generateSessionSummary(session.contents, session.userId, session.characterId, id);
+      }
+      sessionBuffers.delete(id);
+    }
   }
 }, 10 * 60 * 1000);  // every 10 minutes
 ```
@@ -167,8 +173,10 @@ setInterval(() => {
 |-----------|-------|
 | Cleanup interval | 10 minutes |
 | Session TTL | 1 hour of inactivity |
+| Summary trigger | Session has >= 6 items (3 exchanges) + userId + characterId |
+| Summary model | `gemini-2.0-flash` (async, fire-and-forget) |
 
-Note: The CLAUDE.md mentions "24-hour lazy cleanup" but the actual implementation uses a 1-hour TTL with 10-minute interval checks.
+The generated summaries are stored in `data/summaries/` and injected into the system prompt on subsequent requests. See [Memory Architecture](memory-flow.md#2-rolling-summaries-temporal-memory) for full details.
 
 ## UUID Validation
 

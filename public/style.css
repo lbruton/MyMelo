@@ -802,6 +802,142 @@ html, body {
   color: #F0E0F0;
 }
 
+/* ─── Conversation Summaries Section ─── */
+
+.summaries-section {
+  margin: 0 0 12px 0;
+  border-radius: 14px;
+  background: var(--pale-pink);
+  border: 1px solid rgba(255, 182, 193, 0.4);
+  overflow: hidden;
+}
+
+.summaries-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-dark);
+}
+
+.summaries-toggle {
+  font-size: 12px;
+  color: var(--text-light);
+  transition: transform 0.2s ease;
+}
+
+.summaries-toggle.open {
+  transform: rotate(90deg);
+}
+
+.summaries-badge {
+  background: var(--char-primary, var(--accent-highlight));
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 10px;
+  margin-left: auto;
+}
+
+.summaries-content {
+  display: none;
+  padding: 0 14px 12px;
+}
+
+.summaries-content.open {
+  display: block;
+}
+
+.summaries-empty {
+  font-size: 13px;
+  color: var(--text-light);
+  font-style: italic;
+  text-align: center;
+  padding: 8px 0;
+  margin: 0;
+}
+
+.summary-card {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 182, 193, 0.2);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+[data-theme="dark"] .summary-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.summary-card:last-child {
+  margin-bottom: 0;
+}
+
+.summary-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-card-date {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.summary-card-count {
+  font-size: 10px;
+  color: var(--text-light);
+  background: rgba(255, 105, 180, 0.12);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
+.summary-delete-btn {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-light);
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-left: auto;
+  transition: background 0.15s, color 0.15s;
+}
+
+.summary-delete-btn:hover,
+.summary-delete-btn:active {
+  background: rgba(231, 76, 60, 0.15);
+  color: #E74C3C;
+}
+
+.summary-card-text {
+  font-size: 13px;
+  color: var(--text-dark);
+  line-height: 1.4;
+  margin-top: 6px;
+  display: none;
+}
+
+.summary-card.expanded .summary-card-text {
+  display: block;
+}
+
 /* ─── Lightbox ─── */
 .lightbox {
   display: none;
