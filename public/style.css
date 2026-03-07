@@ -598,6 +598,210 @@ html, body {
   grid-column: 1 / -1;
 }
 
+/* ─── Core Memory Section ─── */
+.core-memory-section {
+  margin: 0 0 12px 0;
+  border-radius: 14px;
+  background: var(--pale-pink);
+  border: 1px solid rgba(255, 182, 193, 0.4);
+  overflow: hidden;
+}
+
+.core-memory-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-dark);
+}
+
+.core-memory-toggle {
+  font-size: 12px;
+  color: var(--text-light);
+  transition: transform 0.2s ease;
+}
+
+.core-memory-toggle.open {
+  transform: rotate(90deg);
+}
+
+.core-memory-badge {
+  background: var(--char-primary, var(--accent-highlight));
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 10px;
+  margin-left: auto;
+}
+
+.core-memory-content {
+  display: none;
+  padding: 0 14px 12px;
+}
+
+.core-memory-content.open {
+  display: block;
+}
+
+.core-memory-category {
+  margin-bottom: 10px;
+}
+
+.core-memory-category:last-child {
+  margin-bottom: 0;
+}
+
+.core-memory-category-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-light);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 182, 193, 0.25);
+}
+
+.core-memory-category-badge {
+  background: rgba(255, 105, 180, 0.15);
+  color: var(--hot-pink);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: 8px;
+}
+
+.core-memory-entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.core-memory-entry-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-dark);
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.core-memory-delete-btn {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--text-light);
+  border-radius: 50%;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+}
+
+.core-memory-delete-btn:hover,
+.core-memory-delete-btn:active {
+  background: rgba(231, 76, 60, 0.15);
+  color: #E74C3C;
+}
+
+.core-memory-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 1px dashed rgba(255, 105, 180, 0.4);
+  background: transparent;
+  color: var(--text-light);
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.core-memory-add-btn:hover,
+.core-memory-add-btn:active {
+  border-color: var(--hot-pink);
+  color: var(--hot-pink);
+}
+
+.core-memory-add-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.core-memory-add-input {
+  flex: 1;
+  border: 1px solid rgba(255, 182, 193, 0.5);
+  border-radius: 10px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-family: 'Quicksand', sans-serif;
+  background: var(--white);
+  color: var(--text-dark);
+  outline: none;
+}
+
+.core-memory-add-input:focus {
+  border-color: var(--hot-pink);
+}
+
+.core-memory-save-btn {
+  border: none;
+  background: var(--char-primary, var(--accent-highlight));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: 'Quicksand', sans-serif;
+  white-space: nowrap;
+}
+
+.core-memory-save-btn:active {
+  opacity: 0.8;
+}
+
+/* Core Memory — Dark Mode */
+[data-theme="dark"] .core-memory-section {
+  background: #2A1F25;
+  border-color: #4A3040;
+}
+
+[data-theme="dark"] .core-memory-category-header {
+  border-bottom-color: rgba(74, 48, 64, 0.5);
+}
+
+[data-theme="dark"] .core-memory-category-badge {
+  background: rgba(255, 105, 180, 0.12);
+}
+
+[data-theme="dark"] .core-memory-add-btn {
+  border-color: rgba(255, 105, 180, 0.25);
+}
+
+[data-theme="dark"] .core-memory-add-input {
+  background: #353040;
+  border-color: #4A3040;
+  color: #F0E0F0;
+}
+
 /* ─── Lightbox ─── */
 .lightbox {
   display: none;

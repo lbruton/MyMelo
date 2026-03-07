@@ -45,7 +45,7 @@ import https from 'https';
 import { GoogleGenAI } from '@google/genai';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, readdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, renameSync } from 'fs';
 import { randomUUID } from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -140,8 +140,11 @@ const IMAGES_DIR = join(DATA_DIR, 'images');
 const IMAGES_META = join(DATA_DIR, 'images-meta.json');
 /** @type {string} Path to relationship/friendship stats JSON file. */
 const RELATIONSHIP_FILE = join(DATA_DIR, 'relationship.json');
+/** @type {string} Directory for core memory JSON files (per user+character). */
+const CORE_MEMORY_DIR = join(DATA_DIR, 'core-memory');
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(IMAGES_DIR)) mkdirSync(IMAGES_DIR, { recursive: true });
+if (!existsSync(CORE_MEMORY_DIR)) mkdirSync(CORE_MEMORY_DIR, { recursive: true });
 if (!existsSync(IMAGES_META)) writeFileSync(IMAGES_META, '[]');
 if (!existsSync(RELATIONSHIP_FILE)) writeFileSync(RELATIONSHIP_FILE, JSON.stringify({
   firstChat: null,
@@ -299,6 +302,103 @@ function readJSON(path) {
  */
 function writeJSON(path, data) {
   writeFileSync(path, JSON.stringify(data, null, 2));
+}
+
+// ---------------------------------------------------------------------------
+// Core Memory — structured per-user, per-character memory blocks
+// ---------------------------------------------------------------------------
+
+/** @type {Object<string, string>} Display labels for each core memory category. */
+const CORE_MEMORY_CATEGORIES = {
+  aboutYou: 'About them',
+  familyAndPets: 'Family & Pets',
+  preferences: 'Preferences',
+  importantDates: 'Important dates',
+  insideJokes: 'Inside jokes'
+};
+
+/** @type {Map<string, object>} In-memory cache keyed by `${userId}_${characterId}`. */
+const coreMemoryCache = new Map();
+
+/**
+ * Return a blank core memory structure.
+ * @returns {object}
+ */
+function defaultCoreMemory() {
+  return { _version: 1, _updated: null, aboutYou: [], familyAndPets: [], preferences: [], importantDates: [], insideJokes: [] };
+}
+
+/**
+ * Resolve the JSON file path for a user+character core memory.
+ * @param {string} userId
+ * @param {string} characterId
+ * @returns {string}
+ */
+function getCoreMemoryPath(userId, characterId) {
+  // Validate against allowlists to prevent path traversal
+  const safeUser = (userId && KNOWN_USERS[userId]) ? userId : 'guest';
+  const safeChar = (characterId && CHARACTERS[characterId]) ? characterId : DEFAULT_CHARACTER;
+  return join(CORE_MEMORY_DIR, `${safeUser}_${safeChar}.json`);
+}
+
+/**
+ * Read core memory for a user+character pair (cache-first, then disk).
+ * Returns defaultCoreMemory() if the file is missing or corrupt.
+ * @param {string} userId
+ * @param {string} characterId
+ * @returns {object}
+ */
+function readCoreMemory(userId, characterId) {
+  const key = `${userId}_${characterId}`;
+  if (coreMemoryCache.has(key)) return coreMemoryCache.get(key);
+  const filePath = getCoreMemoryPath(userId, characterId);
+  let data;
+  try {
+    data = JSON.parse(readFileSync(filePath, 'utf-8'));
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('Core memory read error:', err.message);
+    data = defaultCoreMemory();
+  }
+  coreMemoryCache.set(key, data);
+  return data;
+}
+
+/**
+ * Persist core memory to disk (atomic write via tmp+rename) and update cache.
+ * @param {string} userId
+ * @param {string} characterId
+ * @param {object} data
+ */
+function writeCoreMemory(userId, characterId, data) {
+  data._updated = new Date().toISOString();
+  const filePath = getCoreMemoryPath(userId, characterId);
+  const tmpPath = filePath + '.tmp';
+  writeFileSync(tmpPath, JSON.stringify(data, null, 2));
+  renameSync(tmpPath, filePath);
+  coreMemoryCache.set(`${userId}_${characterId}`, data);
+}
+
+/**
+ * Format core memory into a prompt-injection string.
+ * Skips empty categories. Returns empty string if nothing stored.
+ * Caps output at 2000 characters.
+ * @param {object} coreMemory
+ * @returns {string}
+ */
+function buildCoreMemoryContext(coreMemory) {
+  const lines = [];
+  for (const [key, label] of Object.entries(CORE_MEMORY_CATEGORIES)) {
+    const entries = coreMemory[key];
+    if (entries && entries.length > 0) {
+      lines.push(`${label}: ${entries.join(', ')}`);
+    }
+  }
+  if (lines.length === 0) return '';
+  let result = '\n\nCore things you know about your friend (always remember these):\n' + lines.join('\n');
+  if (result.length > 2000) {
+    result = result.slice(0, 1997) + '...';
+  }
+  return result;
 }
 
 /** @type {string} Base system prompt for My Melody — rebuilt per request with memory/relationship context appended. */
@@ -1014,6 +1114,77 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}, character 
   }).catch(err => console.error('mem0 agent save error:', err.message));
 }
 
+// ─── Core Memory Extraction ───
+
+/**
+ * Merge extracted facts into existing core memory, deduplicating case-insensitively.
+ * Each category is capped at 10 entries (FIFO — oldest removed first).
+ * @param {object} existing - Current core memory object
+ * @param {object} extracted - Newly extracted facts from Gemini
+ * @returns {boolean} Whether any changes were made
+ */
+function mergeCoreMemory(existing, extracted) {
+  let changed = false;
+  for (const key of Object.keys(CORE_MEMORY_CATEGORIES)) {
+    const existingEntries = existing[key] || [];
+    const newEntries = extracted[key] || [];
+    const existingLower = existingEntries.map(e => e.toLowerCase().trim());
+
+    for (const entry of newEntries) {
+      if (!entry || typeof entry !== 'string') continue;
+      const normalized = entry.toLowerCase().trim();
+      if (normalized.length === 0) continue;
+      if (existingLower.includes(normalized)) continue;
+      existingEntries.push(entry.trim());
+      existingLower.push(normalized);
+      changed = true;
+    }
+
+    // FIFO cap at 10
+    if (existingEntries.length > 10) {
+      existingEntries.splice(0, existingEntries.length - 10);
+      changed = true;
+    }
+    existing[key] = existingEntries;
+  }
+  return changed;
+}
+
+/**
+ * Extract personal facts from a chat exchange and merge into core memory.
+ * Uses gemini-2.0-flash (cheapest model) for extraction. Fire-and-forget.
+ * @param {string} userMessage
+ * @param {string} assistantReply
+ * @param {string} userId
+ * @param {string} characterId
+ */
+async function extractCoreMemory(userMessage, assistantReply, userId, characterId) {
+  if (!userId || userId === 'guest') return;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.0-flash',
+    contents: `User: ${userMessage}\nAssistant: ${assistantReply}`,
+    config: {
+      systemInstruction: 'Extract personal facts from this conversation that should be permanently remembered. Categorize into: aboutYou (name, age, location, occupation), familyAndPets (family members, pets), preferences (favorites, hobbies), importantDates (birthdays, anniversaries), insideJokes (shared humor). Return JSON with these keys. Each value is an array of short fact strings. Return empty arrays for categories with no new facts. Only extract CLEAR, EXPLICIT facts — do not infer or guess.',
+      responseMimeType: 'application/json'
+    }
+  });
+
+  let extracted;
+  try {
+    extracted = JSON.parse(response.text);
+  } catch {
+    console.error('Core memory extraction: invalid JSON from model');
+    return;
+  }
+  const existing = readCoreMemory(userId, characterId);
+  const changed = mergeCoreMemory(existing, extracted);
+  if (changed) {
+    writeCoreMemory(userId, characterId, existing);
+    console.log(`Core memory updated for ${userId}/${characterId}`);
+  }
+}
+
 // ─── Conversation Buffer (Session Store) ───
 
 /**
@@ -1120,6 +1291,10 @@ app.post('/api/chat', async (req, res) => {
       identityContext = `\n\nYou are currently talking to your friend ${userName}. Use their name naturally in conversation.`;
     }
 
+    // Read core memory (always-injected context)
+    const coreMemory = readCoreMemory(userId, characterId || 'melody');
+    const coreMemoryContext = buildCoreMemoryContext(coreMemory);
+
     // Search all memory tracks in parallel (own + cross-character)
     const searchQuery = message || 'image shared';
     const [userMemories, agentMemories, crossCharacterMemories] = await Promise.all([
@@ -1189,7 +1364,7 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const isStraightTalk = replyStyle === 'straightTalk';
-    const systemInstruction = character.getPrompt() + (isStraightTalk ? '' : CHARACTER_CONTEXT) + identityContext + crossUserInstruction + relationshipContext + userMemoryContext + agentMemoryContext + crossCharacterContext + crossUserContext + styleInstruction;
+    const systemInstruction = character.getPrompt() + (isStraightTalk ? '' : CHARACTER_CONTEXT) + identityContext + crossUserInstruction + coreMemoryContext + relationshipContext + userMemoryContext + agentMemoryContext + crossCharacterContext + crossUserContext + styleInstruction;
 
     // Build message contents (prepend conversation buffer for multi-turn context)
     const historyBuffer = getSessionBuffer(sessionId);
@@ -1318,6 +1493,10 @@ app.post('/api/chat', async (req, res) => {
       replyStyle,
       skipAgentTrack: replyStyle === 'straightTalk'
     }, character);
+
+    // Extract core memory facts (fire-and-forget, non-blocking)
+    extractCoreMemory(message || '[shared an image]', reply, userId, characterId || 'melody')
+      .catch(err => console.error('Core memory extraction error:', err.message));
 
     res.json({ reply, sources, wikiSource });
   } catch (err) {
@@ -1533,6 +1712,87 @@ app.delete('/api/memories/:id', async (req, res) => {
 });
 
 /**
+ * GET /api/core-memory — Retrieve core memory blocks for a user+character pair.
+ *
+ * @route GET /api/core-memory
+ * @param {string} [req.query.userId] - User key (default: 'guest')
+ * @param {string} [req.query.characterId] - Character key (default: 'melody')
+ * @returns {Object} 200 - Core memory object with all categories
+ */
+app.get('/api/core-memory', (req, res) => {
+  try {
+    const userId = req.query.userId || 'guest';
+    const characterId = req.query.characterId || 'melody';
+    const data = readCoreMemory(userId, characterId);
+    res.json(data);
+  } catch (err) {
+    console.error('Core memory read error:', err.message);
+    res.status(500).json({ error: 'Failed to read core memory' });
+  }
+});
+
+/**
+ * PUT /api/core-memory — Update a single category's entries in core memory.
+ *
+ * @route PUT /api/core-memory
+ * @param {Object} req.body - { userId, characterId, category, entries }
+ * @returns {Object} 200 - { ok: true, category, count }
+ * @returns {Object} 400 - { error: string } on invalid category or entries
+ */
+app.put('/api/core-memory', (req, res) => {
+  try {
+    const { userId = 'guest', characterId = 'melody', category, entries } = req.body;
+    if (!category || !CORE_MEMORY_CATEGORIES[category]) {
+      return res.status(400).json({ error: `Invalid category. Must be one of: ${Object.keys(CORE_MEMORY_CATEGORIES).join(', ')}` });
+    }
+    if (!Array.isArray(entries)) {
+      return res.status(400).json({ error: 'entries must be an array of strings' });
+    }
+    const capped = entries.slice(0, 10).map(String);
+    const data = readCoreMemory(userId, characterId);
+    data[category] = capped;
+    writeCoreMemory(userId, characterId, data);
+    res.json({ ok: true, category, count: capped.length });
+  } catch (err) {
+    console.error('Core memory update error:', err.message);
+    res.status(500).json({ error: 'Failed to update core memory' });
+  }
+});
+
+/**
+ * DELETE /api/core-memory/:category/:index — Delete a single core memory entry.
+ *
+ * @route DELETE /api/core-memory/:category/:index
+ * @param {string} req.params.category - Category key (e.g., 'aboutYou')
+ * @param {string} req.params.index - Numeric index of entry to delete
+ * @param {string} [req.query.userId] - User key (default: 'guest')
+ * @param {string} [req.query.characterId] - Character key (default: 'melody')
+ * @returns {Object} 200 - { ok: true }
+ * @returns {Object} 400 - { error: string } on invalid category or index
+ */
+app.delete('/api/core-memory/:category/:index', (req, res) => {
+  try {
+    const { category } = req.params;
+    if (!CORE_MEMORY_CATEGORIES[category]) {
+      return res.status(400).json({ error: `Invalid category. Must be one of: ${Object.keys(CORE_MEMORY_CATEGORIES).join(', ')}` });
+    }
+    const index = parseInt(req.params.index, 10);
+    const userId = req.query.userId || 'guest';
+    const characterId = req.query.characterId || 'melody';
+    const data = readCoreMemory(userId, characterId);
+    if (isNaN(index) || index < 0 || index >= (data[category] || []).length) {
+      return res.status(400).json({ error: `Invalid index. Must be 0-${(data[category] || []).length - 1}` });
+    }
+    data[category].splice(index, 1);
+    writeCoreMemory(userId, characterId, data);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Core memory delete error:', err.message);
+    res.status(500).json({ error: 'Failed to delete core memory entry' });
+  }
+});
+
+/**
  * GET /api/relationship — Get friendship stats for display in the Memories tab.
  *
  * @route GET /api/relationship
@@ -1718,7 +1978,8 @@ app.get('/api/capabilities', (req, res) => {
     { id: 'quote', name: 'Quotes', description: 'Inspirational quotes', tag: '[QUOTE]' },
     { id: 'gif', name: 'GIF Search', description: 'Search for GIFs via Giphy', tag: '[GIF: search query]' },
     { id: 'radar', name: 'Weather Radar', description: 'Live animated radar loop for local area', tag: '[RADAR]' },
-    { id: 'storm_stream', name: 'Storm Stream', description: 'Live local severe weather coverage', tag: '[STORM_STREAM]' }
+    { id: 'storm_stream', name: 'Storm Stream', description: 'Live local severe weather coverage', tag: '[STORM_STREAM]' },
+    { id: 'core_memory', name: 'Core Memory', description: 'Structured always-remembered facts about each friend', tag: null }
   ]);
 });
 

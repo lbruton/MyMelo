@@ -43,6 +43,16 @@ let pendingImageBase64 = null;
 let pendingImageMime = null;
 let pendingImageDataURL = null;
 
+// ─── Core Memory Labels ───
+/** @type {Object<string, string>} Map core memory category keys to display labels. */
+const CORE_MEMORY_LABELS = {
+  aboutYou: 'About You',
+  familyAndPets: 'Family & Pets',
+  preferences: 'Preferences',
+  importantDates: 'Important Dates',
+  insideJokes: 'Inside Jokes'
+};
+
 // ─── User Picker ───
 /** @type {Object<string, string>} Map user IDs to display names. */
 const USER_NAMES = { amelia: 'Amelia', lonnie: 'Lonnie', guest: 'Guest' };
@@ -1756,6 +1766,191 @@ async function loadRelationshipStats() {
 refreshMemoriesBtn.addEventListener('click', loadMemories);
 
 /**
+ * Render the core memory section above the mem0 memory list.
+ *
+ * Builds a collapsible panel with per-category entries, inline add/delete controls.
+ * Inserts (or updates) a container div before the memoryList element.
+ *
+ * @param {Object} coreMemory - Core memory data from the API.
+ * @param {string} characterId - Active character ID for API calls.
+ * @returns {void}
+ */
+function renderCoreMemory(coreMemory, characterId) {
+  const categories = Object.keys(CORE_MEMORY_LABELS);
+  let totalEntries = 0;
+  categories.forEach(cat => {
+    if (Array.isArray(coreMemory[cat])) totalEntries += coreMemory[cat].length;
+  });
+
+  // Get or create the section container
+  let section = document.getElementById('coreMemorySection');
+  if (!section) {
+    section = document.createElement('div');
+    section.id = 'coreMemorySection';
+    section.className = 'core-memory-section';
+    memoryList.parentNode.insertBefore(section, memoryList);
+  }
+  // Clear previous content
+  section.innerHTML = '';
+
+  // Collapsible header
+  const header = document.createElement('div');
+  header.className = 'core-memory-header';
+
+  const toggle = document.createElement('span');
+  toggle.className = 'core-memory-toggle';
+  toggle.textContent = '\u25B6';
+
+  const title = document.createElement('span');
+  title.textContent = 'Core Memories';
+
+  const badge = document.createElement('span');
+  badge.className = 'core-memory-badge';
+  badge.textContent = String(totalEntries);
+
+  header.appendChild(toggle);
+  header.appendChild(title);
+  header.appendChild(badge);
+
+  // Content wrapper
+  const content = document.createElement('div');
+  content.className = 'core-memory-content';
+
+  // Restore collapsed state from sessionStorage
+  const storageKey = 'coreMemoryOpen';
+  if (sessionStorage.getItem(storageKey) === 'true') {
+    toggle.classList.add('open');
+    content.classList.add('open');
+  }
+
+  header.addEventListener('click', () => {
+    const isOpen = content.classList.toggle('open');
+    toggle.classList.toggle('open', isOpen);
+    sessionStorage.setItem(storageKey, isOpen ? 'true' : 'false');
+  });
+
+  // Build each category
+  categories.forEach(cat => {
+    const entries = Array.isArray(coreMemory[cat]) ? coreMemory[cat] : [];
+
+    const catDiv = document.createElement('div');
+    catDiv.className = 'core-memory-category';
+
+    // Category header
+    const catHeader = document.createElement('div');
+    catHeader.className = 'core-memory-category-header';
+
+    const catLabel = document.createElement('span');
+    catLabel.textContent = CORE_MEMORY_LABELS[cat];
+
+    const catBadge = document.createElement('span');
+    catBadge.className = 'core-memory-category-badge';
+    catBadge.textContent = String(entries.length);
+
+    catHeader.appendChild(catLabel);
+    catHeader.appendChild(catBadge);
+    catDiv.appendChild(catHeader);
+
+    // Entries
+    entries.forEach((entry, idx) => {
+      const row = document.createElement('div');
+      row.className = 'core-memory-entry';
+
+      const text = document.createElement('span');
+      text.className = 'core-memory-entry-text';
+      text.textContent = entry;
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'core-memory-delete-btn';
+      delBtn.textContent = '\u00D7';
+      delBtn.addEventListener('click', async () => {
+        try {
+          await fetch(`/api/core-memory/${cat}/${idx}?characterId=${characterId}${activeUser ? '&userId=' + activeUser : ''}`, { method: 'DELETE' });
+          loadMemories();
+        } catch (err) {
+          console.error('Core memory delete error:', err);
+        }
+      });
+
+      row.appendChild(text);
+      row.appendChild(delBtn);
+      catDiv.appendChild(row);
+    });
+
+    // Add button + inline input
+    const addBtn = document.createElement('button');
+    addBtn.className = 'core-memory-add-btn';
+    addBtn.textContent = '+ Add';
+
+    const addRow = document.createElement('div');
+    addRow.className = 'core-memory-add-row';
+    addRow.style.display = 'none';
+
+    const addInput = document.createElement('input');
+    addInput.className = 'core-memory-add-input';
+    addInput.type = 'text';
+    addInput.placeholder = CORE_MEMORY_LABELS[cat] + '...';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'core-memory-save-btn';
+    saveBtn.textContent = 'Save';
+
+    addRow.appendChild(addInput);
+    addRow.appendChild(saveBtn);
+
+    addBtn.addEventListener('click', () => {
+      addRow.style.display = 'flex';
+      addBtn.style.display = 'none';
+      addInput.focus();
+    });
+
+    const doSave = async () => {
+      const val = addInput.value.trim();
+      if (!val) return;
+      saveBtn.disabled = true;
+      saveBtn.textContent = '...';
+      try {
+        // Cap at 9 existing + 1 new = 10 max (server also enforces 10-cap)
+        const trimmed = entries.length >= 10 ? entries.slice(-9) : entries;
+        const updatedEntries = [...trimmed, val];
+        const resp = await fetch('/api/core-memory', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: activeUser || undefined,
+            characterId: characterId,
+            category: cat,
+            entries: updatedEntries
+          })
+        });
+        if (!resp.ok) throw new Error(`Server error: ${resp.status}`);
+        loadMemories();
+      } catch (err) {
+        console.error('Core memory save error:', err);
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save';
+      }
+    };
+
+    saveBtn.addEventListener('click', doSave);
+    addInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') doSave();
+      if (e.key === 'Escape') {
+        addRow.style.display = 'none';
+        addBtn.style.display = '';
+      }
+    });
+
+    catDiv.appendChild(addBtn);
+    catDiv.appendChild(addRow);
+    content.appendChild(catDiv);
+  });
+
+  section.appendChild(header);
+  section.appendChild(content);
+}
+
+/**
  * Fetch all mem0 memories (friend + melody tracks) and render them as cards with delete buttons.
  *
  * @returns {Promise<void>}
@@ -1768,6 +1963,17 @@ async function loadMemories() {
     const _charName = (CHARACTER_CONFIG[activeCharacter] || CHARACTER_CONFIG.melody).name;
     memoriesTabHeader.textContent = `${_charName}'s Memories`;
   }
+
+  // Load core memory section
+  try {
+    const _cmCharId = CHARACTER_CONFIG[activeCharacter] ? activeCharacter : 'melody';
+    const cmRes = await fetch(`/api/core-memory?characterId=${_cmCharId}${activeUser ? '&userId=' + activeUser : ''}`);
+    const coreMemory = await cmRes.json();
+    renderCoreMemory(coreMemory, _cmCharId);
+  } catch (e) {
+    console.error('Core memory load error:', e);
+  }
+
   memoryList.innerHTML = '<p class="empty-state">Loading memories...</p>';
   try {
     const _charId = CHARACTER_CONFIG[activeCharacter] ? activeCharacter : 'melody';
