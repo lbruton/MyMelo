@@ -59,9 +59,12 @@ const systemInstruction = character.getPrompt()
   + (isStraightTalk ? '' : CHARACTER_CONTEXT)
   + identityContext
   + crossUserInstruction
+  + coreMemoryContext
+  + summaryContext
   + relationshipContext
   + userMemoryContext
   + agentMemoryContext
+  + crossCharacterContext
   + crossUserContext
   + styleInstruction;
 ```
@@ -96,9 +99,12 @@ const systemInstruction = character.getPrompt()
 │  │    [omitted in straightTalk mode]                  │  │
 │  │  + identityContext (who is talking)                │  │
 │  │  + crossUserInstruction (family sharing rules)     │  │
+│  │  + coreMemoryContext (structured key facts)        │  │
+│  │  + summaryContext (rolling session summaries, ≤3) │  │
 │  │  + relationshipContext (days, chats, streak)       │  │
 │  │  + userMemoryContext (friend's memories)           │  │
 │  │  + agentMemoryContext (character's own memories)   │  │
+│  │  + crossCharacterContext (other chars' memories)   │  │
 │  │  + crossUserContext (other user's memories)        │  │
 │  │  + styleInstruction (reply verbosity)              │  │
 │  └────────────────────────────────────────────────────┘  │
@@ -247,6 +253,21 @@ Per-user identity instruction based on the active `userId`:
 Always present when `userName` is set (known, non-guest user):
 
 > You know multiple family members. If someone asks about another family member, you can share casual, friendly info about what they've been chatting about. Frame it naturally (e.g. "Oh~! Lonnie told me about..."). Never share Guest conversations — guests get privacy.
+
+### summaryContext
+
+Built by `buildSummaryContext(readSummaries(userId, characterId))`. Injects the 3 most recent rolling conversation summaries as narrative text, capped at ~1500 characters. The 2 newest summaries get full text; the 3rd oldest gets only its first paragraph. Empty string if no summaries exist.
+
+Example output:
+
+```
+Recent conversation summaries (use for continuity):
+Session from March 5: The conversation covered baking tips and a recipe lookup...
+Session from March 6: Amelia shared photos of her cat and discussed weekend plans...
+Session from March 7: A lively chat about Hello Kitty Island Adventure gift guides...
+```
+
+Summaries are generated automatically by `gemini-2.0-flash` when a session is pruned (1hr idle, minimum 3 exchanges). Stored in `data/summaries/{userId}_{characterId}.json`, max 20 per pair.
 
 ### relationshipContext
 

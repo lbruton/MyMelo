@@ -2,11 +2,13 @@
 
 ## Overview
 
-Three independent memory layers work together to give Melody context:
+Five independent memory layers work together to give characters context:
 
 | Layer | Storage | Scope | Lifetime |
 |-------|---------|-------|----------|
 | **Conversation Buffer** | Server RAM (`Map`) | Per browser tab (sessionId) | 1 hour, max 6 exchanges |
+| **Rolling Summaries** | `data/summaries/*.json` (Docker volume) | Per user + per character | Permanent, max 20 per pair |
+| **Core Memory Blocks** | `data/core-memory/*.json` (Docker volume) | Per user + per character | Permanent (until deleted) |
 | **mem0 Dual-Track** | mem0 cloud API | Per user + global agent | Permanent (until deleted) |
 | **Relationship Stats** | `data/relationship.json` | Per user | Permanent (Docker volume) |
 
@@ -59,9 +61,13 @@ Three independent memory layers work together to give Melody context:
           │  Base character prompt   │
           │  + 46 Sanrio characters  │
           │  + identity context      │
+          │  + cross-user instruction│
+          │  + core memory blocks    │
+          │  + rolling summaries (≤3)│
           │  + relationship stats    │
           │  + user memories (≤10)   │
           │  + agent memories (≤5)   │
+          │  + cross-char context    │
           │  + cross-user context    │
           │  + reply style instruction│
           └────────────┬─────────────┘
@@ -141,7 +147,32 @@ The **only** layer that provides multi-turn context within a single chat session
 
 Without this buffer, every message would be a standalone request — Melody would have no idea what you just said 2 messages ago.
 
-### 2. mem0 Dual-Track (Long-Term)
+### 2. Rolling Summaries (Temporal Memory)
+
+Auto-generated narrative digests of past sessions, giving characters "last time we talked about..." awareness.
+
+- **Where:** `data/summaries/{userId}_{characterId}.json` on the Docker volume
+- **Trigger:** When a session is pruned (1hr idle) and has at least 3 exchanges (6 messages)
+- **Generator:** `gemini-2.0-flash` (fire-and-forget, async)
+- **Capacity:** Max 20 summaries per user+character pair (oldest deleted when cap hit)
+- **Prompt injection:** The 3 most recent summaries are injected into the system prompt, capped at ~1500 characters. The 2 newest get full text; the 3rd oldest gets first paragraph only.
+- **Cache:** In-memory `Map` avoids re-reading JSON on every request
+- **API:** `GET /api/summaries`, `DELETE /api/summaries/:index`
+- **UI:** Collapsible "Conversation Summaries" section in the Memories tab
+
+Each summary object:
+
+```json
+{
+  "date": "2026-03-07T05:00:00.000Z",
+  "exchangeCount": 5,
+  "summary": "The conversation covered baking tips and Hello Kitty Island Adventure...",
+  "sessionId": "a1b2c3d4-...",
+  "characterId": "melody"
+}
+```
+
+### 3. mem0 Dual-Track (Long-Term)
 
 Permanent memory that persists across sessions, browser clears, and restarts.
 
@@ -166,7 +197,7 @@ Permanent memory that persists across sessions, browser clears, and restarts.
 - mem0's AI decides what's worth remembering — not every message creates a memory
 - The full `[user message, assistant reply]` pair is sent so mem0 has context
 
-### 3. Relationship Stats (Friendship Tracking)
+### 4. Relationship Stats (Friendship Tracking)
 
 Numeric stats about the friendship, stored locally in `data/relationship.json`.
 
@@ -216,10 +247,6 @@ There is **no batching or local queue** — every single chat exchange fires two
 ### mem0 Controls What Gets Stored
 
 The `infer: true` flag means mem0's AI decides what facts to extract. We send the full conversation pair but have no control over what mem0 actually persists. This is why memory labels sometimes say things like "user's friend is named Lonnie" — that's mem0's own phrasing, not ours.
-
-### No Rolling Summary
-
-Older conversations are never summarized. The session buffer drops messages after 6 exchanges, and mem0 stores individual facts — but there's no condensed "story so far" that captures the arc of the friendship.
 
 ### No Entity Graph
 
@@ -342,19 +369,9 @@ retrieval_criteria:
     weight: 2
 ```
 
-#### 6. Rolling Session Summaries
+#### 6. Rolling Session Summaries (SHIPPED — v3.4.0, HKF-31)
 
-At session end (or every N messages), summarize the conversation and store as a memory:
-
-```text
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│ Session ends     │────▶│ Gemini summarizes │────▶│ mem0 save with  │
-│ (tab close or    │     │ the full session  │     │ infer: false    │
-│  6+ exchanges)   │     │ buffer            │     │ source: summary │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-```
-
-Enables "last time we talked about..." context on next visit. Store with `infer: false` (raw summary, don't re-extract) and metadata `{ source: 'session_summary' }`.
+Implemented as a local JSON storage layer (not mem0). Summaries are generated by `gemini-2.0-flash` on session prune and stored in `data/summaries/`. See [Rolling Summaries layer](#2-rolling-summaries-temporal-memory) above for full details.
 
 ### Tier 3 — Larger Features (own spec required)
 
