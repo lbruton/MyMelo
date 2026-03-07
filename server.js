@@ -1703,6 +1703,87 @@ app.delete('/api/memories/:id', async (req, res) => {
 });
 
 /**
+ * GET /api/core-memory — Retrieve core memory blocks for a user+character pair.
+ *
+ * @route GET /api/core-memory
+ * @param {string} [req.query.userId] - User key (default: 'guest')
+ * @param {string} [req.query.characterId] - Character key (default: 'melody')
+ * @returns {Object} 200 - Core memory object with all categories
+ */
+app.get('/api/core-memory', (req, res) => {
+  try {
+    const userId = req.query.userId || 'guest';
+    const characterId = req.query.characterId || 'melody';
+    const data = readCoreMemory(userId, characterId);
+    res.json(data);
+  } catch (err) {
+    console.error('Core memory read error:', err.message);
+    res.status(500).json({ error: 'Failed to read core memory' });
+  }
+});
+
+/**
+ * PUT /api/core-memory — Update a single category's entries in core memory.
+ *
+ * @route PUT /api/core-memory
+ * @param {Object} req.body - { userId, characterId, category, entries }
+ * @returns {Object} 200 - { ok: true, category, count }
+ * @returns {Object} 400 - { error: string } on invalid category or entries
+ */
+app.put('/api/core-memory', (req, res) => {
+  try {
+    const { userId = 'guest', characterId = 'melody', category, entries } = req.body;
+    if (!category || !CORE_MEMORY_CATEGORIES[category]) {
+      return res.status(400).json({ error: `Invalid category. Must be one of: ${Object.keys(CORE_MEMORY_CATEGORIES).join(', ')}` });
+    }
+    if (!Array.isArray(entries)) {
+      return res.status(400).json({ error: 'entries must be an array of strings' });
+    }
+    const capped = entries.slice(0, 10).map(String);
+    const data = readCoreMemory(userId, characterId);
+    data[category] = capped;
+    writeCoreMemory(userId, characterId, data);
+    res.json({ ok: true, category, count: capped.length });
+  } catch (err) {
+    console.error('Core memory update error:', err.message);
+    res.status(500).json({ error: 'Failed to update core memory' });
+  }
+});
+
+/**
+ * DELETE /api/core-memory/:category/:index — Delete a single core memory entry.
+ *
+ * @route DELETE /api/core-memory/:category/:index
+ * @param {string} req.params.category - Category key (e.g., 'aboutYou')
+ * @param {string} req.params.index - Numeric index of entry to delete
+ * @param {string} [req.query.userId] - User key (default: 'guest')
+ * @param {string} [req.query.characterId] - Character key (default: 'melody')
+ * @returns {Object} 200 - { ok: true }
+ * @returns {Object} 400 - { error: string } on invalid category or index
+ */
+app.delete('/api/core-memory/:category/:index', (req, res) => {
+  try {
+    const { category } = req.params;
+    if (!CORE_MEMORY_CATEGORIES[category]) {
+      return res.status(400).json({ error: `Invalid category. Must be one of: ${Object.keys(CORE_MEMORY_CATEGORIES).join(', ')}` });
+    }
+    const index = parseInt(req.params.index, 10);
+    const userId = req.query.userId || 'guest';
+    const characterId = req.query.characterId || 'melody';
+    const data = readCoreMemory(userId, characterId);
+    if (isNaN(index) || index < 0 || index >= (data[category] || []).length) {
+      return res.status(400).json({ error: `Invalid index. Must be 0-${(data[category] || []).length - 1}` });
+    }
+    data[category].splice(index, 1);
+    writeCoreMemory(userId, characterId, data);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Core memory delete error:', err.message);
+    res.status(500).json({ error: 'Failed to delete core memory entry' });
+  }
+});
+
+/**
  * GET /api/relationship — Get friendship stats for display in the Memories tab.
  *
  * @route GET /api/relationship
@@ -1888,7 +1969,8 @@ app.get('/api/capabilities', (req, res) => {
     { id: 'quote', name: 'Quotes', description: 'Inspirational quotes', tag: '[QUOTE]' },
     { id: 'gif', name: 'GIF Search', description: 'Search for GIFs via Giphy', tag: '[GIF: search query]' },
     { id: 'radar', name: 'Weather Radar', description: 'Live animated radar loop for local area', tag: '[RADAR]' },
-    { id: 'storm_stream', name: 'Storm Stream', description: 'Live local severe weather coverage', tag: '[STORM_STREAM]' }
+    { id: 'storm_stream', name: 'Storm Stream', description: 'Live local severe weather coverage', tag: '[STORM_STREAM]' },
+    { id: 'core_memory', name: 'Core Memory', description: 'Structured always-remembered facts about each friend', tag: null }
   ]);
 });
 
