@@ -145,6 +145,9 @@ const CORE_MEMORY_DIR = join(DATA_DIR, 'core-memory');
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 if (!existsSync(IMAGES_DIR)) mkdirSync(IMAGES_DIR, { recursive: true });
 if (!existsSync(CORE_MEMORY_DIR)) mkdirSync(CORE_MEMORY_DIR, { recursive: true });
+/** @type {string} Directory for rolling conversation summary JSON files (per user+character). */
+const SUMMARIES_DIR = join(DATA_DIR, 'summaries');
+if (!existsSync(SUMMARIES_DIR)) mkdirSync(SUMMARIES_DIR, { recursive: true });
 if (!existsSync(IMAGES_META)) writeFileSync(IMAGES_META, '[]');
 if (!existsSync(RELATIONSHIP_FILE)) writeFileSync(RELATIONSHIP_FILE, JSON.stringify({
   firstChat: null,
@@ -320,6 +323,9 @@ const CORE_MEMORY_CATEGORIES = {
 /** @type {Map<string, object>} In-memory cache keyed by `${userId}_${characterId}`. */
 const coreMemoryCache = new Map();
 
+/** @type {Map<string, Array>} In-memory cache for rolling summaries, keyed by `${userId}_${characterId}`. */
+const summaryCache = new Map();
+
 /**
  * Return a blank core memory structure.
  * @returns {object}
@@ -397,6 +403,118 @@ function buildCoreMemoryContext(coreMemory) {
   let result = '\n\nCore things you know about your friend (always remember these):\n' + lines.join('\n');
   if (result.length > 2000) {
     result = result.slice(0, 1997) + '...';
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Rolling Conversation Summaries — per-user, per-character session summaries
+// ---------------------------------------------------------------------------
+
+/** @type {number} Maximum number of summaries to retain per user+character pair. */
+const MAX_SUMMARIES = 20;
+
+/**
+ * Resolve the JSON file path for a user+character summary file.
+ * Validates against allowlists to prevent path traversal.
+ * @param {string} userId
+ * @param {string} characterId
+ * @returns {string}
+ */
+function getSummaryPath(userId, characterId) {
+  const safeUser = (userId && KNOWN_USERS[userId]) ? userId : 'guest';
+  const safeChar = (characterId && CHARACTERS[characterId]) ? characterId : DEFAULT_CHARACTER;
+  return join(SUMMARIES_DIR, `${safeUser}_${safeChar}.json`);
+}
+
+/**
+ * Read summaries for a user+character pair (cache-first, then disk).
+ * Returns empty array if the file is missing or corrupt.
+ * @param {string} userId
+ * @param {string} characterId
+ * @returns {Array}
+ */
+function readSummaries(userId, characterId) {
+  const key = `${userId}_${characterId}`;
+  if (summaryCache.has(key)) return summaryCache.get(key);
+  const filePath = getSummaryPath(userId, characterId);
+  let data;
+  try {
+    data = JSON.parse(readFileSync(filePath, 'utf-8'));
+    if (!Array.isArray(data)) data = [];
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.error('Summary read error:', err.message);
+    data = [];
+  }
+  summaryCache.set(key, data);
+  return data;
+}
+
+/**
+ * Append a summary object and persist to disk (atomic write via tmp+rename).
+ * Enforces MAX_SUMMARIES cap, dropping oldest entries when exceeded.
+ * @param {string} userId
+ * @param {string} characterId
+ * @param {object} summaryObj - { date, exchangeCount, summary, sessionId, characterId }
+ */
+function writeSummary(userId, characterId, summaryObj) {
+  const summaries = readSummaries(userId, characterId);
+  summaries.push(summaryObj);
+  // Drop oldest if over cap
+  while (summaries.length > MAX_SUMMARIES) summaries.shift();
+  const filePath = getSummaryPath(userId, characterId);
+  const tmpPath = filePath + '.tmp';
+  writeFileSync(tmpPath, JSON.stringify(summaries, null, 2));
+  renameSync(tmpPath, filePath);
+  summaryCache.set(`${userId}_${characterId}`, summaries);
+}
+
+/**
+ * Delete a summary by index. Returns true on success, false on invalid index.
+ * @param {string} userId
+ * @param {string} characterId
+ * @param {number} index - Zero-based index of the summary to remove
+ * @returns {boolean}
+ */
+function deleteSummary(userId, characterId, index) {
+  const summaries = readSummaries(userId, characterId);
+  if (index < 0 || index >= summaries.length) return false;
+  summaries.splice(index, 1);
+  const filePath = getSummaryPath(userId, characterId);
+  const tmpPath = filePath + '.tmp';
+  writeFileSync(tmpPath, JSON.stringify(summaries, null, 2));
+  renameSync(tmpPath, filePath);
+  summaryCache.set(`${userId}_${characterId}`, summaries);
+  return true;
+}
+
+/**
+ * Format the 3 most recent summaries for prompt injection.
+ * Most recent 2 get full text; 3rd oldest gets first paragraph only.
+ * Caps total output at ~1500 characters.
+ * @param {Array} summaries - Array of summary objects
+ * @returns {string}
+ */
+function buildSummaryContext(summaries) {
+  if (!summaries || summaries.length === 0) return '';
+  // Take the 3 most recent (newest last in array)
+  const recent = summaries.slice(-3);
+  const lines = [];
+  for (let i = 0; i < recent.length; i++) {
+    const s = recent[i];
+    const d = new Date(s.date);
+    const dateStr = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    let text = s.summary || '';
+    // Oldest of the 3 (index 0 when we have 3) gets truncated to first paragraph
+    if (recent.length === 3 && i === 0) {
+      const firstPara = text.split(/\n\n|\n/)[0];
+      text = firstPara;
+    }
+    lines.push(`Session from ${dateStr}: ${text}`);
+  }
+  let result = '\n\nRecent conversation summaries (use for continuity):\n' + lines.join('\n');
+  if (result.length > 1500) {
+    result = result.slice(0, 1497) + '...';
   }
   return result;
 }
@@ -1185,6 +1303,51 @@ async function extractCoreMemory(userMessage, assistantReply, userId, characterI
   }
 }
 
+/**
+ * Generate a rolling summary of a conversation session before it is pruned.
+ * Uses gemini-2.0-flash for cheap summarization. Fire-and-forget — never throws.
+ * @param {Array<{role: string, parts: Array<{text: string}>}>} buffer - Session conversation history
+ * @param {string} userId
+ * @param {string} characterId
+ * @param {string} sessionId
+ */
+async function generateSessionSummary(buffer, userId, characterId, sessionId) {
+  try {
+    if (!buffer || buffer.length < 6) return; // Need at least 3 exchanges
+
+    const transcript = buffer.map(item => {
+      const role = item.role === 'user' ? 'User' : 'Character';
+      const text = item.parts?.map(p => p.text).filter(Boolean).join(' ') || '';
+      return `${role}: ${text}`;
+    }).join('\n');
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash',
+      contents: transcript,
+      config: {
+        systemInstruction: 'Summarize this chat session between a user and a Sanrio character companion. Write 2-3 short paragraphs covering:\n1. Main topics discussed\n2. Emotional tone and mood of the conversation\n3. Key facts or preferences learned about the user\n4. Any notable events (images shared, games played, recipes looked up, wiki searches)\n5. How the friendship developed or any relationship milestones\n\nWrite naturally as a narrative summary, not a bullet list. Be concise but capture the important details that would help the character remember this conversation.',
+        responseMimeType: 'text/plain'
+      }
+    });
+
+    const summaryText = response.text?.trim();
+    if (!summaryText) return;
+
+    const summaryObj = {
+      date: new Date().toISOString(),
+      exchangeCount: Math.floor(buffer.length / 2),
+      summary: summaryText,
+      sessionId,
+      characterId
+    };
+
+    writeSummary(userId, characterId, summaryObj);
+    console.log(`Session summary generated for ${userId}/${characterId}`);
+  } catch (err) {
+    console.error('Session summary generation failed:', err.message || err);
+  }
+}
+
 // ─── Conversation Buffer (Session Store) ───
 
 /**
@@ -1205,9 +1368,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
  * Validates UUID format and enforces a global session cap.
  *
  * @param {string} sessionId - Client-generated UUID
+ * @param {string} [userId] - User identifier (stored on session for summary generation)
+ * @param {string} [characterId] - Character identifier (stored on session for summary generation)
  * @returns {Array<{role: string, parts: Array<{text: string}>}>} Conversation history array
  */
-function getSessionBuffer(sessionId) {
+function getSessionBuffer(sessionId, userId, characterId) {
   if (!sessionId || !UUID_RE.test(sessionId)) return [];
   if (!sessionBuffers.has(sessionId)) {
     // Enforce max session cap — evict oldest session if at limit
@@ -1218,10 +1383,13 @@ function getSessionBuffer(sessionId) {
       }
       if (oldest) sessionBuffers.delete(oldest);
     }
-    sessionBuffers.set(sessionId, { contents: [], lastAccess: Date.now() });
+    sessionBuffers.set(sessionId, { contents: [], lastAccess: Date.now(), userId: userId || null, characterId: characterId || null });
   }
   const session = sessionBuffers.get(sessionId);
   session.lastAccess = Date.now();
+  // Update userId/characterId if provided (may not be set on first call)
+  if (userId) session.userId = userId;
+  if (characterId) session.characterId = characterId;
   return session.contents;
 }
 
@@ -1252,7 +1420,13 @@ function addToSessionBuffer(sessionId, userMessage, assistantReply) {
 setInterval(() => {
   const cutoff = Date.now() - 60 * 60 * 1000;
   for (const [id, session] of sessionBuffers) {
-    if (session.lastAccess < cutoff) sessionBuffers.delete(id);
+    if (session.lastAccess < cutoff) {
+      // Generate summary before pruning (fire-and-forget)
+      if (session.contents.length >= 6 && session.userId && session.characterId) {
+        generateSessionSummary(session.contents, session.userId, session.characterId, id);
+      }
+      sessionBuffers.delete(id);
+    }
   }
 }, 10 * 60 * 1000);
 
@@ -1364,10 +1538,13 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const isStraightTalk = replyStyle === 'straightTalk';
-    const systemInstruction = character.getPrompt() + (isStraightTalk ? '' : CHARACTER_CONTEXT) + identityContext + crossUserInstruction + coreMemoryContext + relationshipContext + userMemoryContext + agentMemoryContext + crossCharacterContext + crossUserContext + styleInstruction;
+    // Read conversation summaries (rolling temporal context)
+    const summaries = readSummaries(userId, characterId || 'melody');
+    const summaryContext = buildSummaryContext(summaries);
+    const systemInstruction = character.getPrompt() + (isStraightTalk ? '' : CHARACTER_CONTEXT) + identityContext + crossUserInstruction + coreMemoryContext + summaryContext + relationshipContext + userMemoryContext + agentMemoryContext + crossCharacterContext + crossUserContext + styleInstruction;
 
     // Build message contents (prepend conversation buffer for multi-turn context)
-    const historyBuffer = getSessionBuffer(sessionId);
+    const historyBuffer = getSessionBuffer(sessionId, userId, characterId);
     const contents = [...historyBuffer];
     if (imageBase64) {
       contents.push({
@@ -1793,6 +1970,74 @@ app.delete('/api/core-memory/:category/:index', (req, res) => {
 });
 
 /**
+ * GET /api/summaries — List conversation summaries for a user+character pair.
+ *
+ * @route GET /api/summaries
+ * @param {string} req.query.userId - User key (required)
+ * @param {string} req.query.characterId - Character key (required)
+ * @returns {Array} 200 - Summary array, newest first
+ * @returns {Object} 400 - { error: string } on missing/invalid params
+ */
+app.get('/api/summaries', (req, res) => {
+  try {
+    const { userId, characterId } = req.query;
+    if (!userId || !characterId) {
+      return res.status(400).json({ error: 'userId and characterId are required' });
+    }
+    if (!KNOWN_USERS[userId]) {
+      return res.status(400).json({ error: 'Invalid userId' });
+    }
+    if (!CHARACTERS[characterId]) {
+      return res.status(400).json({ error: 'Invalid characterId' });
+    }
+    const summaries = readSummaries(userId, characterId);
+    // Return newest first
+    res.json([...summaries].reverse());
+  } catch (err) {
+    console.error('Summaries read error:', err.message);
+    res.status(500).json({ error: 'Failed to read summaries' });
+  }
+});
+
+/**
+ * DELETE /api/summaries/:index — Delete a single conversation summary.
+ *
+ * @route DELETE /api/summaries/:index
+ * @param {string} req.params.index - Zero-based index (in stored order, oldest-first)
+ * @param {string} req.query.userId - User key (required)
+ * @param {string} req.query.characterId - Character key (required)
+ * @returns {Object} 200 - { ok: true }
+ * @returns {Object} 400 - { error: string } on missing/invalid params
+ * @returns {Object} 404 - { error: string } on index out of range
+ */
+app.delete('/api/summaries/:index', (req, res) => {
+  try {
+    const { userId, characterId } = req.query;
+    if (!userId || !characterId) {
+      return res.status(400).json({ error: 'userId and characterId are required' });
+    }
+    if (!KNOWN_USERS[userId]) {
+      return res.status(400).json({ error: 'Invalid userId' });
+    }
+    if (!CHARACTERS[characterId]) {
+      return res.status(400).json({ error: 'Invalid characterId' });
+    }
+    const index = parseInt(req.params.index, 10);
+    if (isNaN(index)) {
+      return res.status(400).json({ error: 'Index must be a number' });
+    }
+    const success = deleteSummary(userId, characterId, index);
+    if (!success) {
+      return res.status(404).json({ error: 'Summary not found at that index' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Summary delete error:', err.message);
+    res.status(500).json({ error: 'Failed to delete summary' });
+  }
+});
+
+/**
  * GET /api/relationship — Get friendship stats for display in the Memories tab.
  *
  * @route GET /api/relationship
@@ -1979,7 +2224,8 @@ app.get('/api/capabilities', (req, res) => {
     { id: 'gif', name: 'GIF Search', description: 'Search for GIFs via Giphy', tag: '[GIF: search query]' },
     { id: 'radar', name: 'Weather Radar', description: 'Live animated radar loop for local area', tag: '[RADAR]' },
     { id: 'storm_stream', name: 'Storm Stream', description: 'Live local severe weather coverage', tag: '[STORM_STREAM]' },
-    { id: 'core_memory', name: 'Core Memory', description: 'Structured always-remembered facts about each friend', tag: null }
+    { id: 'core_memory', name: 'Core Memory', description: 'Structured always-remembered facts about each friend', tag: null },
+    { id: 'conversation_summaries', name: 'Conversation Summaries', description: 'Rolling summaries of past chat sessions for continuity', tag: null }
   ]);
 });
 

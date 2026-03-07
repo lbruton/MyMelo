@@ -1951,6 +1951,134 @@ function renderCoreMemory(coreMemory, characterId) {
 }
 
 /**
+ * Render the conversation summaries section in the Memories tab.
+ * Positioned between Core Memory and mem0 memories.
+ * @param {Array} summaries - Array of summary objects from the API.
+ * @param {string} characterId - Active character ID for API calls.
+ */
+function renderSummaries(summaries, characterId) {
+  // Get or create section container
+  let section = document.getElementById('summariesSection');
+  if (!section) {
+    section = document.createElement('div');
+    section.id = 'summariesSection';
+    section.className = 'summaries-section';
+    // Insert after core memory section, before memoryList
+    const coreSection = document.getElementById('coreMemorySection');
+    if (coreSection && coreSection.nextSibling) {
+      coreSection.parentNode.insertBefore(section, coreSection.nextSibling);
+    } else {
+      memoryList.parentNode.insertBefore(section, memoryList);
+    }
+  }
+  section.innerHTML = '';
+
+  // Collapsible header
+  const header = document.createElement('div');
+  header.className = 'summaries-header';
+
+  const toggle = document.createElement('span');
+  toggle.className = 'summaries-toggle';
+  toggle.textContent = '\u25B6'; // ▶
+
+  const title = document.createElement('span');
+  title.textContent = 'Conversation Summaries';
+
+  const badge = document.createElement('span');
+  badge.className = 'summaries-badge';
+  badge.textContent = String(summaries.length);
+
+  header.appendChild(toggle);
+  header.appendChild(title);
+  header.appendChild(badge);
+
+  // Content wrapper
+  const content = document.createElement('div');
+  content.className = 'summaries-content';
+
+  // Restore collapsed state
+  const storageKey = 'summariesOpen';
+  if (sessionStorage.getItem(storageKey) === 'true') {
+    toggle.classList.add('open');
+    content.classList.add('open');
+  }
+
+  header.addEventListener('click', () => {
+    const isOpen = content.classList.toggle('open');
+    toggle.classList.toggle('open', isOpen);
+    sessionStorage.setItem(storageKey, isOpen ? 'true' : 'false');
+  });
+
+  // Empty state
+  if (!summaries.length) {
+    const empty = document.createElement('p');
+    empty.className = 'summaries-empty';
+    empty.textContent = 'No conversation summaries yet \u2014 keep chatting!';
+    content.appendChild(empty);
+  } else {
+    // Summaries come from API newest-first
+    summaries.forEach((s, displayIdx) => {
+      const card = document.createElement('div');
+      card.className = 'summary-card';
+
+      // Date + exchange count header
+      const cardHeader = document.createElement('div');
+      cardHeader.className = 'summary-card-header';
+
+      const dateSpan = document.createElement('span');
+      dateSpan.className = 'summary-card-date';
+      const d = new Date(s.date);
+      dateSpan.textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+      const countBadge = document.createElement('span');
+      countBadge.className = 'summary-card-count';
+      countBadge.textContent = `${s.exchangeCount} exchanges`;
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'summary-delete-btn';
+      delBtn.textContent = '\u00D7'; // ×
+      delBtn.title = 'Delete summary';
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('Delete this conversation summary?')) return;
+        try {
+          // API stores oldest-first, display is newest-first — convert index
+          // The API returns newest-first, so displayIdx 0 = last in stored array
+          // We need the stored index: summaries.length - 1 - displayIdx
+          const storedIndex = summaries.length - 1 - displayIdx;
+          await fetch(`/api/summaries/${storedIndex}?characterId=${characterId}${activeUser ? '&userId=' + activeUser : ''}`, { method: 'DELETE' });
+          loadMemories();
+        } catch (err) {
+          console.error('Summary delete error:', err);
+        }
+      });
+
+      cardHeader.appendChild(dateSpan);
+      cardHeader.appendChild(countBadge);
+      cardHeader.appendChild(delBtn);
+
+      // Summary text (collapsible)
+      const textDiv = document.createElement('div');
+      textDiv.className = 'summary-card-text';
+      textDiv.textContent = s.summary || '';
+
+      card.appendChild(cardHeader);
+      card.appendChild(textDiv);
+
+      // Click card header to toggle text visibility
+      card.addEventListener('click', () => {
+        card.classList.toggle('expanded');
+      });
+
+      content.appendChild(card);
+    });
+  }
+
+  section.appendChild(header);
+  section.appendChild(content);
+}
+
+/**
  * Fetch all mem0 memories (friend + melody tracks) and render them as cards with delete buttons.
  *
  * @returns {Promise<void>}
@@ -1972,6 +2100,16 @@ async function loadMemories() {
     renderCoreMemory(coreMemory, _cmCharId);
   } catch (e) {
     console.error('Core memory load error:', e);
+  }
+
+  // Load conversation summaries section
+  try {
+    const _sumCharId = CHARACTER_CONFIG[activeCharacter] ? activeCharacter : 'melody';
+    const sumRes = await fetch(`/api/summaries?characterId=${_sumCharId}${activeUser ? '&userId=' + activeUser : ''}`);
+    const summaries = await sumRes.json();
+    renderSummaries(summaries, _sumCharId);
+  } catch (e) {
+    console.error('Summaries load error:', e);
   }
 
   memoryList.innerHTML = '<p class="empty-state">Loading memories...</p>';
