@@ -1282,7 +1282,7 @@ function mergeCoreMemory(existing, extracted) {
 
 /**
  * Extract personal facts from a chat exchange and merge into core memory.
- * Uses gemini-2.0-flash (cheapest model) for extraction. Fire-and-forget.
+ * Uses gemini-2.5-flash-preview for extraction. Fire-and-forget.
  * @param {string} userMessage
  * @param {string} assistantReply
  * @param {string} userId
@@ -1292,7 +1292,7 @@ async function extractCoreMemory(userMessage, assistantReply, userId, characterI
   if (!userId || userId === 'guest') return;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash-preview',
     contents: `User: ${userMessage}\nAssistant: ${assistantReply}`,
     config: {
       systemInstruction: 'Extract personal facts from this conversation that should be permanently remembered. Categorize into: aboutYou (name, age, location, occupation), familyAndPets (family members, pets), preferences (favorites, hobbies), importantDates (birthdays, anniversaries), insideJokes (shared humor). Return JSON with these keys. Each value is an array of short fact strings. Return empty arrays for categories with no new facts. Only extract CLEAR, EXPLICIT facts — do not infer or guess.',
@@ -1317,7 +1317,7 @@ async function extractCoreMemory(userMessage, assistantReply, userId, characterI
 
 /**
  * Generate a rolling summary of a conversation session before it is pruned.
- * Uses gemini-2.0-flash for cheap summarization. Fire-and-forget — never throws.
+ * Uses gemini-2.5-flash-preview for cheap summarization. Fire-and-forget — never throws.
  * @param {Array<{role: string, parts: Array<{text: string}>}>} buffer - Session conversation history
  * @param {string} userId
  * @param {string} characterId
@@ -1334,7 +1334,7 @@ async function generateSessionSummary(buffer, userId, characterId, sessionId) {
     }).join('\n');
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.5-flash-preview',
       contents: transcript,
       config: {
         systemInstruction: 'Summarize this chat session between a user and a Sanrio character companion. Write 2-3 short paragraphs covering:\n1. Main topics discussed\n2. Emotional tone and mood of the conversation\n3. Key facts or preferences learned about the user\n4. Any notable events (images shared, games played, recipes looked up, wiki searches)\n5. How the friendship developed or any relationship milestones\n\nWrite naturally as a narrative summary, not a bullet list. Be concise but capture the important details that would help the character remember this conversation.',
