@@ -670,41 +670,12 @@ function addMessage(text, role, imageDataURL, searchImageUrl, videoResult, sourc
       p.textContent = text;
       bubble.appendChild(p);
     }
+  } else if (role === 'assistant' && text instanceof DocumentFragment) {
+    // Inline tag pipeline (HKF-36): fragment already contains formatted text + placeholders
+    bubble.appendChild(text);
   } else if (role === 'assistant') {
-    // Render special character blocks, then basic markdown
-    const formatText = raw => raw
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/\n\s*[\*\-]\s+/g, '<br>• ')
-      .replace(/\n/g, '<br>');
-
-    // Split on special tags, preserving them as block elements
-    const formatted = text
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      // Retsuko metal lyrics — Bebas Neue, neon red glow
-      .replace(/\[LYRICS:\s*([\s\S]+?)\]/g, (_, lyrics) => {
-        const lines = lyrics.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-        const html = lines.trim().replace(/\s*\/\s*/g, '<br>');
-        return `</p><div class="lyrics-block">${html}</div><p>`;
-      })
-      // Melody Mama Says — italic pink quote block
-      .replace(/\[MAMA:\s*([\s\S]+?)\]/g, (_, quote) => {
-        const html = formatText(quote.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim());
-        return `</p><div class="mama-quote">${html}</div><p>`;
-      })
-      // Kuromi villain declaration — gothic purple block
-      .replace(/\[EVIL:\s*([\s\S]+?)\]/g, (_, speech) => {
-        const html = formatText(speech.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim());
-        return `</p><div class="evil-speech">${html}</div><p>`;
-      })
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/\n\s*[\*\-]\s+/g, '<br>• ')
-      .replace(/\n/g, '<br>');
-
-    bubble.innerHTML = `<p>${formatted}</p>`.replace(/<p><\/p>/g, '').replace(/<p><br>/g, '<p>');
-
+    // Plain string assistant message (e.g. from welcome flow, trivia results)
+    bubble.innerHTML = formatAssistantText(text);
   } else {
     bubble.textContent = text;
   }
@@ -870,825 +841,830 @@ function hideTyping() {
   typingIndicator.classList.remove('active');
 }
 
+// ─── Tag Registry (HKF-36) ───
+// Each entry: { name, pattern, fetch(match) → data|null, render(data) → HTMLElement }
+// Tags are matched in order; each tag appears inline at its text position.
+
+/** Helper: build a simple image card */
+function _imageCard(src, alt, caption) {
+  const card = document.createElement('div');
+  card.className = 'api-card image-card';
+  const img = document.createElement('img');
+  img.src = src; img.alt = alt;
+  img.addEventListener('error', () => card.remove());
+  card.appendChild(img);
+  if (caption) {
+    const cap = document.createElement('span');
+    cap.className = 'api-card-caption';
+    cap.textContent = caption;
+    card.appendChild(cap);
+  }
+  return card;
+}
+
+/** Helper: build a fact/quote card with icon */
+function _factCard(icon, text, source) {
+  const card = document.createElement('div');
+  card.className = 'api-card fact-card';
+  const iconEl = document.createElement('div');
+  iconEl.className = 'fact-icon';
+  iconEl.textContent = icon;
+  const txt = document.createElement('div');
+  txt.className = 'fact-text';
+  txt.textContent = text;
+  card.appendChild(iconEl);
+  card.appendChild(txt);
+  if (source) {
+    const src = document.createElement('div');
+    src.className = 'fact-source';
+    src.textContent = `\u2014 ${source}`;
+    card.appendChild(src);
+  }
+  return card;
+}
+
+/** Helper: build a recipe/cocktail card */
+function _recipeCard(data, metaField) {
+  const card = document.createElement('div');
+  card.className = 'api-card recipe-card';
+  if (data.imageUrl) {
+    const img = document.createElement('img');
+    img.src = data.imageUrl; img.alt = data.name;
+    img.className = 'recipe-card-img';
+    img.addEventListener('error', () => img.remove());
+    card.appendChild(img);
+  }
+  const body = document.createElement('div');
+  body.className = 'recipe-card-body';
+  const title = document.createElement('div');
+  title.className = 'recipe-card-title';
+  title.textContent = data.name;
+  body.appendChild(title);
+  const meta = document.createElement('div');
+  meta.className = 'recipe-card-meta';
+  meta.textContent = [data.category, data[metaField]].filter(Boolean).join(' \u2022 ');
+  body.appendChild(meta);
+  if (data.ingredients && data.ingredients.length) {
+    const ingDiv = document.createElement('div');
+    ingDiv.className = 'recipe-card-ingredients';
+    const strong = document.createElement('strong');
+    strong.textContent = 'Ingredients:';
+    ingDiv.appendChild(strong);
+    const ul = document.createElement('ul');
+    data.ingredients.forEach(ing => {
+      const li = document.createElement('li');
+      li.textContent = ing;
+      ul.appendChild(li);
+    });
+    ingDiv.appendChild(ul);
+    body.appendChild(ingDiv);
+  }
+  if (data.sourceUrl) {
+    const link = document.createElement('a');
+    link.href = data.sourceUrl; link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.className = 'recipe-source-link';
+    link.textContent = 'View full recipe';
+    body.appendChild(link);
+  }
+  card.appendChild(body);
+  return card;
+}
+
+const TAG_REGISTRY = [
+  {
+    name: 'image_search',
+    pattern: /\[IMAGE_SEARCH:\s*(.+?)\]/,
+    fetch: async (match) => {
+      const results = await fetch(`/api/image-search?q=${encodeURIComponent(match[1])}`).then(r => r.json());
+      const valid = results.filter(r => r.imageUrl);
+      if (!valid.length) return null;
+      const pick = valid[Math.floor(Math.random() * Math.min(valid.length, 4))];
+      return { imageUrl: pick.imageUrl };
+    },
+    render: (data) => {
+      const img = document.createElement('img');
+      img.src = data.imageUrl; img.className = 'search-result-img'; img.alt = 'Search result';
+      img.addEventListener('click', () => openLightbox(data.imageUrl));
+      img.addEventListener('error', () => img.remove());
+      return img;
+    }
+  },
+  {
+    name: 'video_search',
+    pattern: /\[VIDEO_SEARCH:\s*(.+?)\]/,
+    fetch: async (match) => {
+      const results = await fetch(`/api/video-search?q=${encodeURIComponent(match[1])}`).then(r => r.json());
+      return results.length ? results[0] : null;
+    },
+    render: (data) => {
+      const ytId = extractYouTubeId(data.url);
+      if (ytId) {
+        const card = document.createElement('div');
+        card.className = 'video-result';
+        if (data.thumbnail) {
+          card.appendChild(createVideoThumbWrapper(data.thumbnail, data.title, ytId));
+        }
+        const infoRow = document.createElement('div');
+        infoRow.className = 'video-info-row';
+        const titleEl = document.createElement('span');
+        titleEl.className = 'video-title';
+        titleEl.textContent = data.title || 'Watch Video';
+        infoRow.appendChild(titleEl);
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'video-save-btn';
+        saveBtn.textContent = 'Save \u2661';
+        saveBtn.addEventListener('click', async () => {
+          try {
+            const resp = await fetch('/api/youtube-favorites', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: activeUser, videoId: ytId, url: data.url, title: data.title || 'Untitled', thumbnail: data.thumbnail || '' })
+            });
+            if (resp.ok) { saveBtn.textContent = 'Saved \u2665'; saveBtn.classList.add('saved'); }
+          } catch (err) { console.error('Failed to save favorite:', err); }
+        });
+        infoRow.appendChild(saveBtn);
+        card.appendChild(infoRow);
+        return card;
+      }
+      // Non-YouTube
+      const videoLink = document.createElement('a');
+      videoLink.href = data.url; videoLink.target = '_blank'; videoLink.rel = 'noopener noreferrer';
+      videoLink.className = 'video-result';
+      if (data.thumbnail) {
+        const thumb = document.createElement('img');
+        thumb.src = data.thumbnail; thumb.alt = data.title || 'Video'; thumb.className = 'video-thumbnail';
+        thumb.addEventListener('error', () => thumb.remove());
+        videoLink.appendChild(thumb);
+      }
+      const infoRow = document.createElement('div');
+      infoRow.className = 'video-info-row';
+      const titleEl = document.createElement('span');
+      titleEl.className = 'video-title';
+      titleEl.textContent = data.title || 'Watch Video';
+      infoRow.appendChild(titleEl);
+      videoLink.appendChild(infoRow);
+      return videoLink;
+    }
+  },
+  {
+    name: 'gallery_search',
+    pattern: /\[GALLERY_SEARCH:\s*(.+?)\]/,
+    fetch: async (match) => {
+      const results = await fetch(`/api/gallery-search?q=${encodeURIComponent(match[1])}`).then(r => r.json());
+      return results.length ? { imageUrl: `/data/images/${results[0].filename}` } : null;
+    },
+    render: (data) => {
+      const img = document.createElement('img');
+      img.src = data.imageUrl; img.className = 'search-result-img'; img.alt = 'Gallery result';
+      img.addEventListener('click', () => openLightbox(data.imageUrl));
+      img.addEventListener('error', () => img.remove());
+      return img;
+    }
+  },
+  {
+    name: 'reaction',
+    pattern: /\[REACTION:\s*(\w+)\]/,
+    fetch: async (match) => {
+      if (Math.random() >= 0.25) return null; // 25% gate
+      const emotion = match[1].toLowerCase();
+      const categories = REACTION_MAP[emotion];
+      if (!categories) return null;
+      const category = categories[Math.floor(Math.random() * categories.length)];
+      const data = await fetch(`https://nekos.best/api/v2/${category}?amount=1`).then(r => r.json());
+      const url = data.results?.[0]?.url;
+      return url ? { url } : null;
+    },
+    render: (data) => {
+      const gif = document.createElement('img');
+      gif.src = data.url; gif.alt = 'Reaction'; gif.className = 'reaction-gif';
+      gif.addEventListener('error', () => gif.remove());
+      return gif;
+    }
+  },
+  {
+    name: 'dog_pic',
+    pattern: /\[DOG_PIC:\s*(.+?)\]/,
+    fetch: async (match) => {
+      const breed = match[1].trim();
+      const data = await fetch(`/api/dog-pic?breed=${encodeURIComponent(breed)}`).then(r => r.json());
+      return data.imageUrl ? data : null;
+    },
+    render: (data) => _imageCard(data.imageUrl, data.breed || 'Dog', data.breed)
+  },
+  {
+    name: 'random_dog',
+    pattern: /\[RANDOM_DOG\]/,
+    fetch: async () => {
+      const data = await fetch('/api/dog-pic').then(r => r.json());
+      return data.imageUrl ? data : null;
+    },
+    render: (data) => _imageCard(data.imageUrl, data.breed || 'Dog', data.breed)
+  },
+  {
+    name: 'cat_pic',
+    pattern: /\[CAT_PIC\]/,
+    fetch: async () => {
+      const data = await fetch('/api/cat-pic').then(r => r.json());
+      return data.imageUrl ? data : null;
+    },
+    render: (data) => _imageCard(data.imageUrl, 'Cat')
+  },
+  {
+    name: 'cat_fact',
+    pattern: /\[CAT_FACT\]/,
+    fetch: async () => {
+      const data = await fetch('/api/cat-fact').then(r => r.json());
+      return data.fact ? data : null;
+    },
+    render: (data) => _factCard('\u{1F431}', data.fact)
+  },
+  {
+    name: 'fox_pic',
+    pattern: /\[FOX_PIC\]/,
+    fetch: async () => {
+      const data = await fetch('/api/fox-pic').then(r => r.json());
+      return data.imageUrl ? data : null;
+    },
+    render: (data) => _imageCard(data.imageUrl, 'Fox')
+  },
+  {
+    name: 'cocktail',
+    pattern: /\[COCKTAIL:\s*(.+?)\]/,
+    fetch: async (match) => {
+      const data = await fetch(`/api/cocktail?s=${encodeURIComponent(match[1].trim())}`).then(r => r.json());
+      return data.name ? data : null;
+    },
+    render: (data) => _recipeCard(data, 'glass')
+  },
+  {
+    name: 'random_cocktail',
+    pattern: /\[RANDOM_COCKTAIL\]/,
+    fetch: async () => {
+      const data = await fetch('/api/cocktail').then(r => r.json());
+      return data.name ? data : null;
+    },
+    render: (data) => _recipeCard(data, 'glass')
+  },
+  {
+    name: 'recipe',
+    pattern: /\[RECIPE:\s*(.+?)\]/,
+    fetch: async (match) => {
+      const data = await fetch(`/api/recipe?s=${encodeURIComponent(match[1].trim())}`).then(r => r.json());
+      return data.name ? data : null;
+    },
+    render: (data) => _recipeCard(data, 'area')
+  },
+  {
+    name: 'random_recipe',
+    pattern: /\[RANDOM_RECIPE\]/,
+    fetch: async () => {
+      const data = await fetch('/api/recipe').then(r => r.json());
+      return data.name ? data : null;
+    },
+    render: (data) => _recipeCard(data, 'area')
+  },
+  {
+    name: 'coffee_pic',
+    pattern: /\[COFFEE_PIC\]/,
+    fetch: async () => {
+      const data = await fetch('/api/coffee-pic').then(r => r.json());
+      return data.imageUrl ? data : null;
+    },
+    render: (data) => _imageCard(data.imageUrl, 'Coffee', 'Coffee')
+  },
+  {
+    name: 'advice',
+    pattern: /\[ADVICE\]/,
+    fetch: async () => {
+      const data = await fetch('/api/advice').then(r => r.json());
+      return data.advice ? data : null;
+    },
+    render: (data) => _factCard('\u{1F4A1}', data.advice)
+  },
+  {
+    name: 'weather',
+    pattern: /\[WEATHER:\s*(.+?)\]/,
+    fetch: async (match) => {
+      const location = match[1].trim();
+      const data = await fetch(`/api/weather?location=${encodeURIComponent(location)}`).then(r => r.json());
+      if (data.temp === undefined) return null;
+      data._location = location;
+      return data;
+    },
+    render: (data) => {
+      const card = document.createElement('div');
+      card.className = 'api-card weather-card';
+      const temp = document.createElement('div');
+      temp.className = 'weather-card-temp';
+      temp.textContent = `${data.temp}\u00B0${data.unit || 'F'}`;
+      card.appendChild(temp);
+      if (data.feelsLike !== undefined) {
+        const feels = document.createElement('div');
+        feels.className = 'weather-card-feels';
+        feels.textContent = `Feels like ${data.feelsLike}\u00B0${data.unit || 'F'}`;
+        card.appendChild(feels);
+      }
+      const desc = document.createElement('div');
+      desc.className = 'weather-card-desc';
+      desc.textContent = data.description || '';
+      card.appendChild(desc);
+      const loc = document.createElement('div');
+      loc.className = 'weather-card-location';
+      loc.textContent = data.location || data._location;
+      card.appendChild(loc);
+      const details = document.createElement('div');
+      details.className = 'weather-card-details';
+      const parts = [];
+      if (data.wind) parts.push(`Wind: ${data.wind}`);
+      if (data.humidity) parts.push(`Humidity: ${data.humidity}%`);
+      details.textContent = parts.join(' \u2022 ');
+      card.appendChild(details);
+      return card;
+    }
+  },
+  {
+    name: 'music_search',
+    pattern: /\[MUSIC_SEARCH:\s*(.+?)\]/,
+    fetch: async (match) => {
+      const tracks = await fetch(`/api/music-search?q=${encodeURIComponent(match[1].trim())}`).then(r => r.json());
+      const items = Array.isArray(tracks) ? tracks.slice(0, 3) : [];
+      return items.length ? items : null;
+    },
+    render: (items) => {
+      const wrapper = document.createElement('div');
+      items.forEach(track => {
+        const card = document.createElement('div');
+        card.className = 'api-card music-card';
+        if (track.albumArt) {
+          const art = document.createElement('img');
+          art.src = track.albumArt; art.alt = track.album || track.title || 'Album';
+          art.className = 'music-card-art';
+          art.addEventListener('error', () => art.remove());
+          card.appendChild(art);
+        }
+        const info = document.createElement('div');
+        info.className = 'music-card-info';
+        const title = document.createElement('div');
+        title.className = 'music-card-title';
+        title.textContent = track.title || 'Unknown Track';
+        info.appendChild(title);
+        const artist = document.createElement('div');
+        artist.className = 'music-card-artist';
+        artist.textContent = track.artist || 'Unknown Artist';
+        info.appendChild(artist);
+        if (track.album) {
+          const album = document.createElement('div');
+          album.className = 'music-card-album';
+          album.textContent = track.album;
+          info.appendChild(album);
+        }
+        card.appendChild(info);
+        if (track.previewUrl) {
+          const audio = document.createElement('audio');
+          audio.controls = true; audio.src = track.previewUrl;
+          audio.className = 'music-card-audio';
+          card.appendChild(audio);
+        }
+        wrapper.appendChild(card);
+      });
+      return wrapper;
+    }
+  },
+  {
+    name: 'dad_joke',
+    pattern: /\[DAD_JOKE\]/,
+    fetch: async () => {
+      const data = await fetch('/api/dad-joke').then(r => r.json());
+      return data.joke ? data : null;
+    },
+    render: (data) => _factCard('\u{1F602}', data.joke)
+  },
+  {
+    name: 'trivia',
+    pattern: /\[TRIVIA(?::\s*(.+?))?\]/,
+    fetch: async (match) => {
+      const category = match[1] ? match[1].trim() : '';
+      const url = category ? `/api/trivia?category=${encodeURIComponent(category)}` : '/api/trivia';
+      const data = await fetch(url).then(r => r.json());
+      return data.question ? data : null;
+    },
+    render: (data) => {
+      const card = document.createElement('div');
+      card.className = 'api-card trivia-card';
+      if (data.category || data.difficulty) {
+        const meta = document.createElement('div');
+        meta.className = 'trivia-meta';
+        if (data.category) {
+          const cat = document.createElement('span');
+          cat.className = 'trivia-category';
+          cat.textContent = data.category;
+          meta.appendChild(cat);
+        }
+        if (data.difficulty) {
+          const diff = document.createElement('span');
+          diff.className = 'trivia-difficulty ' + data.difficulty;
+          diff.textContent = data.difficulty;
+          meta.appendChild(diff);
+        }
+        card.appendChild(meta);
+      }
+      const question = document.createElement('div');
+      question.className = 'trivia-question';
+      question.textContent = data.question;
+      card.appendChild(question);
+      const answersDiv = document.createElement('div');
+      answersDiv.className = 'trivia-answers';
+      const allAnswers = [
+        { text: data.correctAnswer, correct: true },
+        ...(data.incorrectAnswers || []).map(a => ({ text: a, correct: false }))
+      ];
+      for (let i = allAnswers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [allAnswers[i], allAnswers[j]] = [allAnswers[j], allAnswers[i]];
+      }
+      allAnswers.forEach(answer => {
+        const btn = document.createElement('button');
+        btn.className = 'trivia-answer';
+        btn.textContent = answer.text;
+        btn.dataset.correct = answer.correct ? 'true' : 'false';
+        btn.addEventListener('click', () => {
+          answersDiv.querySelectorAll('.trivia-answer').forEach(b => {
+            b.disabled = true;
+            if (b.dataset.correct === 'true') b.classList.add('correct');
+          });
+          if (!answer.correct) btn.classList.add('wrong');
+          const resultMsg = answer.correct
+            ? `[TRIVIA_RESULT: correct, category="${data.category}", answer="${data.correctAnswer}"]`
+            : `[TRIVIA_RESULT: wrong, category="${data.category}", correctAnswer="${data.correctAnswer}", theirAnswer="${answer.text}"]`;
+          fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: resultMsg, characterId: activeCharacter, sessionId, userId: activeUser })
+          }).then(r => r.json()).then(res => {
+            if (res.reply) addMessage(res.reply, 'assistant');
+          }).catch(() => {});
+        });
+        answersDiv.appendChild(btn);
+      });
+      card.appendChild(answersDiv);
+      return card;
+    }
+  },
+  {
+    name: 'insult',
+    pattern: /\[INSULT\]/,
+    fetch: async () => {
+      const data = await fetch('/api/insult').then(r => r.json());
+      return data.insult ? data : null;
+    },
+    render: (data) => _factCard('\u{1F608}', data.insult)
+  },
+  {
+    name: 'space_pic',
+    pattern: /\[SPACE_PIC\]/,
+    fetch: async () => {
+      const data = await fetch('/api/space-pic').then(r => r.json());
+      return (data.imageUrl || data.title) ? data : null;
+    },
+    render: (data) => {
+      const card = document.createElement('div');
+      card.className = 'api-card image-card';
+      if (data.imageUrl && data.mediaType !== 'video') {
+        const img = document.createElement('img');
+        img.src = data.imageUrl; img.alt = data.title || 'Space';
+        img.addEventListener('click', () => openLightbox(data.imageUrl));
+        img.addEventListener('error', () => img.remove());
+        card.appendChild(img);
+      }
+      const cap = document.createElement('span');
+      cap.className = 'api-card-caption';
+      cap.textContent = data.title || 'NASA Astronomy Picture of the Day';
+      card.appendChild(cap);
+      if (data.date) {
+        const dateCap = document.createElement('span');
+        dateCap.className = 'api-card-caption';
+        dateCap.textContent = data.date;
+        card.appendChild(dateCap);
+      }
+      return card;
+    }
+  },
+  {
+    name: 'fun_fact',
+    pattern: /\[FUN_FACT\]/,
+    fetch: async () => {
+      const data = await fetch('/api/fun-fact').then(r => r.json());
+      return data.fact ? data : null;
+    },
+    render: (data) => _factCard('\u{1F913}', data.fact, data.source)
+  },
+  {
+    name: 'quote',
+    pattern: /\[QUOTE\]/,
+    fetch: async () => {
+      const data = await fetch('/api/quote').then(r => r.json());
+      return data.quote ? data : null;
+    },
+    render: (data) => _factCard('\u2728', data.quote, data.author)
+  },
+  {
+    name: 'gif',
+    pattern: /\[GIF:\s*(.+?)\]/,
+    fetch: async (match) => {
+      const data = await fetch(`/api/gif?q=${encodeURIComponent(match[1])}`).then(r => r.json());
+      if (!data.results?.length) return null;
+      const pick = data.results[Math.floor(Math.random() * data.results.length)];
+      return pick.url ? { url: pick.url, title: pick.title || match[1] } : null;
+    },
+    render: (data) => {
+      const card = document.createElement('div');
+      card.className = 'api-card image-card gif-card';
+      const img = document.createElement('img');
+      img.src = data.url; img.alt = data.title; img.loading = 'lazy';
+      img.style.maxHeight = '180px'; img.style.width = 'auto';
+      img.addEventListener('error', () => card.remove());
+      card.appendChild(img);
+      const caption = document.createElement('span');
+      caption.className = 'api-card-caption';
+      caption.textContent = 'via Giphy';
+      card.appendChild(caption);
+      return card;
+    }
+  },
+  {
+    name: 'radar',
+    pattern: /\[RADAR\]/,
+    fetch: async () => {
+      const data = await fetch('/api/radar').then(r => r.json());
+      return data.nwsGif ? data : null;
+    },
+    render: (data) => {
+      const card = document.createElement('div');
+      card.className = 'api-card radar-card';
+      const header = document.createElement('div');
+      header.className = 'radar-card-header';
+      const radarIcon = document.createElement('span');
+      radarIcon.className = 'radar-icon';
+      radarIcon.textContent = '\u{1F4E1}';
+      header.appendChild(radarIcon);
+      header.appendChild(document.createTextNode(` Live Radar \u2014 ${data.station}`));
+      card.appendChild(header);
+      const img = document.createElement('img');
+      img.src = data.nwsGif; img.alt = `NWS Radar Loop - ${data.station}`;
+      img.className = 'radar-gif'; img.loading = 'lazy';
+      img.addEventListener('error', () => {
+        img.style.display = 'none';
+        const fallback = document.createElement('div');
+        fallback.className = 'radar-fallback';
+        const fbLink = document.createElement('a');
+        fbLink.href = 'https://radar.weather.gov/?settings=v1_eyJhZ2VuZGEiOnsiaWQiOm51bGwsImNlbnRlciI6Wy05NS45OSozNi4xNV0sInpvb20iOjh9fQ%3D%3D';
+        fbLink.target = '_blank'; fbLink.rel = 'noopener noreferrer';
+        fbLink.textContent = 'View radar on weather.gov \u2197';
+        fallback.appendChild(fbLink);
+        card.appendChild(fallback);
+      });
+      card.appendChild(img);
+      const footer = document.createElement('div');
+      footer.className = 'radar-card-footer';
+      const footerLink = document.createElement('a');
+      footerLink.href = 'https://radar.weather.gov';
+      footerLink.target = '_blank'; footerLink.rel = 'noopener noreferrer';
+      footerLink.textContent = 'NWS Radar \u2197';
+      footer.appendChild(footerLink);
+      card.appendChild(footer);
+      return card;
+    }
+  },
+  {
+    name: 'storm_stream',
+    pattern: /\[STORM_STREAM\]/,
+    fetch: async () => await fetch('/api/storm-stream').then(r => r.json()),
+    render: (data) => {
+      const card = document.createElement('div');
+      card.className = 'api-card storm-stream-card';
+      const header = document.createElement('div');
+      header.className = 'storm-stream-header';
+      const stormIcon = document.createElement('span');
+      stormIcon.className = 'storm-icon';
+      stormIcon.textContent = '\u{1F4FA}';
+      header.appendChild(stormIcon);
+      header.appendChild(document.createTextNode(` ${data.channel} `));
+      if (data.isLive) {
+        const badge = document.createElement('span');
+        badge.className = 'live-badge';
+        badge.textContent = 'LIVE';
+        header.appendChild(badge);
+      }
+      card.appendChild(header);
+      const desc = document.createElement('div');
+      desc.className = 'storm-stream-desc';
+      desc.textContent = data.isLive
+        ? 'Severe weather coverage is live right now!'
+        : 'Local severe weather coverage \u2014 check for live updates during storms.';
+      card.appendChild(desc);
+      const link = document.createElement('a');
+      link.href = data.liveUrl; link.target = '_blank'; link.rel = 'noopener noreferrer';
+      link.className = 'storm-stream-link';
+      link.textContent = data.isLive ? '\u{25B6}\u{FE0F} Watch Live Stream' : '\u{1F4FA} Open Weather Channel';
+      card.appendChild(link);
+      return card;
+    }
+  },
+  // ─── Mini-Game Tags (HKF-17) ───
+  {
+    name: 'wyr',
+    pattern: /\[WYR:\s*(.+?)\s*\|\s*(.+?)\]/,
+    fetch: async (match) => ({ optionA: match[1].trim(), optionB: match[2].trim() }),
+    render: (data) => renderWYRCard(data.optionA, data.optionB)
+  },
+  {
+    name: '20q_start',
+    pattern: /\[20Q_START:\s*(.+?)\]/,
+    fetch: async (match) => ({ category: match[1].trim() }),
+    render: (data) => render20QCard(data.category)
+  },
+  {
+    name: '20q_update',
+    pattern: /\[20Q_UPDATE:\s*(\d+)\s*\|\s*(.+?)\]/,
+    fetch: async (match) => ({ num: parseInt(match[1], 10), answer: match[2].trim() }),
+    render: (data) => { update20QCard(data.num, data.answer); return null; }
+  },
+  {
+    name: '20q_end',
+    pattern: /\[20Q_END:\s*(.+?)\s*\|\s*(\d+)\s*\|\s*(.+?)\]/,
+    fetch: async (match) => ({ result: match[1].trim(), num: parseInt(match[2], 10), answer: match[3].trim() }),
+    render: (data) => { end20QCard(data.result, data.num, data.answer); return null; }
+  },
+  {
+    name: 'charades',
+    pattern: /\[CHARADES:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\]/,
+    fetch: async (match) => ({ emojis: match[1].trim(), answer: match[2].trim(), hint: match[3].trim() }),
+    render: (data) => renderCharadesCard(data.emojis, data.answer, data.hint)
+  },
+  {
+    name: 'trivia_showdown',
+    pattern: /\[TRIVIA_SHOWDOWN:\s*(\d+)(?:\s*\|\s*(.+?))?\]/,
+    fetch: async (match) => ({ totalRounds: parseInt(match[1], 10), category: match[2] ? match[2].trim() : '' }),
+    render: (data) => renderTriviaShowdown(data.totalRounds, data.category)
+  },
+  // ─── Result/feedback tags (strip only, no render) ───
+  { name: 'wiki_search', pattern: /\[WIKI_SEARCH:\s*.+?\]/, fetch: async () => null, render: () => null },
+  { name: 'wyr_result', pattern: /\[WYR_RESULT:\s*.+?\]/, fetch: async () => null, render: () => null },
+  { name: 'charades_guess', pattern: /\[CHARADES_GUESS:\s*.+?\s*\|\s*.+?\]/, fetch: async () => null, render: () => null },
+  { name: 'trivia_showdown_result', pattern: /\[TRIVIA_SHOWDOWN_RESULT:\s*.+?\]/, fetch: async () => null, render: () => null },
+];
+
+// ─── Inline Tag Pipeline (HKF-36) ───
+
 /**
- * Parse search tags from an assistant reply, fetch media results, and render the message.
+ * Split text into interleaved text and tag segments using the registry.
+ * @param {string} text - Raw reply text with tags.
+ * @param {Array} registry - TAG_REGISTRY array.
+ * @returns {Array<{type: 'text'|'tag', content?: string, entry?: Object, match?: Array}>}
+ */
+function splitAtTags(text, registry) {
+  // Find all tag matches with positions
+  const matches = [];
+  for (const entry of registry) {
+    const re = new RegExp(entry.pattern.source, entry.pattern.flags.includes('g') ? entry.pattern.flags : entry.pattern.flags + 'g');
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      matches.push({ start: m.index, end: m.index + m[0].length, entry, match: m });
+    }
+  }
+  // Sort by position (earlier first), then by longer match first for same position
+  matches.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+
+  // Remove overlapping matches (keep first/longest at each position)
+  const filtered = [];
+  let lastEnd = 0;
+  for (const m of matches) {
+    if (m.start >= lastEnd) {
+      filtered.push(m);
+      lastEnd = m.end;
+    }
+  }
+
+  // Build segment array
+  const segments = [];
+  let cursor = 0;
+  for (const m of filtered) {
+    if (m.start > cursor) {
+      segments.push({ type: 'text', content: text.slice(cursor, m.start) });
+    }
+    segments.push({ type: 'tag', entry: m.entry, match: m.match });
+    cursor = m.end;
+  }
+  if (cursor < text.length) {
+    segments.push({ type: 'text', content: text.slice(cursor) });
+  }
+  // If no segments at all (empty text), return single empty text segment
+  if (!segments.length) {
+    segments.push({ type: 'text', content: '' });
+  }
+  return segments;
+}
+
+/**
+ * Format a text string with character blocks and basic markdown (same as addMessage's assistant path).
+ * @param {string} raw - Raw text content.
+ * @returns {string} HTML string.
+ */
+function formatAssistantText(raw) {
+  const formatText = r => r
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\n\s*[\*\-]\s+/g, '<br>\u2022 ')
+    .replace(/\n/g, '<br>');
+
+  const formatted = raw
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\[LYRICS:\s*([\s\S]+?)\]/g, (_, lyrics) => {
+      const lines = lyrics.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      const html = lines.trim().replace(/\s*\/\s*/g, '<br>');
+      return `</p><div class="lyrics-block">${html}</div><p>`;
+    })
+    .replace(/\[MAMA:\s*([\s\S]+?)\]/g, (_, quote) => {
+      const html = formatText(quote.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim());
+      return `</p><div class="mama-quote">${html}</div><p>`;
+    })
+    .replace(/\[EVIL:\s*([\s\S]+?)\]/g, (_, speech) => {
+      const html = formatText(speech.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim());
+      return `</p><div class="evil-speech">${html}</div><p>`;
+    })
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/\n\s*[\*\-]\s+/g, '<br>\u2022 ')
+    .replace(/\n/g, '<br>');
+
+  return `<p>${formatted}</p>`.replace(/<p><\/p>/g, '').replace(/<p><br>/g, '<p>');
+}
+
+/**
+ * Convert segments into a DocumentFragment with text-segment divs and card-placeholder divs.
+ * @param {Array} segments - From splitAtTags.
+ * @returns {{ fragment: DocumentFragment, placeholders: Map<string, {el: HTMLElement, entry: Object, match: Array}> }}
+ */
+function buildMessageContent(segments) {
+  const fragment = document.createDocumentFragment();
+  const placeholders = new Map();
+  let tagCounter = 0;
+
+  for (const seg of segments) {
+    if (seg.type === 'text') {
+      const trimmed = seg.content.trim();
+      if (trimmed) {
+        const div = document.createElement('div');
+        div.className = 'text-segment';
+        div.innerHTML = formatAssistantText(trimmed);
+        fragment.appendChild(div);
+      }
+    } else {
+      const id = `tag-${tagCounter++}`;
+      const ph = document.createElement('div');
+      ph.className = 'card-placeholder';
+      ph.dataset.tagId = id;
+      fragment.appendChild(ph);
+      placeholders.set(id, { el: ph, entry: seg.entry, match: seg.match });
+    }
+  }
+  return { fragment, placeholders };
+}
+
+/**
+ * Fire all tag fetches in parallel, replace placeholders with rendered cards or remove on failure.
+ * @param {Map} placeholders - From buildMessageContent.
+ */
+function populatePlaceholders(placeholders) {
+  for (const [id, { el, entry, match }] of placeholders) {
+    entry.fetch(match)
+      .then(data => {
+        if (data === null) { el.remove(); return; }
+        const card = entry.render(data);
+        if (card) { el.replaceWith(card); } else { el.remove(); }
+        chatArea.scrollTop = chatArea.scrollHeight;
+      })
+      .catch(() => el.remove());
+  }
+}
+
+/**
+ * Parse search tags from an assistant reply, split text around them, and render inline cards.
  *
- * @param {string} text - Raw reply text potentially containing [IMAGE_SEARCH:], [VIDEO_SEARCH:], [GALLERY_SEARCH:], or [WIKI_SEARCH:] tags.
+ * @param {string} text - Raw reply text potentially containing special tags.
  * @param {Array<{url: string, title?: string}>|null} sources - Google Search grounding sources.
- * @param {{title: string, url: string, wikiName: string}|null} wikiSource - Wiki source metadata from the server.
+ * @param {{title: string, url: string, wikiName: string}|null} wikiSource - Wiki source metadata.
  * @returns {Promise<void>}
  */
 async function processReply(text, sources, wikiSource) {
-  const imageSearchMatch = text.match(/\[IMAGE_SEARCH:\s*(.+?)\]/);
-  const videoSearchMatch = text.match(/\[VIDEO_SEARCH:\s*(.+?)\]/);
-  const gallerySearchMatch = text.match(/\[GALLERY_SEARCH:\s*(.+?)\]/);
-  const reactionMatch = text.match(/\[REACTION:\s*(\w+)\]/);
-
-  // Parse new API tags
-  const dogPicMatch = text.match(/\[DOG_PIC:\s*(.+?)\]/);
-  const randomDogMatch = text.match(/\[RANDOM_DOG\]/);
-  const catPicMatch = text.match(/\[CAT_PIC\]/);
-  const catFactMatch = text.match(/\[CAT_FACT\]/);
-  const foxPicMatch = text.match(/\[FOX_PIC\]/);
-  const cocktailMatch = text.match(/\[COCKTAIL:\s*(.+?)\]/);
-  const randomCocktailMatch = text.match(/\[RANDOM_COCKTAIL\]/);
-  const recipeMatch = text.match(/\[RECIPE:\s*(.+?)\]/);
-  const randomRecipeMatch = text.match(/\[RANDOM_RECIPE\]/);
-  const coffeePicMatch = text.match(/\[COFFEE_PIC\]/);
-  const adviceMatch = text.match(/\[ADVICE\]/);
-  const weatherMatch = text.match(/\[WEATHER:\s*(.+?)\]/);
-  const musicSearchMatch = text.match(/\[MUSIC_SEARCH:\s*(.+?)\]/);
-  const dadJokeMatch = text.match(/\[DAD_JOKE\]/);
-  const triviaMatch = text.match(/\[TRIVIA(?::\s*(.+?))?\]/);
-  const insultMatch = text.match(/\[INSULT\]/);
-  const spacePicMatch = text.match(/\[SPACE_PIC\]/);
-  const funFactMatch = text.match(/\[FUN_FACT\]/);
-  const quoteMatch = text.match(/\[QUOTE\]/);
-  const gifMatch = text.match(/\[GIF:\s*(.+?)\]/);
-  const radarMatch = text.match(/\[RADAR\]/);
-  const stormStreamMatch = text.match(/\[STORM_STREAM\]/);
-
-  // Parse mini-game tags
-  const wyrMatch = text.match(/\[WYR:\s*(.+?)\s*\|\s*(.+?)\]/);
-  const twentyqStartMatch = text.match(/\[20Q_START:\s*(.+?)\]/);
-  const twentyqUpdateMatch = text.match(/\[20Q_UPDATE:\s*(\d+)\s*\|\s*(.+?)\]/);
-  const twentyqEndMatch = text.match(/\[20Q_END:\s*(.+?)\s*\|\s*(\d+)\s*\|\s*(.+?)\]/);
-  const charadesMatch = text.match(/\[CHARADES:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\]/);
-  const showdownMatch = text.match(/\[TRIVIA_SHOWDOWN:\s*(\d+)(?:\s*\|\s*(.+?))?\]/);
-
-  // Clean tags from display text
-  let displayText = text
-    .replace(/\[IMAGE_SEARCH:\s*.+?\]/g, '')
-    .replace(/\[VIDEO_SEARCH:\s*.+?\]/g, '')
-    .replace(/\[GALLERY_SEARCH:\s*.+?\]/g, '')
-    .replace(/\[WIKI_SEARCH:\s*.+?\]/g, '')
-    .replace(/\[REACTION:\s*\w+\]/g, '')
-    .replace(/\[DOG_PIC:\s*.+?\]/g, '')
-    .replace(/\[RANDOM_DOG\]/g, '')
-    .replace(/\[CAT_PIC\]/g, '')
-    .replace(/\[CAT_FACT\]/g, '')
-    .replace(/\[FOX_PIC\]/g, '')
-    .replace(/\[COCKTAIL:\s*.+?\]/g, '')
-    .replace(/\[RANDOM_COCKTAIL\]/g, '')
-    .replace(/\[RECIPE:\s*.+?\]/g, '')
-    .replace(/\[RANDOM_RECIPE\]/g, '')
-    .replace(/\[COFFEE_PIC\]/g, '')
-    .replace(/\[ADVICE\]/g, '')
-    .replace(/\[WEATHER:\s*.+?\]/g, '')
-    .replace(/\[MUSIC_SEARCH:\s*.+?\]/g, '')
-    .replace(/\[DAD_JOKE\]/g, '')
-    .replace(/\[TRIVIA(?::\s*.+?)?\]/g, '')
-    .replace(/\[INSULT\]/g, '')
-    .replace(/\[SPACE_PIC\]/g, '')
-    .replace(/\[FUN_FACT\]/g, '')
-    .replace(/\[QUOTE\]/g, '')
-    .replace(/\[GIF:\s*.+?\]/g, '')
-    .replace(/\[RADAR\]/g, '')
-    .replace(/\[STORM_STREAM\]/g, '')
-    .replace(/\[WYR:\s*.+?\s*\|\s*.+?\]/g, '')
-    .replace(/\[20Q_START:\s*.+?\]/g, '')
-    .replace(/\[20Q_UPDATE:\s*\d+\s*\|\s*.+?\]/g, '')
-    .replace(/\[20Q_END:\s*.+?\s*\|\s*\d+\s*\|\s*.+?\]/g, '')
-    .replace(/\[CHARADES:\s*.+?\s*\|\s*.+?\s*\|\s*.+?\]/g, '')
-    .replace(/\[TRIVIA_SHOWDOWN:\s*\d+(?:\s*\|\s*.+?)?\]/g, '')
-    .replace(/\[WYR_RESULT:\s*.+?\]/g, '')
-    .replace(/\[CHARADES_GUESS:\s*.+?\s*\|\s*.+?\]/g, '')
-    .replace(/\[TRIVIA_SHOWDOWN_RESULT:\s*.+?\]/g, '')
-    .trim();
-
-  let searchImageUrl = null;
-  let videoResult = null;
-  let reactionGifUrl = null;
-
-  if (imageSearchMatch) {
-    try {
-      const results = await fetch(`/api/image-search?q=${encodeURIComponent(imageSearchMatch[1])}`).then(r => r.json());
-      const valid = results.filter(r => r.imageUrl);
-      if (valid.length) {
-        const pick = valid[Math.floor(Math.random() * Math.min(valid.length, 4))];
-        searchImageUrl = pick.imageUrl;
-      }
-    } catch (err) {
-      console.error('Image search failed:', err);
-    }
-  }
-
-  if (videoSearchMatch) {
-    try {
-      const results = await fetch(`/api/video-search?q=${encodeURIComponent(videoSearchMatch[1])}`).then(r => r.json());
-      if (results.length) {
-        videoResult = results[0];
-      }
-    } catch (err) {
-      console.error('Video search failed:', err);
-    }
-  }
-
-  if (gallerySearchMatch && !searchImageUrl) {
-    try {
-      const results = await fetch(`/api/gallery-search?q=${encodeURIComponent(gallerySearchMatch[1])}`).then(r => r.json());
-      if (results.length) {
-        searchImageUrl = `/data/images/${results[0].filename}`;
-      }
-    } catch (err) {
-      console.error('Gallery search failed:', err);
-    }
-  }
-
-  // Render message immediately (don't block on reaction GIF)
-  const lastBubble = addMessage(displayText, 'assistant', null, searchImageUrl, videoResult, sources, wikiSource);
+  const segments = splitAtTags(text, TAG_REGISTRY);
+  const { fragment, placeholders } = buildMessageContent(segments);
+  const lastBubble = addMessage(fragment, 'assistant', null, null, null, sources, wikiSource);
   if (!lastBubble) return;
-
-  // Fetch and append reaction GIF asynchronously (non-blocking)
-  // Extra gate: even when the model emits [REACTION:], only show ~25% of the time
-  if (reactionMatch && Math.random() < 0.25) {
-    const emotion = reactionMatch[1].toLowerCase();
-    const categories = REACTION_MAP[emotion];
-    if (categories) {
-      const category = categories[Math.floor(Math.random() * categories.length)];
-      fetch(`https://nekos.best/api/v2/${category}?amount=1`)
-        .then(r => r.json())
-        .then(data => {
-          const url = data.results?.[0]?.url;
-          if (url && lastBubble) {
-            const gif = document.createElement('img');
-            gif.src = url;
-            gif.alt = 'Reaction';
-            gif.className = 'reaction-gif';
-            gif.addEventListener('error', () => gif.remove());
-            lastBubble.appendChild(gif);
-          }
-        })
-        .catch(() => { /* silently skip */ });
-    }
-  }
-
-  // ─── New API Tag Processing ───
-  // Append cards to the last message bubble (non-blocking, silent failures)
-  if (lastBubble) {
-    // Dog pic
-    if (dogPicMatch || randomDogMatch) {
-      const breed = dogPicMatch ? dogPicMatch[1].trim() : '';
-      const url = breed ? `/api/dog-pic?breed=${encodeURIComponent(breed)}` : '/api/dog-pic';
-      fetch(url).then(r => r.json()).then(data => {
-        if (data.imageUrl) {
-          const card = document.createElement('div');
-          card.className = 'api-card image-card';
-          const img = document.createElement('img');
-          img.src = data.imageUrl;
-          img.alt = data.breed || 'Dog';
-          img.addEventListener('error', () => card.remove());
-          card.appendChild(img);
-          if (data.breed) {
-            const cap = document.createElement('span');
-            cap.className = 'api-card-caption';
-            cap.textContent = data.breed;
-            card.appendChild(cap);
-          }
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Cat pic
-    if (catPicMatch) {
-      fetch('/api/cat-pic').then(r => r.json()).then(data => {
-        if (data.imageUrl) {
-          const card = document.createElement('div');
-          card.className = 'api-card image-card';
-          const img = document.createElement('img');
-          img.src = data.imageUrl;
-          img.alt = 'Cat';
-          img.addEventListener('error', () => card.remove());
-          card.appendChild(img);
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Cat fact
-    if (catFactMatch) {
-      fetch('/api/cat-fact').then(r => r.json()).then(data => {
-        if (data.fact) {
-          const card = document.createElement('div');
-          card.className = 'api-card fact-card';
-          const icon = document.createElement('div');
-          icon.className = 'fact-icon';
-          icon.textContent = '\u{1F431}';
-          const txt = document.createElement('div');
-          txt.className = 'fact-text';
-          txt.textContent = data.fact;
-          card.appendChild(icon);
-          card.appendChild(txt);
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Fox pic
-    if (foxPicMatch) {
-      fetch('/api/fox-pic').then(r => r.json()).then(data => {
-        if (data.imageUrl) {
-          const card = document.createElement('div');
-          card.className = 'api-card image-card';
-          const img = document.createElement('img');
-          img.src = data.imageUrl;
-          img.alt = 'Fox';
-          img.addEventListener('error', () => card.remove());
-          card.appendChild(img);
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Cocktail
-    if (cocktailMatch || randomCocktailMatch) {
-      const query = cocktailMatch ? cocktailMatch[1].trim() : '';
-      const url = query ? `/api/cocktail?s=${encodeURIComponent(query)}` : '/api/cocktail';
-      fetch(url).then(r => r.json()).then(data => {
-        if (data.name) {
-          const card = document.createElement('div');
-          card.className = 'api-card recipe-card';
-          if (data.imageUrl) {
-            const img = document.createElement('img');
-            img.src = data.imageUrl;
-            img.alt = data.name;
-            img.className = 'recipe-card-img';
-            img.addEventListener('error', () => img.remove());
-            card.appendChild(img);
-          }
-          const body = document.createElement('div');
-          body.className = 'recipe-card-body';
-          const title = document.createElement('div');
-          title.className = 'recipe-card-title';
-          title.textContent = data.name;
-          body.appendChild(title);
-          const meta = document.createElement('div');
-          meta.className = 'recipe-card-meta';
-          meta.textContent = [data.category, data.glass].filter(Boolean).join(' \u2022 ');
-          body.appendChild(meta);
-          if (data.ingredients && data.ingredients.length) {
-            const ingDiv = document.createElement('div');
-            ingDiv.className = 'recipe-card-ingredients';
-            const strong = document.createElement('strong');
-            strong.textContent = 'Ingredients:';
-            ingDiv.appendChild(strong);
-            const ul = document.createElement('ul');
-            data.ingredients.forEach(ing => {
-              const li = document.createElement('li');
-              li.textContent = ing;
-              ul.appendChild(li);
-            });
-            ingDiv.appendChild(ul);
-            body.appendChild(ingDiv);
-          }
-          if (data.sourceUrl) {
-            const link = document.createElement('a');
-            link.href = data.sourceUrl;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            link.className = 'recipe-source-link';
-            link.textContent = 'View full recipe';
-            body.appendChild(link);
-          }
-          card.appendChild(body);
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Recipe
-    if (recipeMatch || randomRecipeMatch) {
-      const query = recipeMatch ? recipeMatch[1].trim() : '';
-      const url = query ? `/api/recipe?s=${encodeURIComponent(query)}` : '/api/recipe';
-      fetch(url).then(r => r.json()).then(data => {
-        if (data.name) {
-          const card = document.createElement('div');
-          card.className = 'api-card recipe-card';
-          if (data.imageUrl) {
-            const img = document.createElement('img');
-            img.src = data.imageUrl;
-            img.alt = data.name;
-            img.className = 'recipe-card-img';
-            img.addEventListener('error', () => img.remove());
-            card.appendChild(img);
-          }
-          const body = document.createElement('div');
-          body.className = 'recipe-card-body';
-          const title = document.createElement('div');
-          title.className = 'recipe-card-title';
-          title.textContent = data.name;
-          body.appendChild(title);
-          const meta = document.createElement('div');
-          meta.className = 'recipe-card-meta';
-          meta.textContent = [data.category, data.area].filter(Boolean).join(' \u2022 ');
-          body.appendChild(meta);
-          if (data.ingredients && data.ingredients.length) {
-            const ingDiv = document.createElement('div');
-            ingDiv.className = 'recipe-card-ingredients';
-            const strong = document.createElement('strong');
-            strong.textContent = 'Ingredients:';
-            ingDiv.appendChild(strong);
-            const ul = document.createElement('ul');
-            data.ingredients.forEach(ing => {
-              const li = document.createElement('li');
-              li.textContent = ing;
-              ul.appendChild(li);
-            });
-            ingDiv.appendChild(ul);
-            body.appendChild(ingDiv);
-          }
-          if (data.sourceUrl) {
-            const link = document.createElement('a');
-            link.href = data.sourceUrl;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            link.className = 'recipe-source-link';
-            link.textContent = 'View full recipe';
-            body.appendChild(link);
-          }
-          card.appendChild(body);
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Coffee pic
-    if (coffeePicMatch) {
-      fetch('/api/coffee-pic').then(r => r.json()).then(data => {
-        if (data.imageUrl) {
-          const card = document.createElement('div');
-          card.className = 'api-card image-card';
-          const img = document.createElement('img');
-          img.src = data.imageUrl;
-          img.alt = 'Coffee';
-          img.addEventListener('error', () => card.remove());
-          card.appendChild(img);
-          const cap = document.createElement('span');
-          cap.className = 'api-card-caption';
-          cap.textContent = 'Coffee';
-          card.appendChild(cap);
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Advice
-    if (adviceMatch) {
-      fetch('/api/advice').then(r => r.json()).then(data => {
-        if (data.advice) {
-          const card = document.createElement('div');
-          card.className = 'api-card fact-card';
-          const icon = document.createElement('div');
-          icon.className = 'fact-icon';
-          icon.textContent = '\u{1F4A1}';
-          const txt = document.createElement('div');
-          txt.className = 'fact-text';
-          txt.textContent = data.advice;
-          card.appendChild(icon);
-          card.appendChild(txt);
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Weather
-    if (weatherMatch) {
-      const location = weatherMatch[1].trim();
-      fetch(`/api/weather?location=${encodeURIComponent(location)}`).then(r => r.json()).then(data => {
-        if (data.temp !== undefined) {
-          const card = document.createElement('div');
-          card.className = 'api-card weather-card';
-          const temp = document.createElement('div');
-          temp.className = 'weather-card-temp';
-          temp.textContent = `${data.temp}\u00B0${data.unit || 'F'}`;
-          card.appendChild(temp);
-          if (data.feelsLike !== undefined) {
-            const feels = document.createElement('div');
-            feels.className = 'weather-card-feels';
-            feels.textContent = `Feels like ${data.feelsLike}\u00B0${data.unit || 'F'}`;
-            card.appendChild(feels);
-          }
-          const desc = document.createElement('div');
-          desc.className = 'weather-card-desc';
-          desc.textContent = data.description || '';
-          card.appendChild(desc);
-          const loc = document.createElement('div');
-          loc.className = 'weather-card-location';
-          loc.textContent = data.location || location;
-          card.appendChild(loc);
-          const details = document.createElement('div');
-          details.className = 'weather-card-details';
-          const parts = [];
-          if (data.wind) parts.push(`Wind: ${data.wind}`);
-          if (data.humidity) parts.push(`Humidity: ${data.humidity}%`);
-          details.textContent = parts.join(' \u2022 ');
-          card.appendChild(details);
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Music search
-    if (musicSearchMatch) {
-      const query = musicSearchMatch[1].trim();
-      fetch(`/api/music-search?q=${encodeURIComponent(query)}`).then(r => r.json()).then(tracks => {
-        const items = Array.isArray(tracks) ? tracks.slice(0, 3) : [];
-        items.forEach(track => {
-          const card = document.createElement('div');
-          card.className = 'api-card music-card';
-          if (track.albumArt) {
-            const art = document.createElement('img');
-            art.src = track.albumArt;
-            art.alt = track.album || track.title || 'Album';
-            art.className = 'music-card-art';
-            art.addEventListener('error', () => art.remove());
-            card.appendChild(art);
-          }
-          const info = document.createElement('div');
-          info.className = 'music-card-info';
-          const title = document.createElement('div');
-          title.className = 'music-card-title';
-          title.textContent = track.title || 'Unknown Track';
-          info.appendChild(title);
-          const artist = document.createElement('div');
-          artist.className = 'music-card-artist';
-          artist.textContent = track.artist || 'Unknown Artist';
-          info.appendChild(artist);
-          if (track.album) {
-            const album = document.createElement('div');
-            album.className = 'music-card-album';
-            album.textContent = track.album;
-            info.appendChild(album);
-          }
-          card.appendChild(info);
-          if (track.previewUrl) {
-            const audio = document.createElement('audio');
-            audio.controls = true;
-            audio.src = track.previewUrl;
-            audio.className = 'music-card-audio';
-            card.appendChild(audio);
-          }
-          lastBubble.appendChild(card);
-        });
-        chatArea.scrollTop = chatArea.scrollHeight;
-      }).catch(() => {});
-    }
-
-    // Dad joke
-    if (dadJokeMatch) {
-      fetch('/api/dad-joke').then(r => r.json()).then(data => {
-        if (data.joke) {
-          const card = document.createElement('div');
-          card.className = 'api-card fact-card';
-          const icon = document.createElement('div');
-          icon.className = 'fact-icon';
-          icon.textContent = '\u{1F602}';
-          const txt = document.createElement('div');
-          txt.className = 'fact-text';
-          txt.textContent = data.joke;
-          card.appendChild(icon);
-          card.appendChild(txt);
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Trivia
-    if (triviaMatch) {
-      const category = triviaMatch[1] ? triviaMatch[1].trim() : '';
-      const url = category ? `/api/trivia?category=${encodeURIComponent(category)}` : '/api/trivia';
-      fetch(url).then(r => r.json()).then(data => {
-        if (data.question) {
-          const card = document.createElement('div');
-          card.className = 'api-card trivia-card';
-          if (data.category || data.difficulty) {
-            const meta = document.createElement('div');
-            meta.className = 'trivia-meta';
-            if (data.category) {
-              const cat = document.createElement('span');
-              cat.className = 'trivia-category';
-              cat.textContent = data.category;
-              meta.appendChild(cat);
-            }
-            if (data.difficulty) {
-              const diff = document.createElement('span');
-              diff.className = 'trivia-difficulty ' + data.difficulty;
-              diff.textContent = data.difficulty;
-              meta.appendChild(diff);
-            }
-            card.appendChild(meta);
-          }
-          const question = document.createElement('div');
-          question.className = 'trivia-question';
-          question.textContent = data.question;
-          card.appendChild(question);
-          const answersDiv = document.createElement('div');
-          answersDiv.className = 'trivia-answers';
-          // Combine and shuffle answers
-          const allAnswers = [
-            { text: data.correctAnswer, correct: true },
-            ...(data.incorrectAnswers || []).map(a => ({ text: a, correct: false }))
-          ];
-          // Fisher-Yates shuffle
-          for (let i = allAnswers.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [allAnswers[i], allAnswers[j]] = [allAnswers[j], allAnswers[i]];
-          }
-          allAnswers.forEach(answer => {
-            const btn = document.createElement('button');
-            btn.className = 'trivia-answer';
-            btn.textContent = answer.text;
-            btn.dataset.correct = answer.correct ? 'true' : 'false';
-            btn.addEventListener('click', () => {
-              // Disable all buttons
-              answersDiv.querySelectorAll('.trivia-answer').forEach(b => {
-                b.disabled = true;
-                if (b.dataset.correct === 'true') b.classList.add('correct');
-              });
-              if (!answer.correct) btn.classList.add('wrong');
-              // Fire-and-forget character reaction to trivia result
-              const resultMsg = answer.correct
-                ? `[TRIVIA_RESULT: correct, category="${data.category}", answer="${data.correctAnswer}"]`
-                : `[TRIVIA_RESULT: wrong, category="${data.category}", correctAnswer="${data.correctAnswer}", theirAnswer="${answer.text}"]`;
-              fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: resultMsg, characterId: activeCharacter, sessionId, userId: activeUser })
-              }).then(r => r.json()).then(res => {
-                if (res.reply) addMessage(res.reply, 'assistant');
-              }).catch(() => {});
-            });
-            answersDiv.appendChild(btn);
-          });
-          card.appendChild(answersDiv);
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Insult
-    if (insultMatch) {
-      fetch('/api/insult').then(r => r.json()).then(data => {
-        if (data.insult) {
-          const card = document.createElement('div');
-          card.className = 'api-card fact-card';
-          const icon = document.createElement('div');
-          icon.className = 'fact-icon';
-          icon.textContent = '\u{1F608}';
-          const txt = document.createElement('div');
-          txt.className = 'fact-text';
-          txt.textContent = data.insult;
-          card.appendChild(icon);
-          card.appendChild(txt);
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Space pic (NASA APOD)
-    if (spacePicMatch) {
-      fetch('/api/space-pic').then(r => r.json()).then(data => {
-        if (data.imageUrl || data.title) {
-          const card = document.createElement('div');
-          card.className = 'api-card image-card';
-          if (data.imageUrl && data.mediaType !== 'video') {
-            const img = document.createElement('img');
-            img.src = data.imageUrl;
-            img.alt = data.title || 'Space';
-            img.addEventListener('click', () => openLightbox(data.imageUrl));
-            img.addEventListener('error', () => img.remove());
-            card.appendChild(img);
-          }
-          const cap = document.createElement('span');
-          cap.className = 'api-card-caption';
-          cap.textContent = data.title || 'NASA Astronomy Picture of the Day';
-          card.appendChild(cap);
-          if (data.date) {
-            const dateCap = document.createElement('span');
-            dateCap.className = 'api-card-caption';
-            dateCap.textContent = data.date;
-            card.appendChild(dateCap);
-          }
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Fun fact
-    if (funFactMatch) {
-      fetch('/api/fun-fact').then(r => r.json()).then(data => {
-        if (data.fact) {
-          const card = document.createElement('div');
-          card.className = 'api-card fact-card';
-          const icon = document.createElement('div');
-          icon.className = 'fact-icon';
-          icon.textContent = '\u{1F913}';
-          const txt = document.createElement('div');
-          txt.className = 'fact-text';
-          txt.textContent = data.fact;
-          card.appendChild(icon);
-          card.appendChild(txt);
-          if (data.source) {
-            const src = document.createElement('div');
-            src.className = 'fact-source';
-            src.textContent = `\u2014 ${data.source}`;
-            card.appendChild(src);
-          }
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // Quote
-    if (quoteMatch) {
-      fetch('/api/quote').then(r => r.json()).then(data => {
-        if (data.quote) {
-          const card = document.createElement('div');
-          card.className = 'api-card fact-card';
-          const icon = document.createElement('div');
-          icon.className = 'fact-icon';
-          icon.textContent = '\u2728';
-          const txt = document.createElement('div');
-          txt.className = 'fact-text';
-          txt.textContent = data.quote;
-          card.appendChild(icon);
-          card.appendChild(txt);
-          if (data.author) {
-            const src = document.createElement('div');
-            src.className = 'fact-source';
-            src.textContent = `\u2014 ${data.author}`;
-            card.appendChild(src);
-          }
-          lastBubble.appendChild(card);
-          chatArea.scrollTop = chatArea.scrollHeight;
-        }
-      }).catch(() => {});
-    }
-
-    // GIF (Giphy)
-    if (gifMatch) {
-      fetch(`/api/gif?q=${encodeURIComponent(gifMatch[1])}`)
-        .then(r => r.json())
-        .then(data => {
-          if (data.results?.length) {
-            const pick = data.results[Math.floor(Math.random() * data.results.length)];
-            if (pick.url) {
-              const card = document.createElement('div');
-              card.className = 'api-card image-card gif-card';
-              const img = document.createElement('img');
-              img.src = pick.url;
-              img.alt = pick.title || gifMatch[1];
-              img.loading = 'lazy';
-              img.style.maxHeight = '180px';
-              img.style.width = 'auto';
-              img.addEventListener('error', () => card.remove());
-              card.appendChild(img);
-              const caption = document.createElement('span');
-              caption.className = 'api-card-caption';
-              caption.textContent = `via Giphy`;
-              card.appendChild(caption);
-              lastBubble.appendChild(card);
-              chatArea.scrollTop = chatArea.scrollHeight;
-            }
-          }
-        }).catch(() => {});
-    }
-
-    // Weather Radar (HKF-34)
-    if (radarMatch) {
-      fetch('/api/radar').then(r => r.json()).then(data => {
-        if (!data.nwsGif) return;
-        const card = document.createElement('div');
-        card.className = 'api-card radar-card';
-
-        const header = document.createElement('div');
-        header.className = 'radar-card-header';
-        const radarIcon = document.createElement('span');
-        radarIcon.className = 'radar-icon';
-        radarIcon.textContent = '\u{1F4E1}';
-        header.appendChild(radarIcon);
-        header.appendChild(document.createTextNode(` Live Radar \u2014 ${data.station}`));
-        card.appendChild(header);
-
-        const img = document.createElement('img');
-        img.src = data.nwsGif;
-        img.alt = `NWS Radar Loop - ${data.station}`;
-        img.className = 'radar-gif';
-        img.loading = 'lazy';
-        img.addEventListener('error', () => {
-          img.style.display = 'none';
-          const fallback = document.createElement('div');
-          fallback.className = 'radar-fallback';
-          const fbLink = document.createElement('a');
-          fbLink.href = 'https://radar.weather.gov/?settings=v1_eyJhZ2VuZGEiOnsiaWQiOm51bGwsImNlbnRlciI6Wy05NS45OSozNi4xNV0sInpvb20iOjh9fQ%3D%3D';
-          fbLink.target = '_blank';
-          fbLink.rel = 'noopener noreferrer';
-          fbLink.textContent = 'View radar on weather.gov \u2197';
-          fallback.appendChild(fbLink);
-          card.appendChild(fallback);
-        });
-        card.appendChild(img);
-
-        const footer = document.createElement('div');
-        footer.className = 'radar-card-footer';
-        const footerLink = document.createElement('a');
-        footerLink.href = 'https://radar.weather.gov';
-        footerLink.target = '_blank';
-        footerLink.rel = 'noopener noreferrer';
-        footerLink.textContent = 'NWS Radar \u2197';
-        footer.appendChild(footerLink);
-        card.appendChild(footer);
-
-        lastBubble.appendChild(card);
-        chatArea.scrollTop = chatArea.scrollHeight;
-      }).catch(() => {});
-    }
-
-    // Storm Stream (HKF-34)
-    if (stormStreamMatch) {
-      fetch('/api/storm-stream').then(r => r.json()).then(data => {
-        const card = document.createElement('div');
-        card.className = 'api-card storm-stream-card';
-
-        const header = document.createElement('div');
-        header.className = 'storm-stream-header';
-        const stormIcon = document.createElement('span');
-        stormIcon.className = 'storm-icon';
-        stormIcon.textContent = '\u{1F4FA}';
-        header.appendChild(stormIcon);
-        header.appendChild(document.createTextNode(` ${data.channel} `));
-        if (data.isLive) {
-          const badge = document.createElement('span');
-          badge.className = 'live-badge';
-          badge.textContent = 'LIVE';
-          header.appendChild(badge);
-        }
-        card.appendChild(header);
-
-        const desc = document.createElement('div');
-        desc.className = 'storm-stream-desc';
-        desc.textContent = data.isLive
-          ? 'Severe weather coverage is live right now!'
-          : 'Local severe weather coverage — check for live updates during storms.';
-        card.appendChild(desc);
-
-        const link = document.createElement('a');
-        link.href = data.liveUrl;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.className = 'storm-stream-link';
-        link.textContent = data.isLive ? '\u{25B6}\u{FE0F} Watch Live Stream' : '\u{1F4FA} Open Weather Channel';
-        card.appendChild(link);
-
-        lastBubble.appendChild(card);
-        chatArea.scrollTop = chatArea.scrollHeight;
-      }).catch(() => {});
-    }
-
-    // ─── Mini-Game Tag Processing (HKF-17) ───
-    if (wyrMatch) {
-      const card = renderWYRCard(wyrMatch[1].trim(), wyrMatch[2].trim());
-      if (card && lastBubble) lastBubble.appendChild(card);
-    }
-
-    if (twentyqStartMatch) {
-      const card = render20QCard(twentyqStartMatch[1].trim());
-      if (card && lastBubble) lastBubble.appendChild(card);
-    }
-
-    if (twentyqUpdateMatch) {
-      update20QCard(parseInt(twentyqUpdateMatch[1], 10), twentyqUpdateMatch[2].trim());
-    }
-
-    if (twentyqEndMatch) {
-      end20QCard(twentyqEndMatch[1].trim(), parseInt(twentyqEndMatch[2], 10), twentyqEndMatch[3].trim());
-    }
-
-    if (charadesMatch) {
-      const card = renderCharadesCard(charadesMatch[1].trim(), charadesMatch[2].trim(), charadesMatch[3].trim());
-      if (card && lastBubble) lastBubble.appendChild(card);
-    }
-
-    if (showdownMatch) {
-      const card = renderTriviaShowdown(parseInt(showdownMatch[1], 10), showdownMatch[2] ? showdownMatch[2].trim() : '');
-      if (card && lastBubble) lastBubble.appendChild(card);
-    }
-  }
+  populatePlaceholders(placeholders);
 }
 
 // ─── Reaction GIF Mapping ───

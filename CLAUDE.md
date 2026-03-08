@@ -8,17 +8,18 @@ A My Melody (Sanrio) companion chat app with persistent memory, image vision, we
 
 - **`main`** — Protected via Codacy PR gate. Never push directly.
 - **`fix/` or `feat/` branches** — Created from `main` for each change.
-- Flow: feature branch → develop + test in Docker locally → push → PR to `main` → Codacy → merge → rebuild Docker
+- Flow: feature branch → push → PR to `main` → Codacy → merge → redeploy via Portainer
 
 ### Project Workflow Overrides (vs global CLAUDE.md)
 
-This is a small personal project running on local Docker. These global rules are **relaxed**:
+This project runs on Portainer (VM 101, `192.168.1.81`, Stack ID 9, ports 3030/3031). These global rules are **relaxed**:
 
 - **No `dev` branch** — `main` only. PRs target `main` directly.
 - **No version lock** — `/release patch` and `/start-patch` do NOT apply.
 - **Worktrees optional** — A simple `git checkout -b fix/xxx` from `main` is fine. Worktrees are available but not mandatory.
-- **No Browserbase tests** — Manual testing in Docker (`docker-compose up --build`).
-- **No deploy-verify** — Local Docker only, no Fly.io.
+- **No Browserbase tests** — Manual testing on the Portainer deployment.
+- **No deploy-verify** — Portainer handles deployment, no Fly.io.
+- **No local Docker** — Do NOT run `docker-compose` on Mac. The app runs on the VM.
 
 ### What DOES apply (non-negotiable)
 
@@ -27,7 +28,7 @@ This is a small personal project running on local Docker. These global rules are
 - **PR gate** — All code reaches `main` via PR. Codacy quality gate enforced.
 - **Implementation logging** — `log-implementation` before marking tasks `[x]`.
 - **Wiki updates** — `/wiki-update` for changes affecting documented behavior.
-- **Test in Docker before pushing** — `docker-compose down && docker-compose up --build -d` then verify.
+- **Test on Portainer after merge** — Redeploy the stack on VM 101 and verify.
 
 ## Architecture
 
@@ -139,12 +140,11 @@ Tags are stripped from display text before rendering. Debug log in server.js pri
 
 ## Build & Run
 
-```bash
-docker-compose down && docker-compose up --build -d
-docker-compose logs --tail 20   # Check for errors
-```
+Deployed via Portainer on VM 101 (`192.168.1.81`), Stack ID 9. Do NOT run Docker locally on Mac.
 
-App runs at http://localhost:3030
+- **HTTP:** `http://192.168.1.81:3030`
+- **HTTPS:** `https://192.168.1.81:3031` (self-signed cert)
+- **Redeploy:** Portainer UI or git redeploy API (note: env vars must be included in the request body)
 
 ## My Melody Character Guide
 

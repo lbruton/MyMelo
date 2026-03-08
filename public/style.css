@@ -1562,6 +1562,32 @@ html, body {
   border-color: rgba(255, 255, 255, 0.5);
 }
 
+/* ─── Inline Tag Pipeline (HKF-36) ─── */
+.text-segment {
+  margin: 4px 0;
+}
+
+.text-segment:first-child {
+  margin-top: 0;
+}
+
+.card-placeholder {
+  min-height: 40px;
+  border-radius: 12px;
+  margin: 8px 0;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--text-dark) 6%, transparent) 25%,
+    color-mix(in srgb, var(--text-dark) 12%, transparent) 50%,
+    color-mix(in srgb, var(--text-dark) 6%, transparent) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 /* ─── API Cards (shared) ─── */
 .api-card {
   margin-top: 10px;
