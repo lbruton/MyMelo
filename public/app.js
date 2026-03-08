@@ -43,6 +43,79 @@ let pendingImageBase64 = null;
 let pendingImageMime = null;
 let pendingImageDataURL = null;
 
+// ─── YouTube Helpers ───
+/**
+ * Extract a YouTube video ID from a URL.
+ *
+ * @param {string} url - A YouTube watch, short-link, or embed URL.
+ * @returns {string|null} The 11-character video ID, or null if not a YouTube URL.
+ */
+function extractYouTubeId(url) {
+  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Create a thumbnail wrapper with play overlay for a video card.
+ * On click, replaces thumbnail with an embedded YouTube player and logs to play history.
+ *
+ * @param {string} thumbnailUrl - URL of the video thumbnail image.
+ * @param {string} title - Video title for alt text.
+ * @param {string} videoId - YouTube video ID (used to create embed on click).
+ * @param {boolean} [skipHistory=false] - If true, skip adding to play history (used in Videos tab).
+ * @returns {HTMLElement} The wrapper div element.
+ */
+function createVideoThumbWrapper(thumbnailUrl, title, videoId, skipHistory) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'video-thumb-wrapper';
+
+  const thumb = document.createElement('img');
+  thumb.src = thumbnailUrl;
+  thumb.alt = title || 'Video';
+  thumb.className = 'video-thumbnail';
+  thumb.addEventListener('error', () => wrapper.remove());
+  wrapper.appendChild(thumb);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'video-play-overlay';
+  wrapper.appendChild(overlay);
+
+  wrapper.addEventListener('click', () => {
+    const iframe = document.createElement('iframe');
+    iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`;
+    iframe.className = 'video-embed';
+    iframe.allow = 'autoplay; encrypted-media';
+    iframe.allowFullscreen = true;
+    wrapper.parentElement.replaceChild(iframe, wrapper);
+
+    // Add to play history (localStorage, max 30 entries)
+    if (!skipHistory) {
+      addToVideoHistory({ videoId, title: title || 'Untitled', thumbnail: thumbnailUrl || '', url: `https://www.youtube.com/watch?v=${videoId}` });
+    }
+  });
+
+  return wrapper;
+}
+
+/**
+ * Add a video to the play history in localStorage.
+ * Deduplicates by videoId, most recent first, max 30 entries.
+ *
+ * @param {{videoId: string, title: string, thumbnail: string, url: string}} video
+ */
+function addToVideoHistory(video) {
+  const key = `videoHistory-${activeUser || 'guest'}`;
+  let history = [];
+  try { history = JSON.parse(localStorage.getItem(key) || '[]'); } catch { history = []; }
+  // Remove existing entry for this videoId (dedup)
+  history = history.filter(h => h.videoId !== video.videoId);
+  // Add to front
+  history.unshift({ ...video, playedAt: new Date().toISOString() });
+  // Cap at 30
+  if (history.length > 30) history.length = 30;
+  localStorage.setItem(key, JSON.stringify(history));
+}
+
 // ─── Core Memory Labels ───
 /** @type {Object<string, string>} Map core memory category keys to display labels. */
 const CORE_MEMORY_LABELS = {
@@ -548,6 +621,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     // Lazy load tab data
     if (target === 'tabImages') loadGallery();
     else if (target === 'tabMemories') loadMemories();
+    else if (target === 'tabVideos') loadVideosTab();
   });
 });
 
@@ -646,26 +720,79 @@ function addMessage(text, role, imageDataURL, searchImageUrl, videoResult, sourc
     bubble.appendChild(img);
   }
 
-  // Append video link if provided
+  // Append video card if provided
   if (videoResult && role === 'assistant') {
-    const videoLink = document.createElement('a');
-    videoLink.href = videoResult.url;
-    videoLink.target = '_blank';
-    videoLink.rel = 'noopener noreferrer';
-    videoLink.className = 'video-result';
-    if (videoResult.thumbnail) {
-      const thumb = document.createElement('img');
-      thumb.src = videoResult.thumbnail;
-      thumb.alt = videoResult.title || 'Video';
-      thumb.className = 'video-thumbnail';
-      thumb.addEventListener('error', () => thumb.remove());
-      videoLink.appendChild(thumb);
+    const ytId = extractYouTubeId(videoResult.url);
+
+    if (ytId) {
+      // YouTube video — inline embed card with save button
+      const card = document.createElement('div');
+      card.className = 'video-result';
+
+      if (videoResult.thumbnail) {
+        const wrapper = createVideoThumbWrapper(videoResult.thumbnail, videoResult.title, ytId);
+        card.appendChild(wrapper);
+      }
+
+      const infoRow = document.createElement('div');
+      infoRow.className = 'video-info-row';
+
+      const titleEl = document.createElement('span');
+      titleEl.className = 'video-title';
+      titleEl.textContent = videoResult.title || 'Watch Video';
+      infoRow.appendChild(titleEl);
+
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'video-save-btn';
+      saveBtn.textContent = 'Save \u2661';
+      saveBtn.addEventListener('click', async () => {
+        try {
+          const resp = await fetch('/api/youtube-favorites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: activeUser,
+              videoId: ytId,
+              url: videoResult.url,
+              title: videoResult.title || 'Untitled',
+              thumbnail: videoResult.thumbnail || ''
+            })
+          });
+          if (resp.ok) {
+            saveBtn.textContent = 'Saved \u2665';
+            saveBtn.classList.add('saved');
+          }
+        } catch (err) {
+          console.error('Failed to save favorite:', err);
+        }
+      });
+      infoRow.appendChild(saveBtn);
+      card.appendChild(infoRow);
+      bubble.appendChild(card);
+    } else {
+      // Non-YouTube video — keep original link behavior
+      const videoLink = document.createElement('a');
+      videoLink.href = videoResult.url;
+      videoLink.target = '_blank';
+      videoLink.rel = 'noopener noreferrer';
+      videoLink.className = 'video-result';
+      if (videoResult.thumbnail) {
+        const thumb = document.createElement('img');
+        thumb.src = videoResult.thumbnail;
+        thumb.alt = videoResult.title || 'Video';
+        thumb.className = 'video-thumbnail';
+        thumb.addEventListener('error', () => thumb.remove());
+        videoLink.appendChild(thumb);
+      }
+      const infoRow = document.createElement('div');
+      infoRow.className = 'video-info-row';
+      const titleEl = document.createElement('span');
+      titleEl.className = 'video-title';
+      titleEl.textContent = videoResult.title || 'Watch Video';
+      infoRow.appendChild(titleEl);
+      videoLink.appendChild(infoRow);
+      bubble.appendChild(videoLink);
     }
-    const titleEl = document.createElement('span');
-    titleEl.className = 'video-title';
-    titleEl.textContent = videoResult.title || 'Watch Video';
-    videoLink.appendChild(titleEl);
-    bubble.appendChild(videoLink);
   }
 
   // Append source links if provided (from Google Search grounding)
@@ -2215,6 +2342,148 @@ async function loadMemories() {
   } catch {
     memoryList.innerHTML = '<p class="empty-state">Could not load memories</p>';
   }
+}
+
+// ─── Music Tab ───
+/**
+ * Load and render the Music tab with saved YouTube favorites.
+ *
+ * @returns {Promise<void>}
+ */
+async function loadVideosTab() {
+  const savedGrid = document.getElementById('savedGrid');
+  const historyGrid = document.getElementById('historyGrid');
+  const savedSection = document.getElementById('savedSection');
+  const historySection = document.getElementById('historySection');
+  const videosEmpty = document.getElementById('videosEmpty');
+  if (!savedGrid || !historyGrid) return;
+
+  savedGrid.innerHTML = '';
+  historyGrid.innerHTML = '';
+
+  // Load saved favorites from server
+  let favorites = [];
+  try {
+    const res = await fetch(`/api/youtube-favorites?userId=${activeUser || 'guest'}`);
+    favorites = await res.json();
+  } catch (err) {
+    console.error('Failed to load favorites:', err);
+  }
+
+  // Load play history from localStorage
+  let history = [];
+  try { history = JSON.parse(localStorage.getItem(`videoHistory-${activeUser || 'guest'}`) || '[]'); } catch { history = []; }
+
+  // Filter history to exclude already-saved videos
+  const savedIds = new Set(favorites.map(f => f.videoId));
+  const unseenHistory = history.filter(h => !savedIds.has(h.videoId));
+
+  const hasSaved = favorites.length > 0;
+  const hasHistory = unseenHistory.length > 0;
+
+  // Show/hide sections
+  savedSection.style.display = hasSaved ? '' : 'none';
+  historySection.style.display = hasHistory ? '' : 'none';
+  videosEmpty.style.display = (hasSaved || hasHistory) ? 'none' : '';
+
+  // Render saved favorites
+  favorites.forEach(fav => {
+    savedGrid.appendChild(createVideoCard(fav, 'saved'));
+  });
+
+  // Render history
+  unseenHistory.forEach(item => {
+    historyGrid.appendChild(createVideoCard(item, 'history'));
+  });
+}
+
+/**
+ * Create a video card for the Videos tab.
+ *
+ * @param {{videoId: string, title: string, thumbnail: string, id?: string}} video
+ * @param {'saved'|'history'} mode - Controls which action buttons appear.
+ * @returns {HTMLElement}
+ */
+function createVideoCard(video, mode) {
+  const card = document.createElement('div');
+  card.className = 'video-card';
+
+  if (video.thumbnail && video.videoId) {
+    const wrapper = createVideoThumbWrapper(video.thumbnail, video.title, video.videoId, true);
+    card.appendChild(wrapper);
+  }
+
+  const infoRow = document.createElement('div');
+  infoRow.className = 'video-info-row';
+
+  const titleEl = document.createElement('span');
+  titleEl.className = 'video-title';
+  titleEl.textContent = video.title || 'Untitled';
+  infoRow.appendChild(titleEl);
+
+  const btnGroup = document.createElement('div');
+  btnGroup.className = 'video-btn-group';
+
+  if (mode === 'history') {
+    // Save button — promote from history to saved
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'video-save-btn';
+    saveBtn.textContent = 'Save \u2661';
+    saveBtn.addEventListener('click', async () => {
+      try {
+        const resp = await fetch('/api/youtube-favorites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: activeUser,
+            videoId: video.videoId,
+            url: video.url || `https://www.youtube.com/watch?v=${video.videoId}`,
+            title: video.title || 'Untitled',
+            thumbnail: video.thumbnail || ''
+          })
+        });
+        if (resp.ok) {
+          saveBtn.textContent = 'Saved \u2665';
+          saveBtn.classList.add('saved');
+          saveBtn.disabled = true;
+        }
+      } catch (err) {
+        console.error('Failed to save favorite:', err);
+      }
+    });
+    btnGroup.appendChild(saveBtn);
+  }
+
+  if (mode === 'saved') {
+    // Delete button — remove from saved
+    const delBtn = document.createElement('button');
+    delBtn.className = 'video-delete-btn';
+    delBtn.textContent = '\u00d7';
+    delBtn.title = 'Remove';
+    delBtn.addEventListener('click', async () => {
+      try {
+        await fetch(`/api/youtube-favorites/${video.id}?userId=${activeUser || 'guest'}`, { method: 'DELETE' });
+        card.remove();
+        const savedGrid = document.getElementById('savedGrid');
+        const savedSection = document.getElementById('savedSection');
+        if (savedGrid && !savedGrid.children.length) {
+          savedSection.style.display = 'none';
+          // Check if history is also empty
+          const historyGrid = document.getElementById('historyGrid');
+          if (!historyGrid.children.length) {
+            document.getElementById('videosEmpty').style.display = '';
+          }
+        }
+      } catch (err) {
+        console.error('Failed to delete favorite:', err);
+      }
+    });
+    btnGroup.appendChild(delBtn);
+  }
+
+  infoRow.appendChild(btnGroup);
+  card.appendChild(infoRow);
+  return card;
 }
 
 // ─── Android keyboard handling ───
