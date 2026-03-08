@@ -1108,7 +1108,6 @@ html, body {
 .video-result {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   margin-top: 8px;
   text-decoration: none;
   background: rgba(255, 105, 180, 0.08);
@@ -1119,17 +1118,85 @@ html, body {
 
 .video-thumbnail {
   width: 100%;
-  max-width: 280px;
   border-radius: 12px 12px 0 0;
   object-fit: cover;
 }
 
 .video-title {
-  padding: 8px 12px;
   font-size: 13px;
   font-weight: 600;
   color: var(--hot-pink);
   line-height: 1.3;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Play button overlay on video thumbnails */
+.video-thumb-wrapper {
+  position: relative;
+  cursor: pointer;
+}
+.video-play-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 48px;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.video-thumb-wrapper:hover .video-play-overlay {
+  background: rgba(255, 0, 0, 0.85);
+}
+.video-play-overlay::after {
+  content: '';
+  display: block;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 8px 0 8px 16px;
+  border-color: transparent transparent transparent white;
+  margin-left: 3px;
+}
+
+/* YouTube iframe embed */
+.video-embed {
+  width: 100%;
+  aspect-ratio: 16/9;
+  border: none;
+  border-radius: 12px 12px 0 0;
+}
+
+/* Save button on video cards */
+.video-save-btn {
+  background: none;
+  border: none;
+  color: var(--char-primary, var(--hot-pink));
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+.video-save-btn:hover { opacity: 1; }
+.video-save-btn.saved { opacity: 1; }
+
+/* Video card bottom row (title + save) */
+.video-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px 8px;
+  gap: 8px;
 }
 
 /* ─── Grounding source links ─── */
@@ -2414,4 +2481,75 @@ html:not([data-theme="dark"]) .storm-stream-link {
 [data-theme="dark"] .charades-input {
   border-color: color-mix(in srgb, var(--text-dark) 30%, transparent);
   background: color-mix(in srgb, var(--white) 5%, transparent);
+}
+
+/* ─── Videos Tab ─── */
+.videos-container {
+  padding: 16px;
+  max-width: 500px;
+  margin: 0 auto;
+  overflow-y: auto;
+  height: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+.videos-section { margin-bottom: 20px; }
+.videos-section-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--char-primary, var(--hot-pink));
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 105, 180, 0.2);
+}
+.videos-empty {
+  text-align: center;
+  padding: 40px 16px;
+  opacity: 0.6;
+}
+.videos-empty p:first-child {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.videos-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.video-card {
+  background: rgba(255, 105, 180, 0.08);
+  border: 1px solid rgba(255, 105, 180, 0.2);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.video-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.video-delete-btn {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: color 0.2s;
+}
+.video-delete-btn:hover { color: #e74c3c; }
+
+/* Dark mode */
+[data-theme="dark"] .video-card {
+  background: rgba(255, 105, 180, 0.05);
+  border-color: rgba(255, 105, 180, 0.15);
+}
+[data-theme="dark"] .videos-section-title {
+  border-bottom-color: rgba(255, 105, 180, 0.15);
+}
+[data-theme="dark"] .video-result {
+  background: rgba(255, 105, 180, 0.05);
+  border-color: rgba(255, 105, 180, 0.15);
 }

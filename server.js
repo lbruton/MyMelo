@@ -148,6 +148,9 @@ if (!existsSync(CORE_MEMORY_DIR)) mkdirSync(CORE_MEMORY_DIR, { recursive: true }
 /** @type {string} Directory for rolling conversation summary JSON files (per user+character). */
 const SUMMARIES_DIR = join(DATA_DIR, 'summaries');
 if (!existsSync(SUMMARIES_DIR)) mkdirSync(SUMMARIES_DIR, { recursive: true });
+/** @type {string} Path to YouTube favorites JSON file. */
+const YT_FAVORITES_FILE = join(DATA_DIR, 'youtube-favorites.json');
+if (!existsSync(YT_FAVORITES_FILE)) writeFileSync(YT_FAVORITES_FILE, '{}');
 if (!existsSync(IMAGES_META)) writeFileSync(IMAGES_META, '[]');
 if (!existsSync(RELATIONSHIP_FILE)) writeFileSync(RELATIONSHIP_FILE, JSON.stringify({
   firstChat: null,
@@ -2957,6 +2960,68 @@ app.get('/api/nws-discussion', async (req, res) => {
     console.error('NWS discussion error:', err.message);
     res.json({ title: '', text: 'Discussion unavailable', updated: null });
   }
+});
+
+// ---------------------------------------------------------------------------
+// YouTube Favorites
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/youtube-favorites — List saved YouTube favorites for a user.
+ * @query {string} userId - The user ID (e.g. "amelia", "lonnie")
+ */
+app.get('/api/youtube-favorites', (req, res) => {
+  const userId = req.query.userId || 'guest';
+  const data = readJSON(YT_FAVORITES_FILE) || {};
+  res.json(data[userId] || []);
+});
+
+/**
+ * POST /api/youtube-favorites — Save a YouTube video to favorites.
+ * @body {string} userId - The user ID
+ * @body {string} videoId - YouTube video ID
+ * @body {string} url - Full YouTube URL
+ * @body {string} title - Video title
+ * @body {string} thumbnail - Thumbnail URL
+ */
+app.post('/api/youtube-favorites', (req, res) => {
+  const { userId = 'guest', videoId, url, title, thumbnail } = req.body;
+  if (!videoId || !url) return res.status(400).json({ error: 'videoId and url required' });
+
+  const data = readJSON(YT_FAVORITES_FILE) || {};
+  if (!data[userId]) data[userId] = [];
+
+  // Prevent duplicates
+  if (data[userId].some(f => f.videoId === videoId)) {
+    return res.json({ message: 'already saved', favorites: data[userId] });
+  }
+
+  const favorite = {
+    id: randomUUID(),
+    videoId,
+    url,
+    title: title || 'Untitled',
+    thumbnail: thumbnail || '',
+    savedAt: new Date().toISOString()
+  };
+  data[userId].push(favorite);
+  writeJSON(YT_FAVORITES_FILE, data);
+  res.json(favorite);
+});
+
+/**
+ * DELETE /api/youtube-favorites/:id — Remove a YouTube favorite.
+ * @query {string} userId - The user ID
+ * @param {string} id - The favorite entry UUID
+ */
+app.delete('/api/youtube-favorites/:id', (req, res) => {
+  const userId = req.query.userId || 'guest';
+  const data = readJSON(YT_FAVORITES_FILE) || {};
+  if (!data[userId]) return res.json({ success: true });
+
+  data[userId] = data[userId].filter(f => f.id !== req.params.id);
+  writeJSON(YT_FAVORITES_FILE, data);
+  res.json({ success: true });
 });
 
 const PORT = process.env.PORT || 3000;
