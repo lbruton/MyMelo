@@ -1819,6 +1819,46 @@ html, body {
   color: #f5a3a3;
 }
 
+/* ─── Trivia Showdown Cards ─── */
+.showdown-card {
+  padding: 0;
+}
+.showdown-score-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--text-dark) 12%, transparent);
+  color: var(--char-primary, var(--accent-highlight));
+}
+.showdown-question-area {
+  padding: 14px;
+}
+.showdown-summary {
+  text-align: center;
+  padding: 20px 14px;
+}
+.showdown-emoji {
+  font-size: 3rem;
+  margin-bottom: 8px;
+}
+.showdown-final-score {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--char-primary, var(--accent-highlight));
+  margin-bottom: 4px;
+}
+.showdown-final-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+[data-theme="dark"] .showdown-score-bar {
+  border-bottom-color: color-mix(in srgb, var(--text-dark) 20%, transparent);
+}
+
 /* ─── Weather Alert Cards ─── */
 .weather-alert-card {
   margin: 8px 0;
@@ -2144,4 +2184,234 @@ html:not([data-theme="dark"]) .storm-stream-link {
 [data-theme="dark"] .mama-quote {
   background: linear-gradient(135deg, rgba(180, 80, 120, 0.2), rgba(120, 40, 80, 0.15));
   color: #f0c0d0;
+}
+
+/* === Would You Rather Card === */
+.wyr-card {
+  padding: 14px;
+}
+
+.wyr-header {
+  font-weight: 700;
+  font-size: 0.95em;
+  margin-bottom: 10px;
+  color: var(--char-primary, var(--accent-highlight));
+}
+
+.wyr-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wyr-option {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--text-dark) 20%, transparent);
+  background: transparent;
+  color: var(--text-dark);
+  font-size: 0.9em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.1s;
+  text-align: left;
+  min-height: 44px;
+}
+
+.wyr-option:hover:not(:disabled) {
+  border-color: var(--char-primary, var(--accent-highlight));
+  background: color-mix(in srgb, var(--char-primary, var(--accent-highlight)) 8%, transparent);
+}
+
+.wyr-option:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.wyr-option.selected {
+  border-color: var(--char-primary, var(--accent-highlight));
+  background: color-mix(in srgb, var(--char-primary, var(--accent-highlight)) 15%, transparent);
+  color: var(--char-primary, var(--accent-highlight));
+  font-weight: 600;
+}
+
+.wyr-option:disabled {
+  cursor: default;
+  opacity: 0.8;
+}
+
+[data-theme="dark"] .wyr-option {
+  border-color: color-mix(in srgb, var(--text-dark) 30%, transparent);
+}
+
+[data-theme="dark"] .wyr-option.selected {
+  background: color-mix(in srgb, var(--char-primary, var(--accent-highlight)) 20%, transparent);
+}
+
+/* === 20 Questions Card === */
+.twentyq-card {
+  padding: 14px;
+}
+
+.twentyq-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.twentyq-category {
+  background: color-mix(in srgb, var(--char-primary, var(--accent-highlight)) 15%, transparent);
+  color: var(--char-primary, var(--accent-highlight));
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.twentyq-counter {
+  font-weight: 700;
+  font-size: 1.1em;
+  color: var(--char-primary, var(--accent-highlight));
+}
+
+.twentyq-title {
+  font-weight: 600;
+  font-size: 0.9em;
+  margin-bottom: 10px;
+  opacity: 0.85;
+}
+
+.twentyq-history {
+  max-height: 150px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.twentyq-entry {
+  font-size: 0.85em;
+  padding: 2px 0;
+}
+
+.twentyq-q-num {
+  font-weight: 600;
+  opacity: 0.7;
+  margin-right: 6px;
+}
+
+.twentyq-yes {
+  color: #27ae60;
+  font-weight: 600;
+}
+
+.twentyq-no {
+  color: #e74c3c;
+  font-weight: 600;
+}
+
+.twentyq-sometimes {
+  color: #f39c12;
+  font-weight: 600;
+}
+
+.twentyq-result {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.twentyq-win {
+  background: rgba(39, 174, 96, 0.15);
+  color: #27ae60;
+  border: 1px solid rgba(39, 174, 96, 0.3);
+}
+
+.twentyq-lose {
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+  border: 1px solid rgba(231, 76, 60, 0.3);
+}
+
+[data-theme="dark"] .twentyq-category {
+  background: color-mix(in srgb, var(--char-primary, var(--accent-highlight)) 25%, transparent);
+}
+
+/* === Emoji Charades Card === */
+.charades-card {
+  padding: 14px;
+}
+
+.charades-emojis {
+  font-size: 2.5em;
+  text-align: center;
+  padding: 16px 8px;
+  line-height: 1.4;
+}
+
+.charades-hint {
+  text-align: center;
+  font-style: italic;
+  font-size: 0.85em;
+  opacity: 0.7;
+  margin-bottom: 12px;
+}
+
+.charades-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.charades-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--text-dark) 20%, transparent);
+  background: transparent;
+  color: var(--text-dark);
+  font-size: 0.9em;
+  outline: none;
+  min-height: 44px;
+}
+
+.charades-input:focus {
+  border-color: var(--char-primary, var(--accent-highlight));
+}
+
+.charades-input:disabled {
+  opacity: 0.6;
+}
+
+.charades-submit {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--char-primary, var(--accent-highlight));
+  color: white;
+  font-weight: 600;
+  font-size: 0.9em;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+  min-height: 44px;
+}
+
+.charades-submit:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.charades-submit:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.charades-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+[data-theme="dark"] .charades-input {
+  border-color: color-mix(in srgb, var(--text-dark) 30%, transparent);
+  background: color-mix(in srgb, var(--white) 5%, transparent);
 }

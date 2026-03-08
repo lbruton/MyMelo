@@ -781,6 +781,14 @@ async function processReply(text, sources, wikiSource) {
   const radarMatch = text.match(/\[RADAR\]/);
   const stormStreamMatch = text.match(/\[STORM_STREAM\]/);
 
+  // Parse mini-game tags
+  const wyrMatch = text.match(/\[WYR:\s*(.+?)\s*\|\s*(.+?)\]/);
+  const twentyqStartMatch = text.match(/\[20Q_START:\s*(.+?)\]/);
+  const twentyqUpdateMatch = text.match(/\[20Q_UPDATE:\s*(\d+)\s*\|\s*(.+?)\]/);
+  const twentyqEndMatch = text.match(/\[20Q_END:\s*(.+?)\s*\|\s*(\d+)\s*\|\s*(.+?)\]/);
+  const charadesMatch = text.match(/\[CHARADES:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\]/);
+  const showdownMatch = text.match(/\[TRIVIA_SHOWDOWN:\s*(\d+)(?:\s*\|\s*(.+?))?\]/);
+
   // Clean tags from display text
   let displayText = text
     .replace(/\[IMAGE_SEARCH:\s*.+?\]/g, '')
@@ -810,6 +818,15 @@ async function processReply(text, sources, wikiSource) {
     .replace(/\[GIF:\s*.+?\]/g, '')
     .replace(/\[RADAR\]/g, '')
     .replace(/\[STORM_STREAM\]/g, '')
+    .replace(/\[WYR:\s*.+?\s*\|\s*.+?\]/g, '')
+    .replace(/\[20Q_START:\s*.+?\]/g, '')
+    .replace(/\[20Q_UPDATE:\s*\d+\s*\|\s*.+?\]/g, '')
+    .replace(/\[20Q_END:\s*.+?\s*\|\s*\d+\s*\|\s*.+?\]/g, '')
+    .replace(/\[CHARADES:\s*.+?\s*\|\s*.+?\s*\|\s*.+?\]/g, '')
+    .replace(/\[TRIVIA_SHOWDOWN:\s*\d+(?:\s*\|\s*.+?)?\]/g, '')
+    .replace(/\[WYR_RESULT:\s*.+?\]/g, '')
+    .replace(/\[CHARADES_GUESS:\s*.+?\s*\|\s*.+?\]/g, '')
+    .replace(/\[TRIVIA_SHOWDOWN_RESULT:\s*.+?\]/g, '')
     .trim();
 
   let searchImageUrl = null;
@@ -1514,6 +1531,35 @@ async function processReply(text, sources, wikiSource) {
         lastBubble.appendChild(card);
         chatArea.scrollTop = chatArea.scrollHeight;
       }).catch(() => {});
+    }
+
+    // ─── Mini-Game Tag Processing (HKF-17) ───
+    if (wyrMatch) {
+      const card = renderWYRCard(wyrMatch[1].trim(), wyrMatch[2].trim());
+      if (card && lastBubble) lastBubble.appendChild(card);
+    }
+
+    if (twentyqStartMatch) {
+      const card = render20QCard(twentyqStartMatch[1].trim());
+      if (card && lastBubble) lastBubble.appendChild(card);
+    }
+
+    if (twentyqUpdateMatch) {
+      update20QCard(parseInt(twentyqUpdateMatch[1], 10), twentyqUpdateMatch[2].trim());
+    }
+
+    if (twentyqEndMatch) {
+      end20QCard(twentyqEndMatch[1].trim(), parseInt(twentyqEndMatch[2], 10), twentyqEndMatch[3].trim());
+    }
+
+    if (charadesMatch) {
+      const card = renderCharadesCard(charadesMatch[1].trim(), charadesMatch[2].trim(), charadesMatch[3].trim());
+      if (card && lastBubble) lastBubble.appendChild(card);
+    }
+
+    if (showdownMatch) {
+      const card = renderTriviaShowdown(parseInt(showdownMatch[1], 10), showdownMatch[2] ? showdownMatch[2].trim() : '');
+      if (card && lastBubble) lastBubble.appendChild(card);
     }
   }
 }
@@ -2490,6 +2536,416 @@ async function checkWeatherAlerts() {
   } catch {
     // Silently fail — alerts are a nice-to-have
   }
+}
+
+// === MINI-GAME CARD RENDERERS (Tasks 3-6 will implement these) ===
+
+/**
+ * Render a Would You Rather card with two options.
+ * @param {string} optionA - First option text.
+ * @param {string} optionB - Second option text.
+ * @returns {HTMLElement|null} The card element, or null if not yet implemented.
+ */
+function renderWYRCard(optionA, optionB) {
+  const card = document.createElement('div');
+  card.className = 'api-card wyr-card';
+
+  const header = document.createElement('div');
+  header.className = 'wyr-header';
+  header.textContent = 'Would You Rather...';
+  card.appendChild(header);
+
+  const optionsDiv = document.createElement('div');
+  optionsDiv.className = 'wyr-options';
+
+  [optionA, optionB].forEach((option) => {
+    const btn = document.createElement('button');
+    btn.className = 'wyr-option';
+    btn.textContent = option;
+    btn.addEventListener('click', () => {
+      optionsDiv.querySelectorAll('.wyr-option').forEach(b => {
+        b.disabled = true;
+        b.classList.remove('selected');
+      });
+      btn.classList.add('selected');
+
+      // Fire-and-forget feedback
+      fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `[WYR_RESULT: ${option}]`,
+          characterId: activeCharacter,
+          sessionId,
+          userId: activeUser
+        })
+      }).then(r => r.json()).then(res => {
+        if (res.reply) addMessage(res.reply, 'assistant');
+      }).catch(() => {});
+    });
+    optionsDiv.appendChild(btn);
+  });
+
+  card.appendChild(optionsDiv);
+  return card;
+}
+
+/**
+ * Render a 20 Questions start card.
+ * @param {string} category - The category/hint for the secret thing.
+ * @returns {HTMLElement|null} The card element, or null if not yet implemented.
+ */
+function render20QCard(category) {
+  const card = document.createElement('div');
+  card.className = 'api-card twentyq-card';
+  card.dataset.questionNum = '0';
+
+  const headerRow = document.createElement('div');
+  headerRow.className = 'twentyq-header';
+
+  const categoryBadge = document.createElement('span');
+  categoryBadge.className = 'twentyq-category';
+  categoryBadge.textContent = category;
+  headerRow.appendChild(categoryBadge);
+
+  const counter = document.createElement('span');
+  counter.className = 'twentyq-counter';
+  counter.textContent = '0/20';
+  headerRow.appendChild(counter);
+
+  card.appendChild(headerRow);
+
+  const title = document.createElement('div');
+  title.className = 'twentyq-title';
+  title.textContent = '20 Questions — Ask yes/no questions to guess what I\'m thinking of!';
+  card.appendChild(title);
+
+  const history = document.createElement('div');
+  history.className = 'twentyq-history';
+  card.appendChild(history);
+
+  return card;
+}
+
+/**
+ * Update an active 20 Questions card with a new answer.
+ * @param {number} questionNum - Current question number.
+ * @param {string} answer - The answer (yes/no/sometimes).
+ */
+function update20QCard(questionNum, answer) {
+  const card = document.querySelector('.twentyq-card:not(.twentyq-ended)');
+  if (!card) return;
+
+  card.dataset.questionNum = String(questionNum);
+
+  const counter = card.querySelector('.twentyq-counter');
+  if (counter) counter.textContent = `${questionNum}/20`;
+
+  const history = card.querySelector('.twentyq-history');
+  if (history) {
+    const entry = document.createElement('div');
+    entry.className = 'twentyq-entry';
+    const answerClass = answer.toLowerCase() === 'yes' ? 'twentyq-yes' : answer.toLowerCase() === 'no' ? 'twentyq-no' : 'twentyq-sometimes';
+    entry.innerHTML = `<span class="twentyq-q-num">Q${questionNum}</span> <span class="${answerClass}">${answer}</span>`;
+    history.appendChild(entry);
+    history.scrollTop = history.scrollHeight;
+  }
+}
+
+/**
+ * End a 20 Questions game with the result.
+ * @param {string} result - "win" or "lose".
+ * @param {number} questionNum - Final question number.
+ * @param {string} answer - The secret answer.
+ */
+function end20QCard(result, questionNum, answer) {
+  const card = document.querySelector('.twentyq-card:not(.twentyq-ended)');
+  if (!card) return;
+
+  card.classList.add('twentyq-ended');
+
+  const counter = card.querySelector('.twentyq-counter');
+  if (counter) counter.textContent = `${questionNum}/20`;
+
+  const banner = document.createElement('div');
+  banner.className = result === 'win' ? 'twentyq-result twentyq-win' : 'twentyq-result twentyq-lose';
+  banner.textContent = result === 'win'
+    ? `You got it in ${questionNum} questions!`
+    : `The answer was: ${answer}`;
+  card.appendChild(banner);
+}
+
+/**
+ * Render a Charades card with emoji clues.
+ * @param {string} emojis - Emoji string representing the clue.
+ * @param {string} answer - The correct answer (hidden).
+ * @param {string} hint - A text hint.
+ * @returns {HTMLElement|null} The card element, or null if not yet implemented.
+ */
+function renderCharadesCard(emojis, answer, hint) {
+  const card = document.createElement('div');
+  card.className = 'api-card charades-card';
+
+  const emojiDisplay = document.createElement('div');
+  emojiDisplay.className = 'charades-emojis';
+  emojiDisplay.textContent = emojis;
+  card.appendChild(emojiDisplay);
+
+  const hintText = document.createElement('div');
+  hintText.className = 'charades-hint';
+  hintText.textContent = hint;
+  card.appendChild(hintText);
+
+  const inputRow = document.createElement('div');
+  inputRow.className = 'charades-input-row';
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'charades-input';
+  input.placeholder = 'Type your guess...';
+  inputRow.appendChild(input);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'charades-submit';
+  submitBtn.textContent = 'Guess!';
+  inputRow.appendChild(submitBtn);
+
+  card.appendChild(inputRow);
+
+  function submitGuess() {
+    const guess = input.value.trim();
+    if (!guess) return;
+
+    input.disabled = true;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sent!';
+
+    // Fire-and-forget feedback — answer is in closure, never in DOM
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `[CHARADES_GUESS: ${guess} | ${answer}]`,
+        characterId: activeCharacter,
+        sessionId,
+        userId: activeUser
+      })
+    }).then(r => r.json()).then(res => {
+      if (res.reply) addMessage(res.reply, 'assistant');
+    }).catch(() => {});
+  }
+
+  submitBtn.addEventListener('click', submitGuess);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submitGuess();
+  });
+
+  return card;
+}
+
+/**
+ * Render a Trivia Showdown multi-round card.
+ * @param {number} totalRounds - Number of rounds in the showdown.
+ * @param {string} category - Optional category filter.
+ * @returns {HTMLElement|null} The card element, or null if not yet implemented.
+ */
+function renderTriviaShowdown(totalRounds, category) {
+  const card = document.createElement('div');
+  card.className = 'api-card showdown-card';
+
+  // Score bar
+  const scoreBar = document.createElement('div');
+  scoreBar.className = 'showdown-score-bar';
+  const roundLabel = document.createElement('span');
+  roundLabel.textContent = `Round 1/${totalRounds}`;
+  const scoreLabel = document.createElement('span');
+  scoreLabel.textContent = `Score: 0/${totalRounds}`;
+  scoreBar.appendChild(roundLabel);
+  scoreBar.appendChild(scoreLabel);
+  card.appendChild(scoreBar);
+
+  // Question area
+  const questionArea = document.createElement('div');
+  questionArea.className = 'showdown-question-area';
+  card.appendChild(questionArea);
+
+  // Game state in closure
+  let currentRound = 0;
+  let score = 0;
+  let prefetchedQuestion = null;
+
+  function fetchQuestion() {
+    const url = category ? `/api/trivia?category=${encodeURIComponent(category)}` : '/api/trivia';
+    return fetch(url).then(r => r.json());
+  }
+
+  function shuffleAnswers(data) {
+    const allAnswers = [
+      { text: data.correctAnswer, correct: true },
+      ...(data.incorrectAnswers || []).map(a => ({ text: a, correct: false }))
+    ];
+    // Fisher-Yates shuffle
+    for (let i = allAnswers.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allAnswers[i], allAnswers[j]] = [allAnswers[j], allAnswers[i]];
+    }
+    return allAnswers;
+  }
+
+  function renderQuestion(data) {
+    questionArea.innerHTML = '';
+    currentRound++;
+
+    roundLabel.textContent = `Round ${currentRound}/${totalRounds}`;
+    scoreLabel.textContent = `Score: ${score}/${totalRounds}`;
+
+    if (data.category || data.difficulty) {
+      const meta = document.createElement('div');
+      meta.className = 'trivia-meta';
+      if (data.category) {
+        const cat = document.createElement('span');
+        cat.className = 'trivia-category';
+        cat.textContent = data.category;
+        meta.appendChild(cat);
+      }
+      if (data.difficulty) {
+        const diff = document.createElement('span');
+        diff.className = 'trivia-difficulty ' + data.difficulty;
+        diff.textContent = data.difficulty;
+        meta.appendChild(diff);
+      }
+      questionArea.appendChild(meta);
+    }
+
+    const question = document.createElement('div');
+    question.className = 'trivia-question';
+    question.textContent = data.question;
+    questionArea.appendChild(question);
+
+    const answersDiv = document.createElement('div');
+    answersDiv.className = 'trivia-answers';
+
+    const allAnswers = shuffleAnswers(data);
+    allAnswers.forEach(answer => {
+      const btn = document.createElement('button');
+      btn.className = 'trivia-answer';
+      btn.textContent = answer.text;
+      btn.dataset.correct = answer.correct ? 'true' : 'false';
+      btn.addEventListener('click', () => {
+        // Disable all buttons
+        answersDiv.querySelectorAll('.trivia-answer').forEach(b => {
+          b.disabled = true;
+          if (b.dataset.correct === 'true') b.classList.add('correct');
+        });
+        if (!answer.correct) btn.classList.add('wrong');
+        if (answer.correct) score++;
+
+        scoreLabel.textContent = `Score: ${score}/${totalRounds}`;
+
+        // Pre-fetch next question during delay
+        if (currentRound < totalRounds) {
+          prefetchedQuestion = fetchQuestion();
+        }
+
+        setTimeout(() => {
+          if (currentRound >= totalRounds) {
+            renderSummary();
+          } else {
+            loadNextRound();
+          }
+        }, 2000);
+      });
+      answersDiv.appendChild(btn);
+    });
+    questionArea.appendChild(answersDiv);
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+
+  function loadNextRound() {
+    const questionPromise = prefetchedQuestion || fetchQuestion();
+    prefetchedQuestion = null;
+    questionPromise.then(data => {
+      if (data.error) {
+        showRetry();
+      } else {
+        renderQuestion(data);
+      }
+    }).catch(() => showRetry());
+  }
+
+  function showRetry() {
+    questionArea.innerHTML = '';
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'trivia-answer';
+    retryBtn.textContent = 'Tap to retry';
+    retryBtn.addEventListener('click', () => {
+      retryBtn.disabled = true;
+      retryBtn.textContent = 'Loading...';
+      fetchQuestion().then(data => {
+        if (data.error) {
+          showRetry();
+        } else {
+          renderQuestion(data);
+        }
+      }).catch(() => showRetry());
+    });
+    questionArea.appendChild(retryBtn);
+  }
+
+  function renderSummary() {
+    questionArea.innerHTML = '';
+    const summary = document.createElement('div');
+    summary.className = 'showdown-summary';
+
+    // Rating emoji scaled proportionally
+    const ratio = score / totalRounds;
+    let emoji;
+    if (ratio >= 1) emoji = '\u{1F3C6}';
+    else if (ratio >= 0.8) emoji = '\u{1F31F}';
+    else if (ratio >= 0.6) emoji = '\u{1F44F}';
+    else if (ratio >= 0.4) emoji = '\u{1F4AA}';
+    else if (ratio >= 0.2) emoji = '\u{1F914}';
+    else emoji = '\u{1F605}';
+
+    const emojiEl = document.createElement('div');
+    emojiEl.className = 'showdown-emoji';
+    emojiEl.textContent = emoji;
+    summary.appendChild(emojiEl);
+
+    const scoreEl = document.createElement('div');
+    scoreEl.className = 'showdown-final-score';
+    scoreEl.textContent = `${score} / ${totalRounds}`;
+    summary.appendChild(scoreEl);
+
+    const label = document.createElement('div');
+    label.className = 'showdown-final-label';
+    label.textContent = 'Final Score';
+    summary.appendChild(label);
+
+    questionArea.appendChild(summary);
+
+    // Fire-and-forget result to character
+    const categoryName = category || 'random';
+    const resultMsg = `[TRIVIA_SHOWDOWN_RESULT: ${score}/${totalRounds} | ${categoryName}]`;
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: resultMsg, characterId: activeCharacter, sessionId, userId: activeUser })
+    }).then(r => r.json()).then(res => {
+      if (res.reply) addMessage(res.reply, 'assistant');
+    }).catch(() => {});
+  }
+
+  // Start the first round
+  fetchQuestion().then(data => {
+    if (data.error) {
+      showRetry();
+    } else {
+      renderQuestion(data);
+    }
+  }).catch(() => showRetry());
+
+  return card;
 }
 
 // ─── Init ───
