@@ -41,7 +41,6 @@
  */
 
 import express from 'express';
-import https from 'https';
 import { GoogleGenAI } from '@google/genai';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -3025,22 +3024,7 @@ app.delete('/api/youtube-favorites/:id', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-const SSL_PORT = process.env.SSL_PORT || 3443;
 
-// HTTP server
 app.listen(PORT, () => {
-  console.log(`✿ My Melody Chat v2.6.0 is running on port ${PORT} (HTTP) ✿`);
+  console.log(`✿ My Melody Chat is running on port ${PORT} ✿`);
 });
-
-// HTTPS server (for PWA install over LAN)
-const certPath = join(__dirname, 'certs', 'cert.pem');
-const keyPath = join(__dirname, 'certs', 'key.pem');
-if (existsSync(certPath) && existsSync(keyPath)) {
-  const sslOptions = {
-    key: readFileSync(keyPath),
-    cert: readFileSync(certPath)
-  };
-  https.createServer(sslOptions, app).listen(SSL_PORT, () => {
-    console.log(`✿ My Melody Chat v2.4 is running on port ${SSL_PORT} (HTTPS) ✿`);
-  });
-}

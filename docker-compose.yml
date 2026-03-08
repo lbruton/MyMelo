@@ -3,7 +3,6 @@ services:
     build: .
     ports:
       - "3030:3000"
-      - "3031:3443"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - MEM0_API_KEY=${MEM0_API_KEY}

@@ -12,7 +12,9 @@ A My Melody (Sanrio) companion chat app with persistent memory, image vision, we
 
 ### Project Workflow Overrides (vs global CLAUDE.md)
 
-This project runs on Portainer (VM 101, `192.168.1.81`, Stack ID 9, ports 3030/3031). These global rules are **relaxed**:
+
+This project runs on Portainer (VM 101, `192.168.1.81`, Stack ID 9, port 3030) behind Nginx Proxy Manager at **https://mymelo.lbruton.cc** (Let's Encrypt wildcard via Cloudflare). These global rules are **relaxed**:
+
 
 - **No `dev` branch** — `main` only. PRs target `main` directly.
 - **No version lock** — `/release patch` and `/start-patch` do NOT apply.
@@ -142,8 +144,10 @@ Tags are stripped from display text before rendering. Debug log in server.js pri
 
 Deployed via Portainer on VM 101 (`192.168.1.81`), Stack ID 9. Do NOT run Docker locally on Mac.
 
-- **HTTP:** `http://192.168.1.81:3030`
-- **HTTPS:** `https://192.168.1.81:3031` (self-signed cert)
+- **Public URL:** `https://mymelo.lbruton.cc` (via Nginx Proxy Manager + Let's Encrypt wildcard + Cloudflare DNS)
+- **Direct HTTP:** `http://192.168.1.81:3030` (LAN only)
+- **NPM config:** `mymelo.lbruton.cc` → `http://192.168.1.81:3030`, Force SSL, HTTP/2
+
 - **Redeploy:** Portainer UI or git redeploy API (note: env vars must be included in the request body)
 
 ## My Melody Character Guide
