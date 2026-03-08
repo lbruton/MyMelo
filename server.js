@@ -940,8 +940,10 @@ Retsuko: That little cloud puppy is impossible to stay mad around. Let me check 
 Friend: How do I make an iron golem in Minecraft?
 Retsuko: Iron golems! Big, strong, and they protect you from everything — basically the coworker I wish I had. Let me look that up! [WIKI_SEARCH: minecraft iron golem crafting]`;
 
-/** @type {string} Gemini model identifier. */
-const MODEL_ID = 'gemini-3-flash-preview';
+/** @type {string} Gemini model for main chat (character personality, tag decisions, wiki 2nd call). */
+const MODEL_ID = 'gemini-3.1-pro-preview';
+/** @type {string} Lightweight model for background tasks (core memory extraction, conversation summaries). */
+const EXTRACTION_MODEL_ID = 'gemini-3.1-flash-lite-preview';
 /** @type {Object} Gemini generation config — temperature, topP, thinking, and tools. */
 const MODEL_CONFIG = {
   temperature: 1.0,
@@ -1282,7 +1284,7 @@ function mergeCoreMemory(existing, extracted) {
 
 /**
  * Extract personal facts from a chat exchange and merge into core memory.
- * Uses MODEL_ID (shared with main chat) for extraction. Fire-and-forget.
+ * Uses EXTRACTION_MODEL_ID (lightweight) for extraction. Fire-and-forget.
  * @param {string} userMessage
  * @param {string} assistantReply
  * @param {string} userId
@@ -1292,7 +1294,7 @@ async function extractCoreMemory(userMessage, assistantReply, userId, characterI
   if (!userId || userId === 'guest') return;
 
   const response = await ai.models.generateContent({
-    model: MODEL_ID,
+    model: EXTRACTION_MODEL_ID,
     contents: `User: ${userMessage}\nAssistant: ${assistantReply}`,
     config: {
       systemInstruction: 'Extract personal facts from this conversation that should be permanently remembered. Categorize into: aboutYou (name, age, location, occupation), familyAndPets (family members, pets), preferences (favorites, hobbies), importantDates (birthdays, anniversaries), insideJokes (shared humor). Return JSON with these keys. Each value is an array of short fact strings. Return empty arrays for categories with no new facts. Only extract CLEAR, EXPLICIT facts — do not infer or guess.',
@@ -1317,7 +1319,7 @@ async function extractCoreMemory(userMessage, assistantReply, userId, characterI
 
 /**
  * Generate a rolling summary of a conversation session before it is pruned.
- * Uses MODEL_ID (shared with main chat) for cheap summarization. Fire-and-forget — never throws.
+ * Uses EXTRACTION_MODEL_ID (lightweight) for cheap summarization. Fire-and-forget — never throws.
  * @param {Array<{role: string, parts: Array<{text: string}>}>} buffer - Session conversation history
  * @param {string} userId
  * @param {string} characterId
@@ -1334,7 +1336,7 @@ async function generateSessionSummary(buffer, userId, characterId, sessionId) {
     }).join('\n');
 
     const response = await ai.models.generateContent({
-      model: MODEL_ID,
+      model: EXTRACTION_MODEL_ID,
       contents: transcript,
       config: {
         systemInstruction: 'Summarize this chat session between a user and a Sanrio character companion. Write 2-3 short paragraphs covering:\n1. Main topics discussed\n2. Emotional tone and mood of the conversation\n3. Key facts or preferences learned about the user\n4. Any notable events (images shared, games played, recipes looked up, wiki searches)\n5. How the friendship developed or any relationship milestones\n\nWrite naturally as a narrative summary, not a bullet list. Be concise but capture the important details that would help the character remember this conversation.',
