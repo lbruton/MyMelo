@@ -319,6 +319,33 @@ async def dashboard_list_all(
             kwargs["user_id"] = user_id
         if agent_id:
             kwargs["agent_id"] = agent_id
+
+        # When no scope specified, search across all known scopes
+        if not user_id and not agent_id:
+            all_items = []
+            try:
+                for uid in KNOWN_USER_IDS:
+                    uid = uid.strip()
+                    if not uid:
+                        continue
+                    results = memory.search(query=search, limit=20, user_id=uid)
+                    items = results.get("results", []) if isinstance(results, dict) else results
+                    all_items.extend([normalize_result(r) for r in (items if isinstance(items, list) else [])])
+                for aid in KNOWN_AGENT_IDS:
+                    aid = aid.strip()
+                    if not aid:
+                        continue
+                    results = memory.search(query=search, limit=20, agent_id=aid)
+                    items = results.get("results", []) if isinstance(results, dict) else results
+                    all_items.extend([normalize_result(r) for r in (items if isinstance(items, list) else [])])
+                # Sort by score descending
+                all_items.sort(key=lambda m: m.get("score") or 0, reverse=True)
+                log.info("Dashboard searched all scopes for %r: %d results", search[:50], len(all_items))
+                return {"memories": all_items}
+            except Exception as e:
+                log.error("Dashboard search-all error: %s", e)
+                return {"memories": []}
+
         try:
             results = memory.search(**kwargs)
             items = results.get("results", []) if isinstance(results, dict) else results
