@@ -960,7 +960,7 @@ Friend: How do I make an iron golem in Minecraft?
 Retsuko: Iron golems! Big, strong, and they protect you from everything — basically the coworker I wish I had. Let me look that up! [WIKI_SEARCH: minecraft iron golem crafting]`;
 
 /** @type {string} Gemini model for main chat (character personality, tag decisions, wiki 2nd call). */
-const MODEL_ID = 'gemini-3.1-pro-preview';
+const MODEL_ID = 'gemini-3.1-flash-lite-preview';
 /** @type {string} Lightweight model for background tasks (core memory extraction, conversation summaries). */
 const EXTRACTION_MODEL_ID = 'gemini-3.1-flash-lite-preview';
 /** @type {Object} Gemini generation config — temperature, topP, thinking, and tools. */
