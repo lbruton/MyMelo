@@ -1,7 +1,7 @@
 # Architecture Overview
 
-> **Last verified:** 2026-03-06 — audited from `server.js` v2.6.0, `public/app.js`, `Dockerfile`, `docker-compose.yml`, `package.json`
-> **Source files:** `server.js`, `public/app.js`, `public/index.html`, `public/sw.js`, `Dockerfile`, `docker-compose.yml`
+> **Last verified:** 2026-03-11 — audited from `server.js`, `public/app.js`, `Dockerfile`, `docker-compose.yml`, `mem0-server/`
+> **Source files:** `server.js`, `public/app.js`, `public/index.html`, `public/sw.js`, `Dockerfile`, `docker-compose.yml`, `mem0-server/main.py`
 > **Known gaps:** None
 
 ---
@@ -45,12 +45,14 @@
          │                    │                    │
          ▼                    ▼                    ▼
   ┌──────────────┐   ┌───────────────┐   ┌────────────────┐
-  │ Gemini API   │   │ mem0 API      │   │ Brave Search   │
-  │ (Google AI)  │   │ (mem0.ai)     │   │ API            │
+  │ Gemini API   │   │ mem0 Backend  │   │ Brave Search   │
+  │ (Google AI)  │   │ (MEM0_MODE)   │   │ API            │
   │              │   │               │   │                │
-  │ Chat + Vision│   │ User track    │   │ Image search   │
-  │ Google Search│   │ Agent track   │   │ Video search   │
-  │ grounding    │   │ (per-char)    │   │                │
+  │ Chat + Vision│   │ cloud:        │   │ Image search   │
+  │ Google Search│   │  api.mem0.ai  │   │ Video search   │
+  │ grounding    │   │ selfhosted:   │   │                │
+  │              │   │  mem0-server  │   │                │
+  │              │   │  + Qdrant     │   │                │
   └──────────────┘   └───────────────┘   └────────────────┘
                                                   │
          ┌────────────────────────────────────────┘
@@ -155,10 +157,14 @@ The user track is shared across all characters so each one knows the friend's na
 | Service | Purpose | Base URL | Auth Method |
 |---------|---------|----------|-------------|
 | Gemini (Google AI) | Chat, image vision, Google Search grounding | SDK-managed | `GEMINI_API_KEY` env var via SDK constructor |
-| mem0 | Persistent memory (dual-track: user + per-character agent) | `https://api.mem0.ai` | `Token` header via `MEM0_API_KEY` |
+| mem0 (cloud) | Persistent memory (dual-track) | `https://api.mem0.ai` | `Token` header via `MEM0_API_KEY` |
+| mem0 (self-hosted) | Persistent memory (dual-track) | `http://192.168.1.81:8769` | None (local network) |
+| Qdrant | Vector store for self-hosted mem0 | `http://192.168.1.81:6333` | None |
 | Brave Search | Image search, video search | `https://api.search.brave.com` | `X-Subscription-Token` header via `BRAVE_API_KEY` |
 | HKIA Wiki | Hello Kitty Island Adventure wiki search | `https://hellokittyislandadventure.wiki.gg/api.php` | None (public MediaWiki API) |
 | Minecraft Wiki | Minecraft wiki search | `https://minecraft.wiki/api.php` | None (public MediaWiki API) |
+
+The `MEM0_MODE` env var (`cloud` or `selfhosted`) determines which mem0 backend is active. The `mem0Headers()` helper in `server.js` conditionally includes the auth header based on the active mode.
 
 ---
 

@@ -1,7 +1,7 @@
 # Docker Deployment
 
-> **Last verified:** 2026-02-27 — audited from `Dockerfile`, `docker-compose.yml`, `server.js` v2.5.0
-> **Source files:** `Dockerfile`, `docker-compose.yml`, `server.js`, `package.json`
+> **Last verified:** 2026-03-11 — audited from `Dockerfile`, `docker-compose.yml`, `mem0-server/docker-compose.yml`, `server.js`
+> **Source files:** `Dockerfile`, `docker-compose.yml`, `mem0-server/Dockerfile`, `mem0-server/docker-compose.yml`, `server.js`, `package.json`
 > **Known gaps:** None
 
 ---
@@ -50,14 +50,20 @@ Production dependencies (3 packages):
 ```yaml
 services:
   my-melody-chat:
-    build: .
+    image: hellokittyfriends-my-melody-chat:latest
     ports:
       - "3030:3000"
-      - "3031:3443"
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - MEM0_API_KEY=${MEM0_API_KEY}
+      - MEM0_MODE=${MEM0_MODE}
+      - MEM0_SELF_URL=${MEM0_SELF_URL}
       - BRAVE_API_KEY=${BRAVE_API_KEY}
+      - GIPHY_API_KEY=${GIPHY_API_KEY}
+      - DEFAULT_LAT=${DEFAULT_LAT}
+      - DEFAULT_LON=${DEFAULT_LON}
+      - NWS_RADAR_STATION=${NWS_RADAR_STATION}
+      - NWS_OFFICE=${NWS_OFFICE}
     volumes:
       - melody-data:/app/data
     restart: unless-stopped
@@ -68,11 +74,53 @@ volumes:
 
 | Setting | Value | Purpose |
 |---------|-------|---------|
-| `build: .` | Current directory | Builds from the local `Dockerfile` |
-| `ports: 3030:3000` | Host 3030 to container 3000 | HTTP access at `http://localhost:3030` |
-| `ports: 3031:3443` | Host 3031 to container 3443 | HTTPS access (optional, requires certs) |
+| `image: hellokittyfriends-my-melody-chat:latest` | Pre-built image | Built via Portainer Docker build API from repo tar |
+| `ports: 3030:3000` | Host 3030 to container 3000 | HTTP access at `http://192.168.1.81:3030` |
 | `volumes: melody-data:/app/data` | Named Docker volume | Persists `relationship.json`, `images-meta.json`, `sanrio-characters.json`, and `images/` across container rebuilds |
 | `restart: unless-stopped` | Auto-restart | Container restarts on crash or host reboot (unless explicitly stopped) |
+
+## mem0 Server Stack (Portainer Stack ID 21)
+
+The self-hosted mem0 backend runs as a separate Docker Compose stack:
+
+```yaml
+# mem0-server/docker-compose.yml
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+
+  mem0-server:
+    build: .
+    ports:
+      - "8769:8080"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - COLLECTION_NAME=mymelo
+      - LLM_MODEL=gemini-2.5-flash-lite
+      - EMBED_MODEL=gemini-embedding-001
+      - EMBED_DIMS=768
+      - KNOWN_USER_IDS=melody-friend-amelia,melody-friend-lonnie
+      - KNOWN_AGENT_IDS=my-melody,kuromi,retsuko
+      - LOG_LEVEL=INFO
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+
+volumes:
+  qdrant_storage:
+```
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| `qdrant` | 6333 | Vector store (embeddings) |
+| `mem0-server` | 8769 | FastAPI mem0 wrapper + dashboard |
 
 ---
 
@@ -191,13 +239,19 @@ Access via `https://localhost:3031` or `https://<LAN-IP>:3031`.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `GEMINI_API_KEY` | Yes | - | Google AI Studio API key for Gemini 3 Flash |
-| `MEM0_API_KEY` | Yes | - | mem0.ai API token for persistent memory |
+| `MEM0_API_KEY` | Cloud mode | - | mem0.ai API token for persistent memory |
+| `MEM0_MODE` | No | `cloud` | `cloud` or `selfhosted` — selects mem0 backend |
+| `MEM0_SELF_URL` | Self-hosted | - | Self-hosted mem0 server URL (e.g., `http://192.168.1.81:8769`) |
 | `BRAVE_API_KEY` | Yes | - | Brave Search API subscription token |
+| `GIPHY_API_KEY` | Yes | - | Giphy API key for GIF reactions |
+| `DEFAULT_LAT` | No | - | Default latitude for weather (geolocation fallback) |
+| `DEFAULT_LON` | No | - | Default longitude for weather (geolocation fallback) |
+| `NWS_RADAR_STATION` | No | - | NWS radar station ID (e.g., `KINX`) |
+| `NWS_OFFICE` | No | - | NWS forecast office (e.g., `TSA`) |
 | `MEM0_USER_ID` | No | `melody-friend` | mem0 user track ID (legacy fallback, overridden by per-user KNOWN_USERS) |
 | `PORT` | No | `3000` | HTTP listener port |
-| `SSL_PORT` | No | `3443` | HTTPS listener port |
 
-API keys are stored in Infisical under the StakTrakr project, dev environment.
+API keys are stored in Infisical under the HelloKittyFriends project, dev environment.
 
 ### Using a .env file
 

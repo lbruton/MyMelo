@@ -1,7 +1,7 @@
 # mem0 Memory System
 
-> **Last verified:** 2026-03-06
-> **Source files:** `server.js` (lines 62-69, 71-86, 84-120, 512-640)
+> **Last verified:** 2026-03-11
+> **Source files:** `server.js` (lines 62-86), `mem0-server/main.py`, `mem0-server/docker-compose.yml`
 > **Known gaps:** None
 
 ---
@@ -12,12 +12,41 @@ My Melody Chat uses [mem0](https://mem0.ai) for persistent long-term memory. The
 
 The user track is **shared across all characters** — the same friend facts apply regardless of who you are chatting with. The agent track is **per-character** — each character has an isolated memory namespace so their personalities evolve independently.
 
+## Hosting Modes
+
+The app supports two mem0 backends, toggled via the `MEM0_MODE` environment variable:
+
+| Mode | `MEM0_MODE` | Base URL | Auth |
+|------|-------------|----------|------|
+| Cloud | `cloud` (default) | `https://api.mem0.ai` | `Token ${MEM0_API_KEY}` header |
+| Self-hosted | `selfhosted` | `MEM0_SELF_URL` env var | None (local network) |
+
+Self-hosted mode uses a custom FastAPI server (`mem0-server/`) that wraps the `mem0ai` Python library and exposes cloud-API-compatible endpoints. This eliminates the 1,000 req/month cloud API cap.
+
+### Self-Hosted Stack (Portainer Stack ID 21)
+
+| Service | Image | Port | Purpose |
+|---------|-------|------|---------|
+| `qdrant` | `qdrant/qdrant:latest` | 6333 | Vector store for embeddings |
+| `mem0-server` | `mymelo-mem0:latest` | 8769 | FastAPI wrapper + dashboard |
+
+| Config | Value |
+|--------|-------|
+| LLM | `gemini-2.5-flash-lite` (fact extraction) |
+| Embedder | `gemini-embedding-001` (768 dims) |
+| Collection | `mymelo` |
+| Dashboard | `http://192.168.1.81:8769/` |
+
+### Rollback
+
+Set `MEM0_MODE=cloud` (or remove it) in the HKF stack env vars. Cloud memories are untouched — the self-hosted instance has its own Qdrant database.
+
 ## Dual-Track Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    mem0 Cloud API                        │
-│                  api.mem0.ai                             │
+│         mem0 Backend (cloud or self-hosted)              │
+│    cloud: api.mem0.ai  |  self: 192.168.1.81:8769       │
 ├───────────────────────┬─────────────────────────────────┤
 │    User Track         │    Agent Track                  │
 │    (Friend Facts)     │    (Character Personality)      │
@@ -98,7 +127,7 @@ The fallback `MEM0_USER_ID` defaults to `'melody-friend'` and can be overridden 
 | Save memories | `/v1/memories/` | POST | With `infer: true` |
 | Delete memory | `/v1/memories/:id/` | DELETE | By mem0 ID |
 
-All requests include the header `Authorization: Token ${MEM0_KEY}`.
+In cloud mode, all requests include the header `Authorization: Token ${MEM0_KEY}`. In self-hosted mode, the auth header is omitted (local network trust). The `mem0Headers()` helper in `server.js` handles this automatically based on `MEM0_MODE`.
 
 ## Memory Search Flow
 
@@ -336,10 +365,22 @@ Chat always works even when mem0 is completely unavailable. The system prompt si
 
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
-| `MEM0_API_KEY` | Yes | -- | mem0.ai API authentication token |
+| `MEM0_API_KEY` | Cloud mode | -- | mem0.ai API authentication token |
+| `MEM0_MODE` | No | `'cloud'` | `'cloud'` or `'selfhosted'` |
+| `MEM0_SELF_URL` | Self-hosted | -- | Self-hosted mem0 server URL (e.g., `http://192.168.1.81:8769`) |
 | `MEM0_USER_ID` | No | `'melody-friend'` | Default user track ID (fallback) |
 
 > **Note:** `MEM0_AGENT_ID` is not an environment variable — it is hardcoded as `'my-melody'` in `server.js` and serves only as the backward-compatibility fallback when no character is passed to `searchAgentMemories` or `saveToMemory`. Character-specific agent IDs are defined in the `CHARACTERS` registry.
+
+## Memory Dashboard
+
+The self-hosted mem0 server includes a built-in dashboard at `http://192.168.1.81:8769/` for troubleshooting and memory management:
+
+- Browse all memories across all user/agent scopes
+- Search memories by keyword (semantic search)
+- Filter by scope (user or agent track)
+- Delete individual memories
+- View stats (total count per track)
 
 ---
 
