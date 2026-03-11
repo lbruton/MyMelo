@@ -1486,7 +1486,14 @@ app.post('/api/chat', async (req, res) => {
     if (userId === 'guest') {
       identityContext = '\n\nYou are talking to a guest friend. Be welcoming but don\'t assume you know them well.';
     } else if (userName) {
-      identityContext = `\n\nYou are currently talking to your friend ${userName}. Use their name naturally in conversation.`;
+      // Build list of OTHER known user names for the identity guard
+      const otherNames = Object.entries(KNOWN_USERS)
+        .filter(([k]) => k !== userId && k !== 'guest')
+        .map(([, v]) => v.name);
+      const otherNamesStr = otherNames.length > 0
+        ? ` You also chat with ${otherNames.join(' and ')}, but they are NOT here right now. Do not address ${userName} as ${otherNames.join(' or ')} — they are different people.`
+        : '';
+      identityContext = `\n\n[CURRENT USER] You are currently talking to your friend ${userName}. Address them as ${userName}. Do not confuse them with anyone else.${otherNamesStr}`;
     }
 
     // Read core memory (always-injected context)
@@ -1506,9 +1513,19 @@ app.post('/api/chat', async (req, res) => {
         userMemories.map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
       : '';
 
-    const agentMemoryContext = agentMemories.length > 0
+    // Filter agent memories: deprioritize memories about other users to avoid identity bleed
+    const otherUserNames = Object.entries(KNOWN_USERS)
+      .filter(([k]) => k !== userId && k !== 'guest')
+      .map(([, v]) => v.name.toLowerCase());
+    const filteredAgentMemories = agentMemories.filter(m => {
+      const text = (m.memory || m.text || m.content || '').toLowerCase();
+      // Keep if it mentions the current user or doesn't mention any other user
+      return !otherUserNames.some(name => text.includes(name));
+    });
+
+    const agentMemoryContext = filteredAgentMemories.length > 0
       ? `\n\nYour own memories and experiences as ${character.name}:\n` +
-        agentMemories.map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
+        filteredAgentMemories.map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
       : '';
 
     // Cross-character memory mesh: what the other characters know
