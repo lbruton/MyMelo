@@ -6,6 +6,8 @@ services:
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - MEM0_API_KEY=${MEM0_API_KEY}
+      - MEM0_MODE=${MEM0_MODE}
+      - MEM0_SELF_URL=${MEM0_SELF_URL}
       - BRAVE_API_KEY=${BRAVE_API_KEY}
       - GIPHY_API_KEY=${GIPHY_API_KEY}
       - DEFAULT_LAT=${DEFAULT_LAT}

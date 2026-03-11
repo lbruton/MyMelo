@@ -58,10 +58,27 @@ app.use('/data/images', express.static(join(__dirname, 'data', 'images')));
 /** @type {GoogleGenAI} Gemini AI SDK client instance. */
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+/** @type {string} mem0 mode — 'cloud' uses mem0.ai API, 'selfhosted' uses local server. */
+const MEM0_MODE = process.env.MEM0_MODE || 'cloud';
 /** @type {string} mem0 API base URL. */
-const MEM0_BASE = 'https://api.mem0.ai';
-/** @type {string} mem0 API authentication token. */
+const MEM0_BASE = MEM0_MODE === 'selfhosted'
+  ? (process.env.MEM0_SELF_URL || 'http://mem0-server:8080')
+  : 'https://api.mem0.ai';
+/** @type {string} mem0 API authentication token (cloud only). */
 const MEM0_KEY = process.env.MEM0_API_KEY;
+
+/**
+ * Build headers for mem0 API calls.
+ * Self-hosted mode skips the Authorization header.
+ * @returns {Object} Headers object
+ */
+function mem0Headers() {
+  const headers = { 'Content-Type': 'application/json' };
+  if (MEM0_MODE !== 'selfhosted' && MEM0_KEY) {
+    headers['Authorization'] = `Token ${MEM0_KEY}`;
+  }
+  return headers;
+}
 /** @type {string} mem0 user track ID — stores facts about the friend. */
 const MEM0_USER_ID = process.env.MEM0_USER_ID || 'melody-friend';
 /** @type {string} mem0 agent track ID — stores Melody's evolving personality. */
@@ -1085,10 +1102,7 @@ async function searchMemories(query, userId) {
   try {
     const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Token ${MEM0_KEY}`
-      },
+      headers: mem0Headers(),
       body: JSON.stringify({
         query,
         filters: { user_id: getUserMemId(userId) },
@@ -1118,10 +1132,7 @@ async function searchAgentMemories(query, characterId = null) {
   try {
     const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Token ${MEM0_KEY}`
-      },
+      headers: mem0Headers(),
       body: JSON.stringify({
         query,
         filters: { agent_id: agentId },
@@ -1156,8 +1167,7 @@ async function searchCrossCharacterMemories(query, activeCharacterId) {
       const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Token ${MEM0_KEY}`
+          ...mem0Headers()
         },
         body: JSON.stringify({
           query,
@@ -1211,8 +1221,7 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}, character 
     fetch(`${MEM0_BASE}/v1/memories/`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Token ${MEM0_KEY}`
+        ...mem0Headers()
       },
       body: JSON.stringify({
         messages: [
@@ -1233,8 +1242,7 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}, character 
   fetch(`${MEM0_BASE}/v1/memories/`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Token ${MEM0_KEY}`
+      ...mem0Headers()
     },
     body: JSON.stringify({
       messages: [
@@ -1857,10 +1865,10 @@ app.get('/api/memories', async (req, res) => {
     // Fetch both user memories and the character's own memories
     const [userRes, agentRes] = await Promise.all([
       fetch(`${MEM0_BASE}/v1/memories/?user_id=${memUserId}`, {
-        headers: { 'Authorization': `Token ${MEM0_KEY}` }
+        headers: mem0Headers()
       }),
       fetch(`${MEM0_BASE}/v1/memories/?agent_id=${agentId}`, {
-        headers: { 'Authorization': `Token ${MEM0_KEY}` }
+        headers: mem0Headers()
       })
     ]);
 
@@ -1894,7 +1902,7 @@ app.delete('/api/memories/:id', async (req, res) => {
   try {
     const r = await fetch(`${MEM0_BASE}/v1/memories/${req.params.id}/`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Token ${MEM0_KEY}` }
+      headers: mem0Headers()
     });
     if (!r.ok) return res.status(r.status).json({ error: 'mem0 error' });
     res.json({ ok: true });
@@ -2171,8 +2179,7 @@ app.post('/api/welcome', async (req, res) => {
       await fetch(`${MEM0_BASE}/v1/memories/`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Token ${MEM0_KEY}`
+          ...mem0Headers()
         },
         body: JSON.stringify({
           messages: [{ role: 'user', content: memoryText }],
@@ -3027,4 +3034,5 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`✿ My Melody Chat is running on port ${PORT} ✿`);
+  console.log(`  mem0 mode: ${MEM0_MODE} → ${MEM0_BASE}`);
 });
