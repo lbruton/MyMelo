@@ -332,6 +332,33 @@ async def dashboard_list_all(
             kwargs["user_id"] = user_id
         if agent_id:
             kwargs["agent_id"] = agent_id
+
+        # When no scope specified, fetch from all known scopes
+        if not user_id and not agent_id:
+            all_items = []
+            try:
+                for uid in KNOWN_USER_IDS:
+                    uid = uid.strip()
+                    if not uid:
+                        continue
+                    result = memory.get_all(user_id=uid)
+                    items = result.get("results", result.get("memories", [])) if isinstance(result, dict) else result
+                    all_items.extend([normalize_result(r) for r in (items if isinstance(items, list) else [])])
+                for aid in KNOWN_AGENT_IDS:
+                    aid = aid.strip()
+                    if not aid:
+                        continue
+                    result = memory.get_all(agent_id=aid)
+                    items = result.get("results", result.get("memories", [])) if isinstance(result, dict) else result
+                    all_items.extend([normalize_result(r) for r in (items if isinstance(items, list) else [])])
+                # Sort by most recent first
+                all_items.sort(key=lambda m: m.get("updated_at") or m.get("created_at") or "", reverse=True)
+                log.info("Dashboard listed all scopes: %d memories", len(all_items))
+                return {"memories": all_items}
+            except Exception as e:
+                log.error("Dashboard list-all error: %s", e)
+                return {"memories": []}
+
         try:
             results = memory.get_all(**kwargs)
             items = results.get("results", results.get("memories", [])) if isinstance(results, dict) else results
