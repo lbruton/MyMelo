@@ -7,13 +7,16 @@ mem0 cloud API surface, so server.js needs minimal changes (swap base URL).
 LLM: Gemini 2.5 Flash Lite (cheapest stable model)
 Embedder: text-embedding-004 via Gemini (768 dims)
 Vector Store: Qdrant
+Reranker: qwen2.5:3b via Ollama LXC (optional, improves search relevance)
 """
 
 import os
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
+import httpx
 from fastapi import FastAPI, Request, Query, Path
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -30,6 +33,13 @@ LLM_MODEL = os.getenv("LLM_MODEL", "gemini-2.5-flash-lite")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "models/text-embedding-004")
 EMBED_DIMS = int(os.getenv("EMBED_DIMS", "768"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+# ─── Reranker Configuration (Ollama LXC) ───
+
+RERANK_ENABLED = os.getenv("RERANK_ENABLED", "false").lower() == "true"
+RERANK_OLLAMA_URL = os.getenv("RERANK_OLLAMA_URL", "http://192.168.1.67:11434")
+RERANK_MODEL = os.getenv("RERANK_MODEL", "qwen2.5:3b")
+RERANK_FETCH_MULTIPLIER = int(os.getenv("RERANK_FETCH_MULTIPLIER", "3"))
 
 logging.basicConfig(level=getattr(logging, LOG_LEVEL), format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("mem0-server")
@@ -110,6 +120,73 @@ def normalize_result(item):
     return item
 
 
+# ─── Reranker (Ollama qwen2.5:3b) ───
+
+
+async def rerank_memories(query: str, memories: list, top_k: int) -> list:
+    """
+    Re-score search results using qwen2.5:3b on the Ollama LXC.
+
+    Sends query + memory texts in a single prompt, asks the model to score
+    each memory's relevance 0-10, then re-sorts by score and returns top_k.
+    Falls back to original order if Ollama is unreachable or response is malformed.
+    """
+    if not memories or len(memories) <= top_k:
+        return memories
+
+    numbered = "\n".join(
+        f"{i+1}. {m.get('memory', '')}" for i, m in enumerate(memories)
+    )
+    prompt = (
+        f"Rate each memory's relevance to the query on a scale of 0-10. "
+        f"Return ONLY a JSON array of numbers, one score per memory, in order. "
+        f"No explanation.\n\n"
+        f"Query: \"{query}\"\n\n"
+        f"Memories:\n{numbered}\n\n"
+        f"Scores:"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(
+                f"{RERANK_OLLAMA_URL}/api/chat",
+                json={
+                    "model": RERANK_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                },
+            )
+            resp.raise_for_status()
+            content = resp.json().get("message", {}).get("content", "")
+
+            # Extract JSON array from response (model may wrap in markdown)
+            start = content.find("[")
+            end = content.rfind("]") + 1
+            if start == -1 or end == 0:
+                log.warning("Reranker returned no JSON array, falling back")
+                return memories[:top_k]
+
+            scores = json.loads(content[start:end])
+            if len(scores) != len(memories):
+                log.warning("Reranker returned %d scores for %d memories, falling back",
+                            len(scores), len(memories))
+                return memories[:top_k]
+
+            # Pair memories with scores, sort descending, return top_k
+            for i, m in enumerate(memories):
+                m["rerank_score"] = float(scores[i])
+            memories.sort(key=lambda m: m.get("rerank_score", 0), reverse=True)
+            log.info("Reranked %d→%d memories (top score=%.1f, bottom=%.1f)",
+                     len(memories), top_k,
+                     memories[0].get("rerank_score", 0),
+                     memories[-1].get("rerank_score", 0))
+            return memories[:top_k]
+
+    except Exception as e:
+        log.warning("Reranker failed (%s), falling back to vector scores", e)
+        return memories[:top_k]
+
+
 # ─── Cloud-Compatible API Endpoints ───
 
 
@@ -123,8 +200,12 @@ async def search_memories(request: Request):
     query = body.get("query", "")
     filters = body.get("filters", {})
     top_k = body.get("top_k", 10)
+    do_rerank = body.get("rerank", False) and RERANK_ENABLED
 
-    kwargs = {"query": query, "limit": top_k}
+    # Fetch more candidates when reranking so the reranker has a wider pool
+    fetch_limit = top_k * RERANK_FETCH_MULTIPLIER if do_rerank else top_k
+
+    kwargs = {"query": query, "limit": fetch_limit}
     if "user_id" in filters:
         kwargs["user_id"] = filters["user_id"]
     if "agent_id" in filters:
@@ -138,7 +219,12 @@ async def search_memories(request: Request):
         else:
             items = results if isinstance(results, list) else []
         normalized = [normalize_result(r) for r in items]
-        log.info("Search query=%r scope=%r returned %d results", query[:50], filters, len(normalized))
+
+        if do_rerank and len(normalized) > top_k:
+            normalized = await rerank_memories(query, normalized, top_k)
+
+        log.info("Search query=%r scope=%r returned %d results (rerank=%s)",
+                 query[:50], filters, len(normalized), do_rerank)
         return {"results": normalized}
     except Exception as e:
         log.error("Search error: %s", e)
@@ -431,4 +517,9 @@ async def health():
         "llm_model": LLM_MODEL,
         "embed_model": EMBED_MODEL,
         "qdrant": f"{QDRANT_HOST}:{QDRANT_PORT}",
+        "reranker": {
+            "enabled": RERANK_ENABLED,
+            "model": RERANK_MODEL,
+            "ollama_url": RERANK_OLLAMA_URL,
+        },
     }

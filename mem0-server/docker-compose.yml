@@ -21,6 +21,10 @@ services:
       - EMBED_DIMS=768
       - KNOWN_USER_IDS=${KNOWN_USER_IDS:-melody-friend-amelia,melody-friend-lonnie}
       - KNOWN_AGENT_IDS=${KNOWN_AGENT_IDS:-my-melody,kuromi,retsuko}
+      - RERANK_ENABLED=${RERANK_ENABLED:-true}
+      - RERANK_OLLAMA_URL=${RERANK_OLLAMA_URL:-http://192.168.1.67:11434}
+      - RERANK_MODEL=${RERANK_MODEL:-qwen2.5:3b}
+      - RERANK_FETCH_MULTIPLIER=${RERANK_FETCH_MULTIPLIER:-3}
       - LOG_LEVEL=INFO
     depends_on:
       - qdrant
