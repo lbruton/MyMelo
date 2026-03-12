@@ -50,7 +50,7 @@ Production dependencies (3 packages):
 ```yaml
 services:
   my-melody-chat:
-    image: hellokittyfriends-my-melody-chat:latest
+    image: mymelo-my-melody-chat:latest
     ports:
       - "3030:3000"
     environment:
@@ -74,7 +74,7 @@ volumes:
 
 | Setting | Value | Purpose |
 |---------|-------|---------|
-| `image: hellokittyfriends-my-melody-chat:latest` | Pre-built image | Built via Portainer Docker build API from repo tar |
+| `image: mymelo-my-melody-chat:latest` | Pre-built image | Built via Portainer Docker build API from repo tar |
 | `ports: 3030:3000` | Host 3030 to container 3000 | HTTP access at `http://192.168.1.81:3030` |
 | `volumes: melody-data:/app/data` | Named Docker volume | Persists `relationship.json`, `images-meta.json`, `sanrio-characters.json`, and `images/` across container rebuilds |
 | `restart: unless-stopped` | Auto-restart | Container restarts on crash or host reboot (unless explicitly stopped) |
@@ -129,7 +129,7 @@ volumes:
 ### First-time setup
 
 ```bash
-cd /Volumes/DATA/GitHub/HelloKittyFriends
+cd /Volumes/DATA/GitHub/MyMelo
 
 # Set environment variables (or use a .env file)
 export GEMINI_API_KEY="your-key-here"
@@ -251,7 +251,7 @@ Access via `https://localhost:3031` or `https://<LAN-IP>:3031`.
 | `MEM0_USER_ID` | No | `melody-friend` | mem0 user track ID (legacy fallback, overridden by per-user KNOWN_USERS) |
 | `PORT` | No | `3000` | HTTP listener port |
 
-API keys are stored in Infisical under the HelloKittyFriends project, dev environment.
+API keys are stored in Infisical under the MyMelo project, dev environment.
 
 ### Using a .env file
 

@@ -2523,7 +2523,7 @@ app.get('/api/weather', async (req, res) => {
     // Step 2a: Try NWS for US locations
     if (country_code === 'US') {
       try {
-        const nwsHeaders = { 'User-Agent': 'HelloKittyFriends/1.0' };
+        const nwsHeaders = { 'User-Agent': 'MyMelo/1.0' };
         const pointsRes = await fetch(`https://api.weather.gov/points/${latitude},${longitude}`, { headers: nwsHeaders });
         if (pointsRes.ok) {
           const pointsData = await pointsRes.json();
@@ -2828,7 +2828,7 @@ app.get('/api/weather-alerts', async (req, res) => {
   try {
     const url = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
     const r = await fetch(url, {
-      headers: { 'User-Agent': 'HelloKittyFriends/1.0' }
+      headers: { 'User-Agent': 'MyMelo/1.0' }
     });
     if (!r.ok) return res.json({ alerts: [] });
     const data = await r.json();
@@ -2919,7 +2919,7 @@ app.get('/api/storm-stream', async (req, res) => {
   let isLive = false;
   try {
     const r = await fetch(liveUrl, {
-      headers: { 'User-Agent': 'HelloKittyFriends/1.0' },
+      headers: { 'User-Agent': 'MyMelo/1.0' },
       redirect: 'follow',
       signal: AbortSignal.timeout(5000)
     });
@@ -2952,7 +2952,7 @@ app.get('/api/nws-discussion', async (req, res) => {
   const office = process.env.NWS_OFFICE || 'TSA';
   try {
     const r = await fetch(`https://api.weather.gov/products/types/AFD/locations/${office}`, {
-      headers: { 'User-Agent': 'HelloKittyFriends/1.0', Accept: 'application/geo+json' }
+      headers: { 'User-Agent': 'MyMelo/1.0', Accept: 'application/geo+json' }
     });
     if (!r.ok) return res.json({ title: '', text: 'No discussion available', updated: null });
     const data = await r.json();
@@ -2962,7 +2962,7 @@ app.get('/api/nws-discussion', async (req, res) => {
 
     // Fetch the full product text
     const prodRes = await fetch(latest['@id'], {
-      headers: { 'User-Agent': 'HelloKittyFriends/1.0', Accept: 'application/geo+json' }
+      headers: { 'User-Agent': 'MyMelo/1.0', Accept: 'application/geo+json' }
     });
     if (!prodRes.ok) return res.json({ title: '', text: 'No discussion available', updated: null });
     const prod = await prodRes.json();

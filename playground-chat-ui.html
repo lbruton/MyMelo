@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat UI Playground — MyMelo</title>
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ─── Playground Chrome ─── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'SF Pro Text', -apple-system, system-ui, sans-serif;
+  background: #0f0a14;
+  color: #e0d8e8;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.pg-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pg-header h1 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #FF69B4;
+}
+
+.pg-header span {
+  font-size: 12px;
+  color: #8B6F7F;
+}
+
+.pg-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ─── Controls Panel ─── */
+.pg-controls {
+  width: 300px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 16px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ctrl-group {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.ctrl-group h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: #FF69B4;
+  margin-bottom: 10px;
+}
+
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.ctrl-row:last-child { margin-bottom: 0; }
+
+.ctrl-row label {
+  font-size: 12px;
+  color: #a090a0;
+}
+
+.ctrl-row .val {
+  font-size: 11px;
+  color: #FF69B4;
+  font-family: 'SF Mono', monospace;
+  min-width: 36px;
+  text-align: right;
+}
+
+input[type="range"] {
+  width: 120px;
+  accent-color: #FF69B4;
+  height: 4px;
+}
+
+select {
+  background: rgba(255,255,255,0.08);
+  color: #e0d8e8;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toggle-row {
+  display: flex;
+  gap: 4px;
+}
+
+.toggle-row button {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 11px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: #a090a0;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.toggle-row button:first-child { border-radius: 6px 0 0 6px; }
+.toggle-row button:last-child { border-radius: 0 6px 6px 0; }
+.toggle-row button:not(:first-child):not(:last-child) { border-radius: 0; }
+
+.toggle-row button.active {
+  background: rgba(255, 105, 180, 0.2);
+  color: #FF69B4;
+  border-color: rgba(255, 105, 180, 0.4);
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.preset-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: #a090a0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.preset-btn:hover {
+  background: rgba(255, 105, 180, 0.15);
+  color: #FF69B4;
+}
+
+.action-btn {
+  width: 100%;
+  padding: 10px;
+  background: linear-gradient(135deg, #FF69B4, #FF85C8);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.action-btn:hover { opacity: 0.9; }
+
+.action-btn.secondary {
+  background: rgba(255,255,255,0.08);
+  color: #e0d8e8;
+}
+
+/* ─── Preview Panel ─── */
+.pg-preview-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pg-preview-wrap {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  overflow: hidden;
+}
+
+/* ─── Phone Frame ─── */
+.phone-frame {
+  width: 390px;
+  height: 720px;
+  border-radius: 40px;
+  overflow: hidden;
+  border: 3px solid rgba(255,255,255,0.1);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* ─── Chat Preview (inside phone) ─── */
+.chat-preview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Quicksand', sans-serif;
+  transition: background 0.3s;
+}
+
+/* Theme vars set by JS */
+.chat-preview {
+  --cp-hot-pink: #FF69B4;
+  --cp-soft-pink: #FFB6C1;
+  --cp-pale-pink: #FFF0F5;
+  --cp-lavender: #E6E6FA;
+  --cp-white: #FFFFFF;
+  --cp-text-dark: #5C4155;
+  --cp-text-light: #8B6F7F;
+  --cp-char-primary: #FF69B4;
+  --cp-char-secondary: #FF85C8;
+  --cp-bg: #FFFFFF;
+  --cp-glass-user: rgba(255, 105, 180, 0.75);
+  --cp-glass-assist: rgba(255, 240, 245, 0.6);
+  --cp-glass-border: rgba(255, 182, 193, 0.4);
+}
+
+.chat-preview.dark {
+  --cp-soft-pink: #4A3040;
+  --cp-pale-pink: #2A1F25;
+  --cp-lavender: #2D2B3A;
+  --cp-white: #1A1520;
+  --cp-text-dark: #F0E0F0;
+  --cp-text-light: #A090A0;
+  --cp-bg: #1A1520;
+  --cp-glass-user: rgba(255, 105, 180, 0.55);
+  --cp-glass-assist: rgba(42, 31, 37, 0.7);
+  --cp-glass-border: rgba(255, 105, 180, 0.2);
+}
+
+.cp-header {
+  background: linear-gradient(135deg, var(--cp-char-primary), var(--cp-char-secondary));
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.chat-preview.dark .cp-header {
+  background: linear-gradient(135deg, rgba(255,105,180,0.7), rgba(255,133,200,0.5));
+}
+
+.cp-header-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  border: 2px solid rgba(255,255,255,0.5);
+}
+
+.cp-header-info h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.cp-header-info span {
+  font-size: 11px;
+  color: rgba(255,255,255,0.75);
+}
+
+.cp-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--cp-bg);
+  transition: background 0.3s;
+  scroll-behavior: smooth;
+}
+
+.cp-messages-inner {
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Message Styles ─── */
+.msg {
+  display: flex;
+  gap: 8px;
+  max-width: 88%;
+  margin-bottom: var(--msg-gap, 10px);
+}
+
+.msg.user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.msg.assist {
+  align-self: flex-start;
+}
+
+.msg-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.msg.assist .msg-avatar {
+  background: #fff;
+  border: 1.5px solid rgba(255,105,180,0.3);
+}
+
+.chat-preview.dark .msg.assist .msg-avatar {
+  background: #2A1F25;
+  border-color: rgba(255,105,180,0.3);
+}
+
+.msg.user .msg-avatar {
+  background: var(--cp-lavender);
+  color: var(--cp-text-dark);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.msg-bubble {
+  padding: var(--bubble-pad-v, 10px) var(--bubble-pad-h, 14px);
+  border-radius: 18px;
+  font-size: var(--msg-font-size, 14px);
+  line-height: 1.5;
+  word-wrap: break-word;
+  position: relative;
+  transition: all 0.2s;
+}
+
+/* ─── Style: Current ─── */
+.style-current .msg.user .msg-bubble {
+  background: linear-gradient(135deg, var(--cp-char-primary), var(--cp-char-secondary));
+  color: #fff;
+  border-bottom-right-radius: 6px;
+}
+
+.style-current .msg.assist .msg-bubble {
+  background: var(--cp-pale-pink);
+  color: var(--cp-text-dark);
+  border-bottom-left-radius: 6px;
+  border: 1px solid var(--cp-glass-border);
+}
+
+/* ─── Style: Glass ─── */
+.style-glass .msg.user .msg-bubble {
+  background: var(--cp-glass-user);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 0 4px 16px rgba(255,105,180,0.2), inset 0 1px 0 rgba(255,255,255,0.15);
+  border-bottom-right-radius: 6px;
+}
+
+.style-glass .msg.assist .msg-bubble {
+  background: var(--cp-glass-assist);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--cp-text-dark);
+  border: 1px solid var(--cp-glass-border);
+  box-shadow: 0 4px 16px rgba(255,182,193,0.1), inset 0 1px 0 rgba(255,255,255,0.1);
+  border-bottom-left-radius: 6px;
+}
+
+.chat-preview.dark .style-glass .msg.user .msg-bubble {
+  box-shadow: 0 4px 20px rgba(255,105,180,0.25), inset 0 1px 0 rgba(255,255,255,0.08);
+  border-color: rgba(255,105,180,0.25);
+}
+
+.chat-preview.dark .style-glass .msg.assist .msg-bubble {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+  border-color: rgba(255,105,180,0.12);
+}
+
+/* ─── Style: Glass + Tail ─── */
+.style-glasstail .msg.user .msg-bubble {
+  background: var(--cp-glass-user);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 0 4px 16px rgba(255,105,180,0.2), inset 0 1px 0 rgba(255,255,255,0.15);
+  border-bottom-right-radius: 6px;
+}
+
+.style-glasstail .msg.user .msg-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--cp-glass-user);
+  border-bottom-left-radius: 12px;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+}
+
+.style-glasstail .msg.assist .msg-bubble {
+  background: var(--cp-glass-assist);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--cp-text-dark);
+  border: 1px solid var(--cp-glass-border);
+  box-shadow: 0 4px 16px rgba(255,182,193,0.1), inset 0 1px 0 rgba(255,255,255,0.1);
+  border-bottom-left-radius: 6px;
+}
+
+.style-glasstail .msg.assist .msg-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--cp-glass-assist);
+  border-bottom-right-radius: 12px;
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
+}
+
+.chat-preview.dark .style-glasstail .msg.user .msg-bubble {
+  box-shadow: 0 4px 20px rgba(255,105,180,0.25), inset 0 1px 0 rgba(255,255,255,0.08);
+  border-color: rgba(255,105,180,0.25);
+}
+
+.chat-preview.dark .style-glasstail .msg.assist .msg-bubble {
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+  border-color: rgba(255,105,180,0.12);
+}
+
+/* ─── Animation: Off ─── */
+.anim-off .msg { animation: none; }
+
+/* ─── Animation: Subtle ─── */
+.anim-subtle .msg {
+  animation: msg-subtle 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes msg-subtle {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Animation: Bouncy ─── */
+.anim-bouncy .msg {
+  animation: msg-bouncy 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes msg-bouncy {
+  from { opacity: 0; transform: translateY(30px) scale(0.95); }
+  60% { opacity: 1; transform: translateY(-4px) scale(1.01); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── GIF placeholder ─── */
+.msg-gif {
+  border-radius: 12px;
+  margin-top: 6px;
+  display: block;
+  background: linear-gradient(135deg, #FFD1E8, #FFB6C1, #E6B3FF, #FFD1E8);
+  background-size: 300% 300%;
+  animation: gif-shimmer 3s ease-in-out infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cp-text-light);
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 140px;
+}
+
+.chat-preview.dark .msg-gif {
+  background: linear-gradient(135deg, #3A2535, #4A3040, #352D4A, #3A2535);
+  background-size: 300% 300%;
+}
+
+@keyframes gif-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* ─── Recipe card placeholder ─── */
+.msg-recipe {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.5);
+  border: 1px solid rgba(255,182,193,0.3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-preview.dark .msg-recipe {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,105,180,0.15);
+}
+
+.msg-recipe-icon { font-size: 28px; }
+
+.msg-recipe-info {
+  font-size: 12px;
+  color: var(--cp-text-dark);
+  line-height: 1.4;
+}
+
+.msg-recipe-info strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+/* ─── Image search card placeholder ─── */
+.msg-images {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.msg-images div {
+  aspect-ratio: 1;
+  background: linear-gradient(135deg, #FFE0F0, #F0E0FF);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.chat-preview.dark .msg-images div {
+  background: linear-gradient(135deg, #3A2535, #352D4A);
+}
+
+/* ─── Input area ─── */
+.cp-input {
+  padding: 10px 12px;
+  background: var(--cp-bg);
+  border-top: 1px solid var(--cp-glass-border);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.cp-input-field {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 22px;
+  border: 1px solid var(--cp-glass-border);
+  background: var(--cp-pale-pink);
+  color: var(--cp-text-dark);
+  font-family: 'Quicksand', sans-serif;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.3s;
+}
+
+.chat-preview.dark .cp-input-field {
+  background: var(--cp-pale-pink);
+  border-color: rgba(255,105,180,0.15);
+}
+
+.cp-send-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--cp-char-primary), var(--cp-char-secondary));
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ─── Typing indicator ─── */
+.typing-ind {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin-bottom: var(--msg-gap, 10px);
+}
+
+.typing-ind .msg-avatar {
+  margin-top: 0;
+}
+
+.typing-dots {
+  display: flex;
+  gap: 4px;
+  padding: 8px 14px;
+  border-radius: 18px;
+  background: var(--cp-pale-pink);
+  border: 1px solid var(--cp-glass-border);
+}
+
+.style-glass .typing-dots,
+.style-glasstail .typing-dots {
+  background: var(--cp-glass-assist);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.typing-dots span {
+  width: 7px;
+  height: 7px;
+  background: var(--cp-soft-pink);
+  border-radius: 50%;
+  animation: typing-bounce 1.4s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); background: var(--cp-soft-pink); }
+  30% { transform: translateY(-6px); background: var(--cp-hot-pink); }
+}
+
+/* ─── Avatar pulse glow ─── */
+.avatar-glow .typing-ind .msg-avatar {
+  animation: avatar-pulse 2s ease-in-out infinite;
+}
+
+@keyframes avatar-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,105,180,0); }
+  50% { box-shadow: 0 0 12px 4px rgba(255,105,180,0.35); }
+}
+
+/* ─── Prompt Output ─── */
+.pg-output {
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding: 16px 24px;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.pg-output-text {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #a090a0;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.copy-btn {
+  padding: 6px 14px;
+  background: rgba(255,105,180,0.15);
+  color: #FF69B4;
+  border: 1px solid rgba(255,105,180,0.3);
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.copy-btn:hover { background: rgba(255,105,180,0.25); }
+
+/* ─── Responsive ─── */
+@media (max-width: 800px) {
+  .pg-main { flex-direction: column; }
+  .pg-controls {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .ctrl-group { min-width: 250px; flex: 1; }
+  .phone-frame { width: 100%; max-width: 390px; height: 500px; }
+}
+</style>
+</head>
+<body>
+
+<div class="pg-header">
+  <h1>Chat UI Playground</h1>
+  <span>MyMelo &mdash; interactive design explorer</span>
+</div>
+
+<div class="pg-main">
+  <!-- Controls -->
+  <div class="pg-controls">
+    <div class="ctrl-group">
+      <h3>Presets</h3>
+      <div class="preset-row">
+        <button class="preset-btn" onclick="applyPreset('current')">Current</button>
+        <button class="preset-btn" onclick="applyPreset('polished')">Polished</button>
+        <button class="preset-btn" onclick="applyPreset('glassmorphic')">Glassmorphic</button>
+        <button class="preset-btn" onclick="applyPreset('imessage')">iMessage</button>
+        <button class="preset-btn" onclick="applyPreset('cozy')">Cozy</button>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <h3>Bubble Style</h3>
+      <div class="toggle-row" id="styleToggle">
+        <button data-val="current" onclick="setState('bubbleStyle','current')">Current</button>
+        <button data-val="glass" onclick="setState('bubbleStyle','glass')">Glass</button>
+        <button data-val="glasstail" onclick="setState('bubbleStyle','glasstail')">Glass + Tail</button>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <h3>Typography</h3>
+      <div class="ctrl-row">
+        <label>Font size</label>
+        <input type="range" min="12" max="20" value="14" oninput="setState('fontSize', +this.value)">
+        <span class="val" id="fontSizeVal">14px</span>
+      </div>
+      <div class="ctrl-row">
+        <label>Line height</label>
+        <input type="range" min="13" max="20" value="15" oninput="setState('lineHeight', this.value / 10)">
+        <span class="val" id="lineHeightVal">1.5</span>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <h3>Spacing</h3>
+      <div class="toggle-row" id="spacingToggle">
+        <button data-val="compact" onclick="setState('spacing','compact')">Compact</button>
+        <button data-val="comfortable" onclick="setState('spacing','comfortable')">Comfortable</button>
+        <button data-val="spacious" onclick="setState('spacing','spacious')">Spacious</button>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <h3>Animation</h3>
+      <div class="toggle-row" id="animToggle">
+        <button data-val="off" onclick="setState('animation','off')">Off</button>
+        <button data-val="subtle" onclick="setState('animation','subtle')">Subtle</button>
+        <button data-val="bouncy" onclick="setState('animation','bouncy')">Bouncy</button>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <h3>GIF / Media Width</h3>
+      <div class="toggle-row" id="gifToggle">
+        <button data-val="auto" onclick="setState('gifWidth','auto')">Auto</button>
+        <button data-val="80" onclick="setState('gifWidth','80')">80%</button>
+        <button data-val="100" onclick="setState('gifWidth','100')">100%</button>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <h3>Theme</h3>
+      <div class="toggle-row" id="themeToggle">
+        <button data-val="light" onclick="setState('theme','light')">Light</button>
+        <button data-val="dark" onclick="setState('theme','dark')">Dark</button>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <h3>Extras</h3>
+      <div class="ctrl-row">
+        <label>Avatar glow</label>
+        <div class="toggle-row" id="glowToggle" style="width:auto">
+          <button data-val="on" onclick="setState('avatarGlow','on')" style="border-radius:6px 0 0 6px">On</button>
+          <button data-val="off" onclick="setState('avatarGlow','off')" style="border-radius:0 6px 6px 0">Off</button>
+        </div>
+      </div>
+      <div class="ctrl-row">
+        <label>Bubble radius</label>
+        <input type="range" min="8" max="24" value="18" oninput="setState('borderRadius', +this.value)">
+        <span class="val" id="radiusVal">18px</span>
+      </div>
+    </div>
+
+    <button class="action-btn" onclick="replayMessages()">Replay Animation</button>
+    <button class="action-btn secondary" onclick="addNewMessage()">+ Add Message</button>
+  </div>
+
+  <!-- Preview -->
+  <div class="pg-preview-area">
+    <div class="pg-preview-wrap">
+      <div class="phone-frame">
+        <div class="chat-preview" id="chatPreview">
+          <div class="cp-header">
+            <div class="cp-header-avatar">🎀</div>
+            <div class="cp-header-info">
+              <h2>My Melody</h2>
+              <span>Online</span>
+            </div>
+          </div>
+          <div class="cp-messages" id="messagesArea">
+            <div class="cp-messages-inner" id="messagesInner"></div>
+          </div>
+          <div class="cp-input">
+            <div class="cp-input-field">Type a message...</div>
+            <button class="cp-send-btn">&#9650;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="pg-output">
+      <div class="pg-output-text" id="promptOutput"></div>
+      <button class="copy-btn" id="copyBtn" onclick="copyPrompt()">Copy CSS</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEFAULTS = {
+  bubbleStyle: 'current',
+  fontSize: 14,
+  lineHeight: 1.5,
+  spacing: 'comfortable',
+  animation: 'subtle',
+  gifWidth: 'auto',
+  theme: 'light',
+  avatarGlow: 'off',
+  borderRadius: 18
+};
+
+const state = { ...DEFAULTS };
+
+const MESSAGES = [
+  { role: 'user', text: 'Have you ever tried making almond pound cake?' },
+  { role: 'assist', text: 'Oh~! Mama always says that the secret to a perfect almond pound cake is using REAL almond extract, not the imitation kind! Would you like me to find a recipe?', card: 'recipe' },
+  { role: 'user', text: 'Yes please! Also look up a cute baking GIF' },
+  { role: 'assist', text: 'Melly-melly~! Here\'s a super cute one!', card: 'gif' },
+  { role: 'user', text: 'That\'s adorable! Can you search for Hello Kitty baking accessories?' },
+  { role: 'assist', text: 'Of course! Mama would love these too~', card: 'images' }
+];
+
+const extraMessages = [
+  { role: 'user', text: 'What about a strawberry shortcake recipe?' },
+  { role: 'assist', text: 'Ahh~ this is so exciting! Strawberry shortcake is one of my absolute favorites. Let me look that up for you!' },
+  { role: 'user', text: 'You\'re the best! 💕' },
+  { role: 'assist', text: 'That\'s not very nice... to say to someone who hasn\'t baked you one yet! Just kidding~ Melly-melly! 🎀' }
+];
+let extraIdx = 0;
+
+const PRESETS = {
+  current: { bubbleStyle: 'current', fontSize: 14, lineHeight: 1.5, spacing: 'comfortable', animation: 'subtle', gifWidth: 'auto', theme: 'light', avatarGlow: 'off', borderRadius: 18 },
+  polished: { bubbleStyle: 'glass', fontSize: 15, lineHeight: 1.5, spacing: 'comfortable', animation: 'subtle', gifWidth: '80', theme: 'light', avatarGlow: 'on', borderRadius: 20 },
+  glassmorphic: { bubbleStyle: 'glasstail', fontSize: 15, lineHeight: 1.55, spacing: 'spacious', animation: 'bouncy', gifWidth: '80', theme: 'dark', avatarGlow: 'on', borderRadius: 22 },
+  imessage: { bubbleStyle: 'glasstail', fontSize: 16, lineHeight: 1.5, spacing: 'compact', animation: 'subtle', gifWidth: '80', theme: 'light', avatarGlow: 'off', borderRadius: 18 },
+  cozy: { bubbleStyle: 'glass', fontSize: 17, lineHeight: 1.6, spacing: 'spacious', animation: 'bouncy', gifWidth: '100', theme: 'light', avatarGlow: 'on', borderRadius: 24 }
+};
+
+function setState(key, value) {
+  state[key] = value;
+  updateAll();
+}
+
+function applyPreset(name) {
+  Object.assign(state, PRESETS[name]);
+  updateAll();
+}
+
+function updateAll() {
+  renderPreview();
+  updateControls();
+  updatePrompt();
+}
+
+function updateControls() {
+  // Toggle buttons
+  updateToggle('styleToggle', state.bubbleStyle);
+  updateToggle('spacingToggle', state.spacing);
+  updateToggle('animToggle', state.animation);
+  updateToggle('gifToggle', state.gifWidth);
+  updateToggle('themeToggle', state.theme);
+  updateToggle('glowToggle', state.avatarGlow);
+
+  // Sliders
+  document.querySelector('[oninput*="fontSize"]').value = state.fontSize;
+  document.getElementById('fontSizeVal').textContent = state.fontSize + 'px';
+
+  document.querySelector('[oninput*="lineHeight"]').value = state.lineHeight * 10;
+  document.getElementById('lineHeightVal').textContent = state.lineHeight.toFixed(1);
+
+  document.querySelector('[oninput*="borderRadius"]').value = state.borderRadius;
+  document.getElementById('radiusVal').textContent = state.borderRadius + 'px';
+}
+
+function updateToggle(id, activeVal) {
+  const btns = document.getElementById(id).querySelectorAll('button');
+  btns.forEach(b => b.classList.toggle('active', b.dataset.val === String(activeVal)));
+}
+
+function renderPreview() {
+  const preview = document.getElementById('chatPreview');
+  const inner = document.getElementById('messagesInner');
+
+  // Theme
+  preview.classList.toggle('dark', state.theme === 'dark');
+
+  // Style class
+  preview.querySelectorAll('.cp-messages-inner').forEach(el => {
+    el.className = 'cp-messages-inner style-' + state.bubbleStyle + ' anim-' + state.animation;
+    if (state.avatarGlow === 'on') el.classList.add('avatar-glow');
+  });
+
+  // CSS vars
+  const spacingMap = { compact: { gap: 6, padV: 7, padH: 12 }, comfortable: { gap: 10, padV: 10, padH: 14 }, spacious: { gap: 16, padV: 13, padH: 18 } };
+  const sp = spacingMap[state.spacing];
+
+  inner.style.setProperty('--msg-gap', sp.gap + 'px');
+  inner.style.setProperty('--bubble-pad-v', sp.padV + 'px');
+  inner.style.setProperty('--bubble-pad-h', sp.padH + 'px');
+  inner.style.setProperty('--msg-font-size', state.fontSize + 'px');
+
+  // Apply line height and border radius to all bubbles
+  inner.querySelectorAll('.msg-bubble').forEach(b => {
+    b.style.lineHeight = state.lineHeight;
+    b.style.borderRadius = state.borderRadius + 'px';
+    // Re-apply tail radius
+    const msg = b.closest('.msg');
+    if (msg.classList.contains('user')) b.style.borderBottomRightRadius = '6px';
+    if (msg.classList.contains('assist')) b.style.borderBottomLeftRadius = '6px';
+  });
+
+  // GIF width
+  inner.querySelectorAll('.msg-gif').forEach(g => {
+    if (state.gifWidth === 'auto') { g.style.width = 'auto'; g.style.maxWidth = '200px'; }
+    else { g.style.width = state.gifWidth + '%'; g.style.maxWidth = '100%'; }
+  });
+}
+
+function buildMessage(msg, delay) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + msg.role;
+  if (delay) div.style.animationDelay = delay + 'ms';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar';
+  avatar.textContent = msg.role === 'user' ? 'A' : '🎀';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.style.lineHeight = state.lineHeight;
+  bubble.style.borderRadius = state.borderRadius + 'px';
+  if (msg.role === 'user') bubble.style.borderBottomRightRadius = '6px';
+  else bubble.style.borderBottomLeftRadius = '6px';
+  bubble.textContent = msg.text;
+
+  // Cards
+  if (msg.card === 'recipe') {
+    const card = document.createElement('div');
+    card.className = 'msg-recipe';
+    card.innerHTML = '<div class="msg-recipe-icon">🧁</div><div class="msg-recipe-info"><strong>Almond Pound Cake</strong>Prep: 15 min &bull; Cook: 55 min &bull; Serves 8</div>';
+    bubble.appendChild(card);
+  }
+  if (msg.card === 'gif') {
+    const gif = document.createElement('div');
+    gif.className = 'msg-gif';
+    gif.textContent = '🎬 Animated GIF';
+    if (state.gifWidth === 'auto') { gif.style.width = 'auto'; gif.style.maxWidth = '200px'; }
+    else { gif.style.width = state.gifWidth + '%'; gif.style.maxWidth = '100%'; }
+    bubble.appendChild(gif);
+  }
+  if (msg.card === 'images') {
+    const grid = document.createElement('div');
+    grid.className = 'msg-images';
+    grid.innerHTML = '<div>🎀</div><div>🧁</div><div>🍰</div>';
+    bubble.appendChild(grid);
+  }
+
+  div.appendChild(avatar);
+  div.appendChild(bubble);
+  return div;
+}
+
+function loadMessages(messages) {
+  const inner = document.getElementById('messagesInner');
+  inner.innerHTML = '';
+  inner.className = 'cp-messages-inner style-' + state.bubbleStyle + ' anim-' + state.animation;
+  if (state.avatarGlow === 'on') inner.classList.add('avatar-glow');
+
+  // Add typing indicator
+  const typing = document.createElement('div');
+  typing.className = 'typing-ind';
+  typing.style.display = 'none';
+  typing.innerHTML = '<div class="msg-avatar" style="background:#fff;border:1.5px solid rgba(255,105,180,0.3)">🎀</div><div class="typing-dots"><span></span><span></span><span></span></div>';
+  typing.id = 'typingInd';
+
+  messages.forEach((msg, i) => {
+    inner.appendChild(buildMessage(msg, i * 120));
+  });
+  inner.appendChild(typing);
+
+  // Apply spacing vars
+  const spacingMap = { compact: { gap: 6, padV: 7, padH: 12 }, comfortable: { gap: 10, padV: 10, padH: 14 }, spacious: { gap: 16, padV: 13, padH: 18 } };
+  const sp = spacingMap[state.spacing];
+  inner.style.setProperty('--msg-gap', sp.gap + 'px');
+  inner.style.setProperty('--bubble-pad-v', sp.padV + 'px');
+  inner.style.setProperty('--bubble-pad-h', sp.padH + 'px');
+  inner.style.setProperty('--msg-font-size', state.fontSize + 'px');
+
+  // Scroll to bottom
+  const area = document.getElementById('messagesArea');
+  requestAnimationFrame(() => area.scrollTop = area.scrollHeight);
+}
+
+function replayMessages() {
+  loadMessages(MESSAGES);
+}
+
+function addNewMessage() {
+  const inner = document.getElementById('messagesInner');
+  const msg = extraMessages[extraIdx % extraMessages.length];
+  extraIdx++;
+
+  // Show typing for assistant messages
+  const typing = document.getElementById('typingInd');
+  if (msg.role === 'assist' && typing) {
+    typing.style.display = 'flex';
+    const area = document.getElementById('messagesArea');
+    area.scrollTop = area.scrollHeight;
+
+    setTimeout(() => {
+      typing.style.display = 'none';
+      inner.insertBefore(buildMessage(msg, 0), typing);
+      requestAnimationFrame(() => area.scrollTop = area.scrollHeight);
+    }, 1200);
+  } else {
+    const typingEl = document.getElementById('typingInd');
+    inner.insertBefore(buildMessage(msg, 0), typingEl);
+    const area = document.getElementById('messagesArea');
+    requestAnimationFrame(() => area.scrollTop = area.scrollHeight);
+  }
+}
+
+function updatePrompt() {
+  const parts = [];
+  const cssParts = [];
+
+  if (state.bubbleStyle !== DEFAULTS.bubbleStyle) {
+    const labels = { glass: 'glassmorphic frosted-glass', glasstail: 'glassmorphic with iMessage-style tails' };
+    parts.push(`Use ${labels[state.bubbleStyle]} bubble styling with backdrop-filter: blur(16px), semi-transparent backgrounds, subtle inner highlight (inset box-shadow), and soft glow shadows`);
+  }
+
+  if (state.fontSize !== DEFAULTS.fontSize) {
+    parts.push(`Set message font size to ${state.fontSize}px`);
+    cssParts.push(`.message-bubble { font-size: ${state.fontSize}px; }`);
+  }
+
+  if (state.lineHeight !== DEFAULTS.lineHeight) {
+    parts.push(`Line height ${state.lineHeight}`);
+    cssParts.push(`.message-bubble { line-height: ${state.lineHeight}; }`);
+  }
+
+  if (state.spacing !== DEFAULTS.spacing) {
+    const spacingMap = { compact: { gap: 6, padV: 7, padH: 12 }, spacious: { gap: 16, padV: 13, padH: 18 } };
+    const sp = spacingMap[state.spacing];
+    if (sp) {
+      parts.push(`${state.spacing} spacing: ${sp.gap}px gap between messages, ${sp.padV}px/${sp.padH}px bubble padding`);
+      cssParts.push(`.message { margin-bottom: ${sp.gap}px; }`);
+      cssParts.push(`.message-bubble { padding: ${sp.padV}px ${sp.padH}px; }`);
+    }
+  }
+
+  if (state.animation !== DEFAULTS.animation) {
+    if (state.animation === 'off') parts.push('Disable message entrance animation');
+    if (state.animation === 'bouncy') parts.push('Use a bouncy spring entrance animation: cubic-bezier(0.34, 1.56, 0.64, 1) with translateY(30px) + scale(0.95) over 0.5s');
+  }
+
+  if (state.gifWidth !== DEFAULTS.gifWidth) {
+    parts.push(`Set GIF/media width to ${state.gifWidth}% of the bubble width on mobile`);
+    cssParts.push(`.gif-card img, .reaction-gif { width: ${state.gifWidth}%; max-width: 100%; height: auto; }`);
+  }
+
+  if (state.avatarGlow !== DEFAULTS.avatarGlow && state.avatarGlow === 'on') {
+    parts.push('Add a pulsing pink glow animation on the assistant avatar during typing');
+  }
+
+  if (state.borderRadius !== DEFAULTS.borderRadius) {
+    parts.push(`Bubble border-radius: ${state.borderRadius}px`);
+    cssParts.push(`.message-bubble { border-radius: ${state.borderRadius}px; }`);
+  }
+
+  // Build CSS for glass styles
+  if (state.bubbleStyle === 'glass' || state.bubbleStyle === 'glasstail') {
+    cssParts.unshift(
+      `/* User bubble — glassmorphic */`,
+      `.message.user .message-bubble {`,
+      `  background: rgba(255, 105, 180, 0.75);`,
+      `  backdrop-filter: blur(16px);`,
+      `  -webkit-backdrop-filter: blur(16px);`,
+      `  color: #fff;`,
+      `  border: 1px solid rgba(255,255,255,0.18);`,
+      `  box-shadow: 0 4px 16px rgba(255,105,180,0.2), inset 0 1px 0 rgba(255,255,255,0.15);`,
+      `  border-bottom-right-radius: 6px;`,
+      `}`,
+      ``,
+      `/* Assistant bubble — frosted glass */`,
+      `.message.assistant .message-bubble {`,
+      `  background: rgba(255, 240, 245, 0.6);`,
+      `  backdrop-filter: blur(16px);`,
+      `  -webkit-backdrop-filter: blur(16px);`,
+      `  color: var(--text-dark);`,
+      `  border: 1px solid rgba(255,182,193,0.4);`,
+      `  box-shadow: 0 4px 16px rgba(255,182,193,0.1), inset 0 1px 0 rgba(255,255,255,0.1);`,
+      `  border-bottom-left-radius: 6px;`,
+      `}`,
+      ``
+    );
+
+    if (state.theme === 'dark') {
+      cssParts.push(
+        ``,
+        `/* Dark mode glass overrides */`,
+        `[data-theme="dark"] .message.user .message-bubble {`,
+        `  background: rgba(255, 105, 180, 0.55);`,
+        `  box-shadow: 0 4px 20px rgba(255,105,180,0.25), inset 0 1px 0 rgba(255,255,255,0.08);`,
+        `  border-color: rgba(255,105,180,0.25);`,
+        `}`,
+        ``,
+        `[data-theme="dark"] .message.assistant .message-bubble {`,
+        `  background: rgba(42, 31, 37, 0.7);`,
+        `  box-shadow: 0 4px 16px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);`,
+        `  border-color: rgba(255,105,180,0.12);`,
+        `}`
+      );
+    }
+  }
+
+  if (state.bubbleStyle === 'glasstail') {
+    cssParts.push(
+      ``,
+      `/* iMessage-style tails */`,
+      `.message.user .message-bubble::after {`,
+      `  content: '';`,
+      `  position: absolute;`,
+      `  bottom: 0; right: -6px;`,
+      `  width: 12px; height: 12px;`,
+      `  background: inherit;`,
+      `  border-bottom-left-radius: 12px;`,
+      `  clip-path: polygon(0 0, 100% 0, 0 100%);`,
+      `}`,
+      ``,
+      `.message.assistant .message-bubble::after {`,
+      `  content: '';`,
+      `  position: absolute;`,
+      `  bottom: 0; left: -6px;`,
+      `  width: 12px; height: 12px;`,
+      `  background: inherit;`,
+      `  border-bottom-right-radius: 12px;`,
+      `  clip-path: polygon(100% 0, 100% 100%, 0 0);`,
+      `}`
+    );
+  }
+
+  if (state.animation === 'bouncy') {
+    cssParts.push(
+      ``,
+      `/* Bouncy entrance animation */`,
+      `@keyframes message-in {`,
+      `  from { opacity: 0; transform: translateY(30px) scale(0.95); }`,
+      `  60% { opacity: 1; transform: translateY(-4px) scale(1.01); }`,
+      `  to { opacity: 1; transform: translateY(0) scale(1); }`,
+      `}`,
+      `.message { animation: message-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }`
+    );
+  }
+
+  if (state.avatarGlow === 'on') {
+    cssParts.push(
+      ``,
+      `/* Avatar pulse glow */`,
+      `@keyframes avatar-pulse {`,
+      `  0%, 100% { box-shadow: 0 0 0 0 rgba(255,105,180,0); }`,
+      `  50% { box-shadow: 0 0 12px 4px rgba(255,105,180,0.35); }`,
+      `}`,
+      `.typing-indicator .message-avatar-img { animation: avatar-pulse 2s ease-in-out infinite; }`
+    );
+  }
+
+  const output = document.getElementById('promptOutput');
+  if (cssParts.length === 0) {
+    output.textContent = 'Using default styles. Adjust controls to generate CSS.';
+  } else {
+    output.textContent = (parts.length ? '/* ' + parts.join('. ') + ' */\n\n' : '') + cssParts.join('\n');
+  }
+}
+
+function copyPrompt() {
+  const text = document.getElementById('promptOutput').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy CSS', 1500);
+  });
+}
+
+// Init
+loadMessages(MESSAGES);
+updateAll();
+</script>
+</body>
+</html>
