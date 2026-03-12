@@ -20,3 +20,5 @@ services:
 
 volumes:
   melody-data:
+    external: true
+    name: hellokittyfriends_melody-data
