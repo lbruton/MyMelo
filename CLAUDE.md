@@ -25,7 +25,7 @@ This project runs on Portainer (VM 101, `192.168.1.81`, Stack ID 9, port 3030) b
 
 ### What DOES apply (non-negotiable)
 
-- **Linear issue for every code change** — No cowboy coding.
+- **Issue for every code change** — No cowboy coding. Prefix: `MEL` (see `issue` skill).
 - **Spec-workflow for features** — Requirements → Design → Tasks → Implementation with dashboard approvals. Bug fixes with clear root cause may skip the spec.
 - **PR gate** — All code reaches `main` via PR. Codacy quality gate enforced.
 - **Implementation logging** — `log-implementation` before marking tasks `[x]`.
