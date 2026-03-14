@@ -84,12 +84,14 @@ const MEM0_USER_ID = process.env.MEM0_USER_ID || 'melody-friend';
 /** @type {string} mem0 agent track ID — stores Melody's evolving personality. */
 const MEM0_AGENT_ID = 'my-melody';
 
-/** @type {Object<string, {name: string, mem0Id: string}>} Known user configurations. */
-const KNOWN_USERS = {
-  amelia: { name: 'Amelia', mem0Id: 'melody-friend-amelia' },
-  lonnie: { name: 'Lonnie', mem0Id: 'melody-friend-lonnie' },
-  guest:  { name: 'Guest',  mem0Id: 'melody-friend-guest' }
+/** @type {Object<string, string|undefined>} Maps old user slugs to their real email (from env vars) for one-time data migration. */
+const MIGRATION_MAP = {
+  amelia: process.env.MIGRATION_EMAIL_AMELIA,
+  lonnie: process.env.MIGRATION_EMAIL_LONNIE
 };
+
+/** @type {string} Fallback email when no Cloudflare header is present (LAN access). */
+const DEFAULT_USER_EMAIL = process.env.DEFAULT_USER_EMAIL || 'owner@local';
 
 /**
  * Registry of available chat characters.
@@ -441,6 +443,130 @@ function updateUserProfile(email, updates) {
 // Load user profiles into cache at startup
 loadUserProfiles();
 
+/**
+ * One-time migration: rename old slug-keyed data files to email-slug-keyed files.
+ * Skips entirely if `_migrated` flag is set in users.json.
+ * For each MIGRATION_MAP entry where the env var is set:
+ *   1. Creates a user profile with `migratedFrom` field
+ *   2. Renames core memory files from `{oldSlug}_*.json` to `{emailSlug}_*.json`
+ *   3. Renames summary files from `{oldSlug}_*.json` to `{emailSlug}_*.json`
+ *   4. Updates relationship.json keys from old slug to email slug
+ *   5. Updates youtube-favorites.json keys from old slug to email slug
+ * Sets `_migrated: true` in users.json to prevent re-running.
+ */
+async function migrateOldUsers() {
+  let usersData = readJSON(USERS_FILE);
+  if (!usersData || Array.isArray(usersData)) usersData = {};
+  if (usersData._migrated) {
+    console.log('Migration already completed — skipping');
+    return;
+  }
+
+  let migrated = false;
+
+  for (const [oldSlug, email] of Object.entries(MIGRATION_MAP)) {
+    if (!email) {
+      console.log(`Migration: skipping "${oldSlug}" — no email env var set`);
+      continue;
+    }
+
+    const newSlug = getEmailSlug(email);
+    console.log(`Migration: migrating "${oldSlug}" → "${newSlug}" (${email})`);
+
+    // 1. Create user profile with migratedFrom field
+    if (!getUserProfile(email)) {
+      const profile = createUserProfile(email);
+      profile.migratedFrom = oldSlug;
+      updateUserProfile(email, profile);
+    } else {
+      updateUserProfile(email, { migratedFrom: oldSlug });
+    }
+
+    // 2. Rename core memory files
+    try {
+      const coreFiles = readdirSync(CORE_MEMORY_DIR);
+      for (const file of coreFiles) {
+        if (file.startsWith(`${oldSlug}_`) && file.endsWith('.json')) {
+          const newFile = file.replace(`${oldSlug}_`, `${newSlug}_`);
+          const oldPath = join(CORE_MEMORY_DIR, file);
+          const newPath = join(CORE_MEMORY_DIR, newFile);
+          if (!existsSync(newPath)) {
+            renameSync(oldPath, newPath);
+            console.log(`  Renamed core memory: ${file} → ${newFile}`);
+          } else {
+            console.log(`  Skipped core memory rename (target exists): ${newFile}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`  Error renaming core memory files for ${oldSlug}:`, err.message);
+    }
+
+    // 3. Rename summary files
+    try {
+      const summaryFiles = readdirSync(SUMMARIES_DIR);
+      for (const file of summaryFiles) {
+        if (file.startsWith(`${oldSlug}_`) && file.endsWith('.json')) {
+          const newFile = file.replace(`${oldSlug}_`, `${newSlug}_`);
+          const oldPath = join(SUMMARIES_DIR, file);
+          const newPath = join(SUMMARIES_DIR, newFile);
+          if (!existsSync(newPath)) {
+            renameSync(oldPath, newPath);
+            console.log(`  Renamed summary: ${file} → ${newFile}`);
+          } else {
+            console.log(`  Skipped summary rename (target exists): ${newFile}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`  Error renaming summary files for ${oldSlug}:`, err.message);
+    }
+
+    // 4. Update relationship.json keys
+    try {
+      const relData = readJSON(RELATIONSHIP_FILE);
+      if (relData && relData[oldSlug] && !relData[newSlug]) {
+        relData[newSlug] = relData[oldSlug];
+        delete relData[oldSlug];
+        writeJSON(RELATIONSHIP_FILE, relData);
+        console.log(`  Migrated relationship key: ${oldSlug} → ${newSlug}`);
+      }
+    } catch (err) {
+      console.error(`  Error migrating relationship data for ${oldSlug}:`, err.message);
+    }
+
+    // 5. Update youtube-favorites.json keys
+    try {
+      const ytData = readJSON(YT_FAVORITES_FILE);
+      if (ytData && ytData[oldSlug] && !ytData[newSlug]) {
+        ytData[newSlug] = ytData[oldSlug];
+        delete ytData[oldSlug];
+        writeJSON(YT_FAVORITES_FILE, ytData);
+        console.log(`  Migrated YouTube favorites key: ${oldSlug} → ${newSlug}`);
+      }
+    } catch (err) {
+      console.error(`  Error migrating YouTube favorites for ${oldSlug}:`, err.message);
+    }
+
+    migrated = true;
+  }
+
+  // Set _migrated flag to prevent re-running
+  if (migrated) {
+    const currentData = readJSON(USERS_FILE) || {};
+    currentData._migrated = true;
+    writeJSON(USERS_FILE, currentData);
+    // Reload profiles to pick up any new entries
+    loadUserProfiles();
+    console.log('Migration complete — _migrated flag set');
+  } else {
+    console.log('No users to migrate — setting _migrated flag');
+    const currentData = readJSON(USERS_FILE) || {};
+    currentData._migrated = true;
+    writeJSON(USERS_FILE, currentData);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Core Memory — structured per-user, per-character memory blocks
 // ---------------------------------------------------------------------------
@@ -475,8 +601,8 @@ function defaultCoreMemory() {
  * @returns {string}
  */
 function getCoreMemoryPath(email, characterId) {
-  // Derive slug from email for filesystem-safe path; validate character against allowlist
-  const safeUser = email ? getEmailSlug(email) : 'guest';
+  // Derive slug from email for filesystem-safe path; validate against user profile store
+  const safeUser = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
   const safeChar = (characterId && CHARACTERS[characterId]) ? characterId : DEFAULT_CHARACTER;
   return join(CORE_MEMORY_DIR, `${safeUser}_${safeChar}.json`);
 }
@@ -489,7 +615,7 @@ function getCoreMemoryPath(email, characterId) {
  * @returns {object}
  */
 function readCoreMemory(email, characterId) {
-  const slug = email ? getEmailSlug(email) : 'guest';
+  const slug = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
   const key = `${slug}_${characterId}`;
   if (coreMemoryCache.has(key)) return coreMemoryCache.get(key);
   const filePath = getCoreMemoryPath(email, characterId);
@@ -516,7 +642,7 @@ function writeCoreMemory(email, characterId, data) {
   const tmpPath = filePath + '.tmp';
   writeFileSync(tmpPath, JSON.stringify(data, null, 2));
   renameSync(tmpPath, filePath);
-  const slug = email ? getEmailSlug(email) : 'guest';
+  const slug = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
   coreMemoryCache.set(`${slug}_${characterId}`, data);
 }
 
@@ -558,7 +684,7 @@ const MAX_SUMMARIES = 20;
  * @returns {string}
  */
 function getSummaryPath(email, characterId) {
-  const safeUser = email ? getEmailSlug(email) : 'guest';
+  const safeUser = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
   const safeChar = (characterId && CHARACTERS[characterId]) ? characterId : DEFAULT_CHARACTER;
   return join(SUMMARIES_DIR, `${safeUser}_${safeChar}.json`);
 }
@@ -571,7 +697,7 @@ function getSummaryPath(email, characterId) {
  * @returns {Array}
  */
 function readSummaries(email, characterId) {
-  const slug = email ? getEmailSlug(email) : 'guest';
+  const slug = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
   const key = `${slug}_${characterId}`;
   if (summaryCache.has(key)) return summaryCache.get(key);
   const filePath = getSummaryPath(email, characterId);
@@ -603,7 +729,7 @@ function writeSummary(email, characterId, summaryObj) {
   const tmpPath = filePath + '.tmp';
   writeFileSync(tmpPath, JSON.stringify(summaries, null, 2));
   renameSync(tmpPath, filePath);
-  const slug = email ? getEmailSlug(email) : 'guest';
+  const slug = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
   summaryCache.set(`${slug}_${characterId}`, summaries);
 }
 
@@ -622,7 +748,7 @@ function deleteSummary(email, characterId, index) {
   const tmpPath = filePath + '.tmp';
   writeFileSync(tmpPath, JSON.stringify(summaries, null, 2));
   renameSync(tmpPath, filePath);
-  const slug = email ? getEmailSlug(email) : 'guest';
+  const slug = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
   summaryCache.set(`${slug}_${characterId}`, summaries);
   return true;
 }
@@ -1572,9 +1698,6 @@ const ETIQUETTE_GUARDRAIL = 'You may mention that you\'ve chatted with other fri
 // ---------------------------------------------------------------------------
 // Identity Middleware — resolve user from Cloudflare Access header
 // ---------------------------------------------------------------------------
-
-/** @type {string} Fallback email when no Cloudflare header is present. */
-const DEFAULT_USER_EMAIL = process.env.DEFAULT_USER_EMAIL || 'owner@local';
 
 /**
  * Express middleware that identifies the current user from the Cloudflare Access
@@ -3213,7 +3336,14 @@ app.delete('/api/youtube-favorites/:id', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`✿ My Melody Chat is running on port ${PORT} ✿`);
   console.log(`  mem0 mode: ${MEM0_MODE} → ${MEM0_BASE}`);
+
+  // Run one-time data migration (idempotent — checks _migrated flag)
+  try {
+    await migrateOldUsers();
+  } catch (err) {
+    console.error('Migration error (non-fatal):', err.message);
+  }
 });

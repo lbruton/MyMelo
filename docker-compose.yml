@@ -14,6 +14,9 @@ services:
       - DEFAULT_LON=${DEFAULT_LON}
       - NWS_RADAR_STATION=${NWS_RADAR_STATION}
       - NWS_OFFICE=${NWS_OFFICE}
+      - DEFAULT_USER_EMAIL=${DEFAULT_USER_EMAIL:-owner@local}
+      - MIGRATION_EMAIL_AMELIA=${MIGRATION_EMAIL_AMELIA:-}
+      - MIGRATION_EMAIL_LONNIE=${MIGRATION_EMAIL_LONNIE:-}
     volumes:
       - melody-data:/app/data
     depends_on:
