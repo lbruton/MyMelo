@@ -104,7 +104,7 @@ function createVideoThumbWrapper(thumbnailUrl, title, videoId, skipHistory) {
  * @param {{videoId: string, title: string, thumbnail: string, url: string}} video
  */
 function addToVideoHistory(video) {
-  const key = `videoHistory-${activeUser || 'guest'}`;
+  const key = 'videoHistory';
   let history = [];
   try { history = JSON.parse(localStorage.getItem(key) || '[]'); } catch { history = []; }
   // Remove existing entry for this videoId (dedup)
@@ -126,55 +126,20 @@ const CORE_MEMORY_LABELS = {
   insideJokes: 'Inside Jokes'
 };
 
-// ─── User Picker ───
-/** @type {Object<string, string>} Map user IDs to display names. */
-const USER_NAMES = { amelia: 'Amelia', lonnie: 'Lonnie', guest: 'Guest' };
+// ─── Current User (from /api/me) ───
+/** @type {{email: string, displayName: string|null, accentColor: string|null, joinedAt: string|null, needsOnboarding: boolean}|null} */
+let currentUser = null;
 
-const userPicker = document.getElementById('userPicker');
-const activeUserLabel = document.getElementById('activeUserLabel');
-const switchUserBtn = document.getElementById('switchUserBtn');
-
-/** @type {string|null} Currently active user ID from localStorage. */
-let activeUser = localStorage.getItem('melodyActiveUser');
-
-/**
- * Show the user picker overlay.
- *
- * @returns {void}
- */
-function showUserPicker() {
-  userPicker.classList.remove('hidden');
-}
-
-/**
- * Select a user, persist the choice, hide the picker, and update the header label.
- *
- * @param {string} userId - The user ID to activate (e.g. "amelia", "lonnie", "guest").
- * @returns {void}
- */
-function selectUser(userId) {
-  localStorage.setItem('melodyActiveUser', userId);
-  activeUser = userId;
-  userPicker.classList.add('hidden');
-  activeUserLabel.textContent = USER_NAMES[userId] || userId;
-}
-
-// Wire user picker buttons
-userPicker.querySelectorAll('[data-user]').forEach(btn => {
-  btn.addEventListener('click', () => selectUser(btn.dataset.user));
-});
-
-// Wire switch user button in settings
-switchUserBtn.addEventListener('click', () => {
-  settingsDropdown.classList.add('hidden');
-  showUserPicker();
-});
-
-// On load: show picker if no user selected, otherwise update label
-if (!activeUser) {
-  showUserPicker();
-} else {
-  activeUserLabel.textContent = USER_NAMES[activeUser] || activeUser;
+async function fetchCurrentUser() {
+  try {
+    const res = await fetch('/api/me');
+    if (res.ok) {
+      currentUser = await res.json();
+    }
+  } catch {
+    currentUser = null;
+  }
+  return currentUser;
 }
 
 // ─── Character Picker ───
@@ -354,10 +319,8 @@ function selectCharacter(characterId) {
   headerAvatar.src = config.avatar;
   headerAvatar.alt = config.name;
 
-  // Update header title text node (preserves the activeUserLabel span inside h1)
-  if (headerTitle.firstChild?.nodeType === Node.TEXT_NODE) {
-    headerTitle.firstChild.textContent = config.name;
-  }
+  // Update header title
+  headerTitle.textContent = config.name;
 
   // Apply character theme colors
   document.documentElement.style.setProperty('--accent-highlight', config.color);
@@ -408,9 +371,9 @@ async function cycleCharacter() {
   await new Promise(r => setTimeout(r, 700));
   hideTyping();
   try {
-    const res = await fetch(`/api/welcome-status${activeUser ? '?userId=' + activeUser : ''}`);
+    const res = await fetch('/api/welcome-status');
     const status = await res.json();
-    const name = status.friendName || (activeUser && activeUser !== 'guest' ? activeUser : null);
+    const name = status.friendName || (currentUser?.displayName) || null;
     addMessage(char.greetReturn(name || 'friend', status.daysSince ?? 0, status.streakDays ?? 0) + ' \u2661', 'assistant');
   } catch {
     addMessage(char.greetReturn('friend', 0, 0) + ' \u2661', 'assistant');
@@ -722,7 +685,6 @@ function addMessage(text, role, imageDataURL, searchImageUrl, videoResult, sourc
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              userId: activeUser,
               videoId: ytId,
               url: videoResult.url,
               title: videoResult.title || 'Untitled',
@@ -979,7 +941,7 @@ const TAG_REGISTRY = [
             const resp = await fetch('/api/youtube-favorites', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: activeUser, videoId: ytId, url: data.url, title: data.title || 'Untitled', thumbnail: data.thumbnail || '' })
+              body: JSON.stringify({ videoId: ytId, url: data.url, title: data.title || 'Untitled', thumbnail: data.thumbnail || '' })
             });
             if (resp.ok) { saveBtn.textContent = 'Saved \u2665'; saveBtn.classList.add('saved'); }
           } catch (err) { console.error('Failed to save favorite:', err); }
@@ -1301,7 +1263,7 @@ const TAG_REGISTRY = [
           fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: resultMsg, characterId: activeCharacter, sessionId, userId: activeUser })
+            body: JSON.stringify({ message: resultMsg, characterId: activeCharacter, sessionId })
           }).then(r => r.json()).then(res => {
             if (res.reply) addMessage(res.reply, 'assistant');
           }).catch(() => {});
@@ -1708,7 +1670,7 @@ async function sendMessage() {
   messageInput.value = '';
   addMessage(text, 'user', pendingImageDataURL);
 
-  const body = { message: text, replyStyle, sessionId, userId: activeUser, characterId: activeCharacter || 'melody' };
+  const body = { message: text, replyStyle, sessionId, characterId: activeCharacter || 'melody' };
   if (pendingImageBase64) {
     body.imageBase64 = pendingImageBase64;
     body.imageMime = pendingImageMime;
@@ -1890,7 +1852,7 @@ const relationshipStats = document.getElementById('relationshipStats');
  */
 async function loadRelationshipStats() {
   try {
-    const res = await fetch(`/api/relationship${activeUser ? '?userId=' + activeUser : ''}`);
+    const res = await fetch('/api/relationship');
     const stats = await res.json();
     relationshipStats.innerHTML = `
       <div class="stat-card">
@@ -2014,7 +1976,7 @@ function renderCoreMemory(coreMemory, characterId) {
       delBtn.textContent = '\u00D7';
       delBtn.addEventListener('click', async () => {
         try {
-          await fetch(`/api/core-memory/${cat}/${idx}?characterId=${characterId}${activeUser ? '&userId=' + activeUser : ''}`, { method: 'DELETE' });
+          await fetch(`/api/core-memory/${cat}/${idx}?characterId=${characterId}`, { method: 'DELETE' });
           loadMemories();
         } catch (err) {
           console.error('Core memory delete error:', err);
@@ -2066,7 +2028,6 @@ function renderCoreMemory(coreMemory, characterId) {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userId: activeUser || undefined,
             characterId: characterId,
             category: cat,
             entries: updatedEntries
@@ -2195,7 +2156,7 @@ function renderSummaries(summaries, characterId) {
           // The API returns newest-first, so displayIdx 0 = last in stored array
           // We need the stored index: summaries.length - 1 - displayIdx
           const storedIndex = summaries.length - 1 - displayIdx;
-          await fetch(`/api/summaries/${storedIndex}?characterId=${characterId}${activeUser ? '&userId=' + activeUser : ''}`, { method: 'DELETE' });
+          await fetch(`/api/summaries/${storedIndex}?characterId=${characterId}`, { method: 'DELETE' });
           loadMemories();
         } catch (err) {
           console.error('Summary delete error:', err);
@@ -2244,7 +2205,7 @@ async function loadMemories() {
   // Load core memory section
   try {
     const _cmCharId = CHARACTER_CONFIG[activeCharacter] ? activeCharacter : 'melody';
-    const cmRes = await fetch(`/api/core-memory?characterId=${_cmCharId}${activeUser ? '&userId=' + activeUser : ''}`);
+    const cmRes = await fetch(`/api/core-memory?characterId=${_cmCharId}`);
     const coreMemory = await cmRes.json();
     renderCoreMemory(coreMemory, _cmCharId);
   } catch (e) {
@@ -2254,7 +2215,7 @@ async function loadMemories() {
   // Load conversation summaries section
   try {
     const _sumCharId = CHARACTER_CONFIG[activeCharacter] ? activeCharacter : 'melody';
-    const sumRes = await fetch(`/api/summaries?characterId=${_sumCharId}${activeUser ? '&userId=' + activeUser : ''}`);
+    const sumRes = await fetch(`/api/summaries?characterId=${_sumCharId}`);
     const summaries = await sumRes.json();
     renderSummaries(summaries, _sumCharId);
   } catch (e) {
@@ -2264,7 +2225,7 @@ async function loadMemories() {
   memoryList.innerHTML = '<p class="empty-state">Loading memories...</p>';
   try {
     const _charId = CHARACTER_CONFIG[activeCharacter] ? activeCharacter : 'melody';
-    const _memoriesUrl = `/api/memories?characterId=${_charId}${activeUser ? '&userId=' + activeUser : ''}`;
+    const _memoriesUrl = `/api/memories?characterId=${_charId}`;
     const res = await fetch(_memoriesUrl);
     const memories = await res.json();
 
@@ -2284,7 +2245,7 @@ async function loadMemories() {
       // Track label — use actual name for friend track, character name for agent track
       const trackLabel = document.createElement('span');
       trackLabel.className = `memory-track-label ${mem.track || 'friend'}`;
-      const friendName = USER_NAMES[activeUser] || 'Friend';
+      const friendName = currentUser?.displayName || 'Friend';
       const trackCharConfig = CHARACTER_CONFIG[mem.track];
       trackLabel.textContent = trackCharConfig ? `${trackCharConfig.name}'s Thoughts` : `About ${friendName}`;
       info.appendChild(trackLabel);
@@ -2340,7 +2301,7 @@ async function loadVideosTab() {
   // Load saved favorites from server
   let favorites = [];
   try {
-    const res = await fetch(`/api/youtube-favorites?userId=${activeUser || 'guest'}`);
+    const res = await fetch('/api/youtube-favorites');
     favorites = await res.json();
   } catch (err) {
     console.error('Failed to load favorites:', err);
@@ -2348,7 +2309,7 @@ async function loadVideosTab() {
 
   // Load play history from localStorage
   let history = [];
-  try { history = JSON.parse(localStorage.getItem(`videoHistory-${activeUser || 'guest'}`) || '[]'); } catch { history = []; }
+  try { history = JSON.parse(localStorage.getItem('videoHistory') || '[]'); } catch { history = []; }
 
   // Filter history to exclude already-saved videos
   const savedIds = new Set(favorites.map(f => f.videoId));
@@ -2411,7 +2372,6 @@ function createVideoCard(video, mode) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userId: activeUser,
             videoId: video.videoId,
             url: video.url || `https://www.youtube.com/watch?v=${video.videoId}`,
             title: video.title || 'Untitled',
@@ -2438,7 +2398,7 @@ function createVideoCard(video, mode) {
     delBtn.title = 'Remove';
     delBtn.addEventListener('click', async () => {
       try {
-        await fetch(`/api/youtube-favorites/${video.id}?userId=${activeUser || 'guest'}`, { method: 'DELETE' });
+        await fetch(`/api/youtube-favorites/${video.id}`, { method: 'DELETE' });
         card.remove();
         const savedGrid = document.getElementById('savedGrid');
         const savedSection = document.getElementById('savedSection');
@@ -2519,32 +2479,27 @@ async function runWelcomeFlow() {
   const char = CHARACTER_CONFIG[activeCharacter] || CHARACTER_CONFIG.melody;
   const welcomeEl = chatArea.querySelector('.welcome-message');
 
-  // Check server-side status first — the server knows if this is a returning user
-  // even when localStorage is cleared (e.g., new browser, cleared cache)
-  const welcomeKey = activeUser ? `melodyWelcomeDone-${activeUser}` : 'melodyWelcomeDone';
-  try {
-    const res = await fetch(`/api/welcome-status${activeUser ? '?userId=' + activeUser : ''}`);
-    const status = await res.json();
+  // Fetch current user profile — identity derived from Cloudflare header
+  await fetchCurrentUser();
 
-    if (status.status === 'returning') {
-      // Server recognizes this user — set localStorage so future loads are instant
-      localStorage.setItem(welcomeKey, 'true');
+  if (!currentUser || !currentUser.needsOnboarding) {
+    // Returning user — show personalized greeting
+    try {
+      const res = await fetch('/api/welcome-status');
+      const status = await res.json();
 
-      const name = status.friendName || 'friend';
-      const welcomeText = char.greetReturn(name, status.daysSince, status.streakDays);
-      if (welcomeEl) welcomeEl.querySelector('p').textContent = welcomeText + ' \u2661';
-      return;
+      if (status.status === 'returning') {
+        const name = status.friendName || currentUser?.displayName || 'friend';
+        const welcomeText = char.greetReturn(name, status.daysSince, status.streakDays);
+        if (welcomeEl) welcomeEl.querySelector('p').textContent = welcomeText + ' \u2661';
+      }
+    } catch {
+      // Network error — keep default welcome message
     }
-  } catch {
-    // Network error — fall through to localStorage check or onboarding
-  }
-
-  // If localStorage says done but server didn't respond, trust localStorage
-  if (localStorage.getItem(welcomeKey)) {
     return;
   }
 
-  // First-time interactive welcome
+  // First-time interactive welcome (needsOnboarding === true)
   if (welcomeEl) welcomeEl.remove();
 
   // Enable welcome mode — sendMessage will route inputs to welcomeResolve
@@ -2580,7 +2535,7 @@ async function runWelcomeFlow() {
   await fetch('/api/welcome', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'name', value: nameRaw, userId: activeUser })
+    body: JSON.stringify({ type: 'name', value: nameRaw })
   });
 
   await melodyTyping(800);
@@ -2598,7 +2553,7 @@ async function runWelcomeFlow() {
   await fetch('/api/welcome', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'color', value: colorRaw, userId: activeUser })
+    body: JSON.stringify({ type: 'color', value: colorRaw })
   });
 
   applyAccentColor(color);
@@ -2615,7 +2570,7 @@ async function runWelcomeFlow() {
   await fetch('/api/welcome', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'interests', value: interests, userId: activeUser })
+    body: JSON.stringify({ type: 'interests', value: interests })
   });
 
   await melodyTyping(1000);
@@ -2624,8 +2579,10 @@ async function runWelcomeFlow() {
   await melodyTyping(600);
   addMessage(char.greetFinish2, 'assistant');
 
-  // Restore normal chat (per-user welcome state)
-  localStorage.setItem(welcomeKey, 'true');
+  // Re-fetch /api/me to refresh local state (needsOnboarding becomes false)
+  await fetchCurrentUser();
+
+  // Restore normal chat
   messageInput.placeholder = char.placeholder;
   imageBtn.style.display = ''; // Restore image button
   welcomeActive = false;
@@ -2821,8 +2778,7 @@ function renderWYRCard(optionA, optionB) {
         body: JSON.stringify({
           message: `[WYR_RESULT: ${option}]`,
           characterId: activeCharacter,
-          sessionId,
-          userId: activeUser
+          sessionId
         })
       }).then(r => r.json()).then(res => {
         if (res.reply) addMessage(res.reply, 'assistant');
@@ -2972,8 +2928,7 @@ function renderCharadesCard(emojis, answer, hint) {
       body: JSON.stringify({
         message: `[CHARADES_GUESS: ${guess} | ${answer}]`,
         characterId: activeCharacter,
-        sessionId,
-        userId: activeUser
+        sessionId
       })
     }).then(r => r.json()).then(res => {
       if (res.reply) addMessage(res.reply, 'assistant');
@@ -3175,7 +3130,7 @@ function renderTriviaShowdown(totalRounds, category) {
     fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: resultMsg, characterId: activeCharacter, sessionId, userId: activeUser })
+      body: JSON.stringify({ message: resultMsg, characterId: activeCharacter, sessionId })
     }).then(r => r.json()).then(res => {
       if (res.reply) addMessage(res.reply, 'assistant');
     }).catch(() => {});
