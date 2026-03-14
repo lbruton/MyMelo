@@ -87,7 +87,20 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Stale-while-revalidate for static assets
+  // Network-first for HTML (ensures SW registration updates propagate)
+  if (e.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
+    e.respondWith(
+      fetch(e.request).then(response => {
+        if (response.ok) {
+          caches.open(CACHE_NAME).then(cache => cache.put(e.request, response.clone()));
+        }
+        return response;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Stale-while-revalidate for other static assets (js, css, images)
   e.respondWith(
     caches.open(CACHE_NAME).then(cache =>
       cache.match(e.request).then(cached => {

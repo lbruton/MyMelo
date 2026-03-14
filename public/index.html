@@ -221,9 +221,26 @@
 
   <script src="app.js"></script>
   <script>
-    // Service Worker registration
+    // Service Worker registration — updateViaCache:'none' forces network fetch of sw.js
+    // on every navigation so cache version bumps propagate immediately
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+        .then(reg => {
+          // Check for updates on every page load
+          reg.update().catch(() => {});
+          // When a new SW is waiting, tell it to activate immediately
+          reg.addEventListener('updatefound', () => {
+            const newSW = reg.installing;
+            if (newSW) {
+              newSW.addEventListener('statechange', () => {
+                if (newSW.state === 'activated') {
+                  window.location.reload();
+                }
+              });
+            }
+          });
+        })
+        .catch(() => {});
     }
   </script>
 </body>
