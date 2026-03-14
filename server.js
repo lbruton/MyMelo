@@ -458,6 +458,15 @@ loadUserProfiles();
 async function migrateOldUsers() {
   let usersData = readJSON(USERS_FILE);
   if (!usersData || Array.isArray(usersData)) usersData = {};
+  // Backfill displayName for migrated profiles missing it (runs every startup, idempotent)
+  for (const [email, profile] of userProfileCache) {
+    if (profile.migratedFrom && !profile.displayName) {
+      const name = profile.migratedFrom.charAt(0).toUpperCase() + profile.migratedFrom.slice(1);
+      updateUserProfile(email, { displayName: name });
+      console.log(`Backfilled displayName "${name}" for migrated user ${getEmailSlug(email)}`);
+    }
+  }
+
   if (usersData._migrated) {
     console.log('Migration already completed — skipping');
     return;
@@ -569,14 +578,6 @@ async function migrateOldUsers() {
     writeJSON(USERS_FILE, currentData);
   }
 
-  // Patch: backfill displayName for migrated profiles that are missing it
-  for (const [email, profile] of userProfileCache) {
-    if (profile.migratedFrom && !profile.displayName) {
-      const name = profile.migratedFrom.charAt(0).toUpperCase() + profile.migratedFrom.slice(1);
-      updateUserProfile(email, { displayName: name });
-      console.log(`Backfilled displayName "${name}" for migrated user ${getEmailSlug(email)}`);
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
