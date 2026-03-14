@@ -104,7 +104,7 @@ function createVideoThumbWrapper(thumbnailUrl, title, videoId, skipHistory) {
  * @param {{videoId: string, title: string, thumbnail: string, url: string}} video
  */
 function addToVideoHistory(video) {
-  const key = 'videoHistory';
+  const key = currentUser?.email ? `videoHistory-${currentUser.email}` : 'videoHistory';
   let history = [];
   try { history = JSON.parse(localStorage.getItem(key) || '[]'); } catch { history = []; }
   // Remove existing entry for this videoId (dedup)
@@ -2309,7 +2309,8 @@ async function loadVideosTab() {
 
   // Load play history from localStorage
   let history = [];
-  try { history = JSON.parse(localStorage.getItem('videoHistory') || '[]'); } catch { history = []; }
+  const historyKey = currentUser?.email ? `videoHistory-${currentUser.email}` : 'videoHistory';
+  try { history = JSON.parse(localStorage.getItem(historyKey) || '[]'); } catch { history = []; }
 
   // Filter history to exclude already-saved videos
   const savedIds = new Set(favorites.map(f => f.videoId));

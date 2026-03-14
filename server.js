@@ -1768,17 +1768,20 @@ app.post('/api/chat', async (req, res) => {
 
     // Build identity context for the system prompt
     const userName = req.userProfile?.displayName || null;
+
+    // Build list of OTHER known user display names (used for identity guard, agent memory filtering, and cross-user search)
+    const otherDisplayNames = [];
+    for (const [otherEmail, profile] of userProfileCache) {
+      if (otherEmail !== email && profile.displayName) {
+        otherDisplayNames.push(profile.displayName);
+      }
+    }
+    const otherNamesLower = otherDisplayNames.map(n => n.toLowerCase());
+
     let identityContext = '';
     if (userName) {
-      // Build list of OTHER known user display names for the identity guard
-      const otherNames = [];
-      for (const [otherEmail, profile] of userProfileCache) {
-        if (otherEmail !== email && profile.displayName) {
-          otherNames.push(profile.displayName);
-        }
-      }
-      const otherNamesStr = otherNames.length > 0
-        ? ` You also chat with ${otherNames.join(' and ')}, but they are NOT here right now. Do not address ${userName} as ${otherNames.join(' or ')} — they are different people.`
+      const otherNamesStr = otherDisplayNames.length > 0
+        ? ` You also chat with ${otherDisplayNames.join(' and ')}, but they are NOT here right now. Do not address ${userName} as ${otherDisplayNames.join(' or ')} — they are different people.`
         : '';
       identityContext = `\n\n[CURRENT USER] You are currently talking to your friend ${userName}. Address them as ${userName}. Do not confuse them with anyone else.${otherNamesStr}`;
     }
@@ -1801,16 +1804,10 @@ app.post('/api/chat', async (req, res) => {
       : '';
 
     // Filter agent memories: deprioritize memories about other users to avoid identity bleed
-    const otherUserNames = [];
-    for (const [otherEmail, profile] of userProfileCache) {
-      if (otherEmail !== email && profile.displayName) {
-        otherUserNames.push(profile.displayName.toLowerCase());
-      }
-    }
     const filteredAgentMemories = agentMemories.filter(m => {
       const text = (m.memory || m.text || m.content || '').toLowerCase();
       // Keep if it mentions the current user or doesn't mention any other user
-      return !otherUserNames.some(name => text.includes(name));
+      return !otherNamesLower.some(name => text.includes(name));
     });
 
     const agentMemoryContext = filteredAgentMemories.length > 0
@@ -2476,18 +2473,22 @@ app.post('/api/welcome', async (req, res) => {
         return res.status(400).json({ error: 'Invalid type' });
     }
 
-    // Save to mem0 user track (per-user)
-    await fetch(`${MEM0_BASE}/v1/memories/`, {
-      method: 'POST',
-      headers: {
-        ...mem0Headers()
-      },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content: memoryText }],
-        user_id: getUserMemId(email),
-        infer: true
-      })
-    });
+    // Save to mem0 user track (per-user) — fire-and-forget, don't block welcome flow
+    try {
+      await fetch(`${MEM0_BASE}/v1/memories/`, {
+        method: 'POST',
+        headers: {
+          ...mem0Headers()
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: memoryText }],
+          user_id: getUserMemId(email),
+          infer: true
+        })
+      });
+    } catch (memErr) {
+      console.error('Welcome mem0 save failed (non-fatal):', memErr.message);
+    }
 
     // Persist display name to user profile store (data/users.json)
     if (type === 'name') {
