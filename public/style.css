@@ -660,6 +660,8 @@ html, body {
 
 .core-memory-content.open {
   display: block;
+  max-height: 50vh;
+  overflow-y: auto;
 }
 
 .core-memory-category {

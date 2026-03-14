@@ -1554,7 +1554,7 @@ async function extractCoreMemory(userMessage, assistantReply, email, characterId
     model: EXTRACTION_MODEL_ID,
     contents: `User: ${userMessage}\nAssistant: ${assistantReply}`,
     config: {
-      systemInstruction: 'Extract personal facts from this conversation that should be permanently remembered. Categorize into: aboutYou (name, age, location, occupation), familyAndPets (family members, pets), preferences (favorites, hobbies), importantDates (birthdays, anniversaries), insideJokes (shared humor). Return JSON with these keys. Each value is an array of short fact strings. Return empty arrays for categories with no new facts. Only extract CLEAR, EXPLICIT facts — do not infer or guess.',
+      systemInstruction: 'Extract personal facts about the USER (the human) from this conversation that should be permanently remembered. The assistant is a fictional Sanrio character — do NOT extract the character\'s name, occupation, species, personality, backstory, or any facts about the character as user facts. If the assistant says "I work in accounting" or "I love baking", that is about the CHARACTER, not the user. Only extract facts the USER explicitly reveals about THEMSELVES. Categorize into: aboutYou (name, age, location, occupation), familyAndPets (family members, pets), preferences (favorites, hobbies), importantDates (birthdays, anniversaries), insideJokes (shared humor). Return JSON with these keys. Each value is an array of short fact strings. Return empty arrays for categories with no new facts. Only extract CLEAR, EXPLICIT facts — do not infer or guess.',
       responseMimeType: 'application/json'
     }
   });
