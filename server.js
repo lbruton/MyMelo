@@ -166,6 +166,8 @@ const SUMMARIES_DIR = join(DATA_DIR, 'summaries');
 if (!existsSync(SUMMARIES_DIR)) mkdirSync(SUMMARIES_DIR, { recursive: true });
 /** @type {string} Path to YouTube favorites JSON file. */
 const YT_FAVORITES_FILE = join(DATA_DIR, 'youtube-favorites.json');
+/** @type {string} Path to user profile store JSON file. */
+const USERS_FILE = join(DATA_DIR, 'users.json');
 if (!existsSync(YT_FAVORITES_FILE)) writeFileSync(YT_FAVORITES_FILE, '{}');
 if (!existsSync(IMAGES_META)) writeFileSync(IMAGES_META, '[]');
 if (!existsSync(RELATIONSHIP_FILE)) writeFileSync(RELATIONSHIP_FILE, JSON.stringify({
@@ -176,6 +178,19 @@ if (!existsSync(RELATIONSHIP_FILE)) writeFileSync(RELATIONSHIP_FILE, JSON.string
   lastStreakDate: null,
   milestones: []
 }));
+
+// Auto-create users.json if missing or corrupted
+try {
+  if (existsSync(USERS_FILE)) {
+    const raw = readFileSync(USERS_FILE, 'utf-8');
+    JSON.parse(raw); // validate JSON
+  } else {
+    writeFileSync(USERS_FILE, '{}');
+  }
+} catch {
+  console.warn('users.json was corrupted — resetting to {}');
+  writeFileSync(USERS_FILE, '{}');
+}
 
 /**
  * Registry of supported game wikis for the wiki search pipeline.
@@ -325,6 +340,106 @@ function readJSON(path) {
 function writeJSON(path, data) {
   writeFileSync(path, JSON.stringify(data, null, 2));
 }
+
+// ---------------------------------------------------------------------------
+// User Profile Store — email-based identity with in-memory cache
+// ---------------------------------------------------------------------------
+
+/** @type {Map<string, object>} In-memory cache for user profiles, keyed by email. */
+const userProfileCache = new Map();
+
+/**
+ * Convert an email address into a filesystem/URL-safe slug.
+ * Lowercase, replace @ with -at-, replace dots/non-alphanumeric with -, truncate to 50 chars.
+ * @param {string} email
+ * @returns {string}
+ */
+function getEmailSlug(email) {
+  return email
+    .toLowerCase()
+    .replace(/@/g, '-at-')
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 50);
+}
+
+/**
+ * Load all user profiles from disk into the cache (called once at startup).
+ * @returns {void}
+ */
+function loadUserProfiles() {
+  try {
+    const profiles = JSON.parse(readFileSync(USERS_FILE, 'utf-8'));
+    if (profiles && typeof profiles === 'object' && !Array.isArray(profiles)) {
+      for (const [email, profile] of Object.entries(profiles)) {
+        userProfileCache.set(email, profile);
+      }
+      console.log(`Loaded ${userProfileCache.size} user profile(s)`);
+    }
+  } catch {
+    console.warn('Failed to load user profiles — starting with empty cache');
+  }
+}
+
+/**
+ * Persist the entire user profile cache to disk.
+ * @returns {void}
+ */
+function persistUserProfiles() {
+  const obj = {};
+  for (const [email, profile] of userProfileCache) {
+    obj[email] = profile;
+  }
+  writeJSON(USERS_FILE, obj);
+}
+
+/**
+ * Get a user profile by email.
+ * @param {string} email
+ * @returns {object|null} Profile object or null if not found
+ */
+function getUserProfile(email) {
+  return userProfileCache.get(email) || null;
+}
+
+/**
+ * Create a new user profile for the given email.
+ * @param {string} email
+ * @returns {object} The newly created profile
+ */
+function createUserProfile(email) {
+  const profile = {
+    displayName: null,
+    emailSlug: getEmailSlug(email),
+    joinedAt: new Date().toISOString(),
+    accentColor: null
+  };
+  userProfileCache.set(email, profile);
+  persistUserProfiles();
+  return profile;
+}
+
+/**
+ * Update an existing user profile with partial data.
+ * Creates the profile first if it doesn't exist.
+ * @param {string} email
+ * @param {object} updates - Fields to merge into the profile
+ * @returns {object} The updated profile
+ */
+function updateUserProfile(email, updates) {
+  let profile = getUserProfile(email);
+  if (!profile) {
+    profile = createUserProfile(email);
+  }
+  Object.assign(profile, updates);
+  userProfileCache.set(email, profile);
+  persistUserProfiles();
+  return profile;
+}
+
+// Load user profiles into cache at startup
+loadUserProfiles();
 
 // ---------------------------------------------------------------------------
 // Core Memory — structured per-user, per-character memory blocks
@@ -1453,6 +1568,36 @@ setInterval(() => {
     }
   }
 }, 10 * 60 * 1000);
+
+// ---------------------------------------------------------------------------
+// Identity Middleware — resolve user from Cloudflare Access header
+// ---------------------------------------------------------------------------
+
+/** @type {string} Fallback email when no Cloudflare header is present. */
+const DEFAULT_USER_EMAIL = process.env.DEFAULT_USER_EMAIL || 'owner@local';
+
+/**
+ * Express middleware that identifies the current user from the Cloudflare Access
+ * authenticated email header, with env-var and hardcoded fallbacks.
+ * Looks up or auto-creates a profile in data/users.json.
+ * Sets req.userEmail and req.userProfile on the request object.
+ */
+function identifyUser(req, res, next) {
+  const cfEmail = req.headers['cf-access-authenticated-user-email'];
+  const email = cfEmail || DEFAULT_USER_EMAIL;
+
+  let profile = getUserProfile(email);
+  if (!profile) {
+    profile = createUserProfile(email);
+  }
+
+  req.userEmail = email;
+  req.userProfile = profile;
+  next();
+}
+
+// Apply identity middleware to all API routes
+app.use('/api', identifyUser);
 
 /**
  * POST /api/chat — Send a message to My Melody.
