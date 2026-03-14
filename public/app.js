@@ -584,6 +584,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     // Lazy load tab data
     if (target === 'tabImages') loadGallery();
     else if (target === 'tabMemories') loadMemories();
+    else if (target === 'tabJournal') loadJournalTab();
     else if (target === 'tabVideos') loadVideosTab();
   });
 });
@@ -2066,10 +2067,18 @@ function renderCoreMemory(coreMemory, characterId) {
  * @param {Array} summaries - Array of summary objects from the API.
  * @param {string} characterId - Active character ID for API calls.
  */
-function renderSummaries(summaries, characterId) {
+function renderSummaries(summaries, characterId, targetContainer, onRefresh) {
   // Get or create section container
   let section = document.getElementById('summariesSection');
-  if (!section) {
+  if (targetContainer) {
+    // Render into a specific container (e.g. Journal tab)
+    section = targetContainer.querySelector('.summaries-section');
+    if (!section) {
+      section = document.createElement('div');
+      section.className = 'summaries-section';
+      targetContainer.appendChild(section);
+    }
+  } else if (!section) {
     section = document.createElement('div');
     section.id = 'summariesSection';
     section.className = 'summaries-section';
@@ -2157,7 +2166,8 @@ function renderSummaries(summaries, characterId) {
           // We need the stored index: summaries.length - 1 - displayIdx
           const storedIndex = summaries.length - 1 - displayIdx;
           await fetch(`/api/summaries/${storedIndex}?characterId=${characterId}`, { method: 'DELETE' });
-          loadMemories();
+          if (onRefresh) onRefresh();
+          else loadMemories();
         } catch (err) {
           console.error('Summary delete error:', err);
         }
@@ -2279,6 +2289,38 @@ async function loadMemories() {
   } catch {
     memoryList.innerHTML = '<p class="empty-state">Could not load memories</p>';
   }
+}
+
+// ─── Journal Tab ───
+async function loadJournalTab() {
+  const journalList = document.getElementById('journalList');
+  if (!journalList) return;
+
+  const charConfig = CHARACTER_CONFIG[activeCharacter] || CHARACTER_CONFIG.melody;
+  const charId = CHARACTER_CONFIG[activeCharacter] ? activeCharacter : 'melody';
+
+  // Update tab header with character name
+  const journalHeader = document.querySelector('#tabJournal .tab-header h2');
+  if (journalHeader) {
+    journalHeader.textContent = `${charConfig.name}'s Journal`;
+  }
+
+  journalList.innerHTML = '<p class="empty-state">Loading journal...</p>';
+
+  try {
+    const res = await fetch(`/api/summaries?characterId=${charId}`);
+    const summaries = await res.json();
+    journalList.innerHTML = '';
+    renderSummaries(summaries, charId, journalList, loadJournalTab);
+  } catch (err) {
+    journalList.innerHTML = '<p class="empty-state">Could not load journal entries</p>';
+  }
+}
+
+// Journal refresh button
+const refreshJournalBtn = document.getElementById('refreshJournalBtn');
+if (refreshJournalBtn) {
+  refreshJournalBtn.addEventListener('click', loadJournalTab);
 }
 
 // ─── Music Tab ───
