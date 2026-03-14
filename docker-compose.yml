@@ -14,6 +14,9 @@ services:
       - DEFAULT_LON=${DEFAULT_LON}
       - NWS_RADAR_STATION=${NWS_RADAR_STATION}
       - NWS_OFFICE=${NWS_OFFICE}
+      - DEFAULT_USER_EMAIL=${DEFAULT_USER_EMAIL:-owner@local}       # Fallback identity when Cloudflare Access header is absent (LAN access)
+      - MIGRATION_EMAIL_AMELIA=${MIGRATION_EMAIL_AMELIA:-}         # Email to migrate Amelia's legacy data to (one-time, leave empty to skip)
+      - MIGRATION_EMAIL_LONNIE=${MIGRATION_EMAIL_LONNIE:-}         # Email to migrate Lonnie's legacy data to (one-time, leave empty to skip)
     volumes:
       - melody-data:/app/data
     depends_on:

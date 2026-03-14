@@ -1455,7 +1455,7 @@ html, body {
   }
 }
 
-/* ─── User Picker ─── */
+/* ─── Picker Overlay (shared by character picker) ─── */
 .user-picker-overlay {
   position: fixed;
   top: 0;
@@ -1478,34 +1478,6 @@ html, body {
   text-align: center;
   font-family: 'Quicksand', sans-serif;
   font-weight: 700;
-}
-.user-picker-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 220px;
-}
-.user-picker-btn {
-  padding: 14px 24px;
-  border-radius: 12px;
-  border: 2px solid #d4447c;
-  background: #fff;
-  color: #d4447c;
-  font-family: 'Quicksand', sans-serif;
-  font-size: 1.1em;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s, color 0.2s;
-}
-.user-picker-btn:hover {
-  background: #d4447c;
-  color: #fff;
-}
-.active-user-label {
-  font-size: 0.75em;
-  opacity: 0.7;
-  margin-left: 8px;
-  font-weight: normal;
 }
 
 /* ─── Character Picker ─── */

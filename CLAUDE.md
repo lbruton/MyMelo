@@ -55,7 +55,16 @@ data/                  — Persisted via Docker volume (melody-data)
   images/              — User-uploaded images (saved as UUID.jpg)
   images-meta.json     — Image metadata (caption, reply, date)
   relationship.json    — Friendship stats (first chat, total chats, streak)
+  users.json           — Dynamic user profile store (email → profile mapping)
 ```
+
+### User Identity via Cloudflare Access
+
+All requests pass through Cloudflare Access, which sets the `Cf-Access-Authenticated-User-Email` header with the authenticated user's email address.
+
+**Request flow:** Cloudflare Access → `Cf-Access-Authenticated-User-Email` header → `identifyUser` middleware → `req.userEmail` / `req.userProfile` → route handlers
+
+The `identifyUser` middleware (applied to all `/api/*` routes) extracts the email from the Cloudflare header, falls back to the `DEFAULT_USER_EMAIL` env var (for LAN access without Cloudflare), and auto-creates a profile in `data/users.json` for new users. Every route handler uses `req.userEmail` as the canonical identity — the server ignores any client-sent userId.
 
 ## External Services
 
@@ -76,8 +85,8 @@ data/                  — Persisted via Docker volume (melody-data)
 
 ### mem0 Dual-Track Memory
 
-- **User track** (`user_id: melody-friend`) — Facts about the friend (name, preferences, life events)
-- **Agent track** (`agent_id: my-melody`) — Melody's own evolving personality, opinions, experiences
+- **User track** (`user_id: melody-friend-{emailSlug}`) — Per-user facts (name, preferences, life events). Email slug derived via `getEmailSlug(email)`
+- **Agent track** (`agent_id: my-melody`) — Melody's own evolving personality, opinions, experiences (global, not per-user)
 - Both tracks are searched in parallel on each chat request and injected into the system prompt
 - Both tracks are saved to after each exchange (fire-and-forget)
 - Memories tab in frontend shows both tracks labeled "Friend" and "Melody"
@@ -127,6 +136,7 @@ Tags are stripped from display text before rendering. Debug log in server.js pri
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| GET | `/api/me` | Current user profile + `needsOnboarding` flag (from Cloudflare identity) |
 | POST | `/api/chat` | Send message (accepts `message`, `imageBase64`, `imageMime`, `replyStyle`) |
 | GET | `/api/images` | List saved image metadata |
 | DELETE | `/api/images/:id` | Delete a saved image |
@@ -138,7 +148,7 @@ Tags are stripped from display text before rendering. Debug log in server.js pri
 | DELETE | `/api/memories/:id` | Delete a specific memory |
 | GET | `/api/relationship` | Friendship stats (days, chats, streak) |
 | GET | `/api/welcome-status` | Check if new or returning user (for welcome flow) |
-| POST | `/api/welcome` | Save onboarding data (name, color, interests) to mem0 |
+| POST | `/api/welcome` | Save onboarding data (name, color, interests) to mem0 + display name to user profile |
 
 ## Build & Run
 
@@ -209,10 +219,13 @@ Uses Ali:Chat format (example dialogues in system prompt) per SillyTavern commun
 ## Environment Variables (docker-compose.yml)
 
 ```yaml
-GEMINI_API_KEY=...       # Google AI Studio key (Gemini 3.1 Pro)
-MEM0_API_KEY=...         # mem0.ai API token
-BRAVE_API_KEY=...        # Brave Search API subscription token (from Infisical: StakTrakr/dev)
-MEM0_USER_ID=...         # Optional, defaults to "melody-friend"
+GEMINI_API_KEY=...                # Google AI Studio key (Gemini 3.1 Pro)
+MEM0_API_KEY=...                  # mem0.ai API token
+BRAVE_API_KEY=...                 # Brave Search API subscription token (from Infisical: StakTrakr/dev)
+MEM0_USER_ID=...                  # Optional, backward-compat fallback for mem0 user_id (defaults to "melody-friend")
+DEFAULT_USER_EMAIL=...            # Fallback email when Cloudflare header is absent (e.g., LAN access). Defaults to "owner@local"
+MIGRATION_EMAIL_AMELIA=...        # Email address to migrate Amelia's legacy userId-based data to (one-time migration)
+MIGRATION_EMAIL_LONNIE=...        # Email address to migrate Lonnie's legacy userId-based data to (one-time migration)
 ```
 
 API keys are stored in Infisical under the StakTrakr project, dev environment.

@@ -15,7 +15,7 @@
  * @property {string} [imageMime] - MIME type of the image (default: image/jpeg)
  * @property {string} [replyStyle] - Reply verbosity: 'default' | 'brief' | 'detailed'
  * @property {string} [sessionId] - Stable session identifier for multi-turn conversation buffer
- * @property {string} [userId] - Active user identity key (e.g., 'amelia', 'lonnie', 'guest')
+ * @property {string} [userId] - Deprecated: client-sent userId is ignored. Identity comes from req.userEmail (Cloudflare header)
  */
 
 /**
@@ -84,12 +84,14 @@ const MEM0_USER_ID = process.env.MEM0_USER_ID || 'melody-friend';
 /** @type {string} mem0 agent track ID — stores Melody's evolving personality. */
 const MEM0_AGENT_ID = 'my-melody';
 
-/** @type {Object<string, {name: string, mem0Id: string}>} Known user configurations. */
-const KNOWN_USERS = {
-  amelia: { name: 'Amelia', mem0Id: 'melody-friend-amelia' },
-  lonnie: { name: 'Lonnie', mem0Id: 'melody-friend-lonnie' },
-  guest:  { name: 'Guest',  mem0Id: 'melody-friend-guest' }
+/** @type {Object<string, string|undefined>} Maps old user slugs to their real email (from env vars) for one-time data migration. */
+const MIGRATION_MAP = {
+  amelia: process.env.MIGRATION_EMAIL_AMELIA,
+  lonnie: process.env.MIGRATION_EMAIL_LONNIE
 };
+
+/** @type {string} Fallback email when no Cloudflare header is present (LAN access). */
+const DEFAULT_USER_EMAIL = process.env.DEFAULT_USER_EMAIL || 'owner@local';
 
 /**
  * Registry of available chat characters.
@@ -139,13 +141,13 @@ function getCharacter(characterId) {
 }
 
 /**
- * Derive mem0 user_id from a userId key.
- * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest')
- * @returns {string} mem0 user_id (e.g., 'melody-friend-amelia') or fallback 'melody-friend'
+ * Derive mem0 user_id from an email address.
+ * @param {string} email - User email address
+ * @returns {string} mem0 user_id (e.g., 'melody-friend-lonnie-bruton-at-gmail-com')
  */
-function getUserMemId(userId) {
-  if (userId && KNOWN_USERS[userId]) return KNOWN_USERS[userId].mem0Id;
-  return MEM0_USER_ID; // backward compat fallback
+function getUserMemId(email) {
+  if (!email) return MEM0_USER_ID; // backward compat fallback
+  return `melody-friend-${getEmailSlug(email)}`;
 }
 
 /** @type {string} Root data directory path (Docker volume mount point). */
@@ -166,6 +168,8 @@ const SUMMARIES_DIR = join(DATA_DIR, 'summaries');
 if (!existsSync(SUMMARIES_DIR)) mkdirSync(SUMMARIES_DIR, { recursive: true });
 /** @type {string} Path to YouTube favorites JSON file. */
 const YT_FAVORITES_FILE = join(DATA_DIR, 'youtube-favorites.json');
+/** @type {string} Path to user profile store JSON file. */
+const USERS_FILE = join(DATA_DIR, 'users.json');
 if (!existsSync(YT_FAVORITES_FILE)) writeFileSync(YT_FAVORITES_FILE, '{}');
 if (!existsSync(IMAGES_META)) writeFileSync(IMAGES_META, '[]');
 if (!existsSync(RELATIONSHIP_FILE)) writeFileSync(RELATIONSHIP_FILE, JSON.stringify({
@@ -176,6 +180,19 @@ if (!existsSync(RELATIONSHIP_FILE)) writeFileSync(RELATIONSHIP_FILE, JSON.string
   lastStreakDate: null,
   milestones: []
 }));
+
+// Auto-create users.json if missing or corrupted
+try {
+  if (existsSync(USERS_FILE)) {
+    const raw = readFileSync(USERS_FILE, 'utf-8');
+    JSON.parse(raw); // validate JSON
+  } else {
+    writeFileSync(USERS_FILE, '{}');
+  }
+} catch {
+  console.warn('users.json was corrupted — resetting to {}');
+  writeFileSync(USERS_FILE, '{}');
+}
 
 /**
  * Registry of supported game wikis for the wiki search pipeline.
@@ -327,6 +344,231 @@ function writeJSON(path, data) {
 }
 
 // ---------------------------------------------------------------------------
+// User Profile Store — email-based identity with in-memory cache
+// ---------------------------------------------------------------------------
+
+/** @type {Map<string, object>} In-memory cache for user profiles, keyed by email. */
+const userProfileCache = new Map();
+
+/**
+ * Convert an email address into a filesystem/URL-safe slug.
+ * Lowercase, replace @ with -at-, replace dots/non-alphanumeric with -, truncate to 50 chars.
+ * @param {string} email
+ * @returns {string}
+ */
+function getEmailSlug(email) {
+  return email
+    .toLowerCase()
+    .replace(/@/g, '-at-')
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 50);
+}
+
+/**
+ * Load all user profiles from disk into the cache (called once at startup).
+ * @returns {void}
+ */
+function loadUserProfiles() {
+  try {
+    const profiles = JSON.parse(readFileSync(USERS_FILE, 'utf-8'));
+    if (profiles && typeof profiles === 'object' && !Array.isArray(profiles)) {
+      userProfileCache.clear();
+      for (const [email, profile] of Object.entries(profiles)) {
+        userProfileCache.set(email, profile);
+      }
+      console.log(`Loaded ${userProfileCache.size} user profile(s)`);
+    }
+  } catch {
+    console.warn('Failed to load user profiles — starting with empty cache');
+  }
+}
+
+/**
+ * Persist the entire user profile cache to disk.
+ * @returns {void}
+ */
+function persistUserProfiles() {
+  const obj = {};
+  for (const [email, profile] of userProfileCache) {
+    obj[email] = profile;
+  }
+  writeJSON(USERS_FILE, obj);
+}
+
+/**
+ * Get a user profile by email.
+ * @param {string} email
+ * @returns {object|null} Profile object or null if not found
+ */
+function getUserProfile(email) {
+  return userProfileCache.get(email) || null;
+}
+
+/**
+ * Create a new user profile for the given email.
+ * @param {string} email
+ * @returns {object} The newly created profile
+ */
+function createUserProfile(email) {
+  const profile = {
+    displayName: null,
+    emailSlug: getEmailSlug(email),
+    joinedAt: new Date().toISOString(),
+    accentColor: null
+  };
+  userProfileCache.set(email, profile);
+  persistUserProfiles();
+  return profile;
+}
+
+/**
+ * Update an existing user profile with partial data.
+ * Creates the profile first if it doesn't exist.
+ * @param {string} email
+ * @param {object} updates - Fields to merge into the profile
+ * @returns {object} The updated profile
+ */
+function updateUserProfile(email, updates) {
+  let profile = getUserProfile(email);
+  if (!profile) {
+    profile = createUserProfile(email);
+  }
+  Object.assign(profile, updates);
+  userProfileCache.set(email, profile);
+  persistUserProfiles();
+  return profile;
+}
+
+// Load user profiles into cache at startup
+loadUserProfiles();
+
+/**
+ * One-time migration: rename old slug-keyed data files to email-slug-keyed files.
+ * Skips entirely if `_migrated` flag is set in users.json.
+ * For each MIGRATION_MAP entry where the env var is set:
+ *   1. Creates a user profile with `migratedFrom` field
+ *   2. Renames core memory files from `{oldSlug}_*.json` to `{emailSlug}_*.json`
+ *   3. Renames summary files from `{oldSlug}_*.json` to `{emailSlug}_*.json`
+ *   4. Updates relationship.json keys from old slug to email slug
+ *   5. Updates youtube-favorites.json keys from old slug to email slug
+ * Sets `_migrated: true` in users.json to prevent re-running.
+ */
+async function migrateOldUsers() {
+  let usersData = readJSON(USERS_FILE);
+  if (!usersData || Array.isArray(usersData)) usersData = {};
+  if (usersData._migrated) {
+    console.log('Migration already completed — skipping');
+    return;
+  }
+
+  let migrated = false;
+
+  for (const [oldSlug, email] of Object.entries(MIGRATION_MAP)) {
+    if (!email) {
+      console.log(`Migration: skipping "${oldSlug}" — no email env var set`);
+      continue;
+    }
+
+    const newSlug = getEmailSlug(email);
+    console.log(`Migration: migrating "${oldSlug}" → "${newSlug}" (${email})`);
+
+    // 1. Create user profile with migratedFrom field
+    if (!getUserProfile(email)) {
+      const profile = createUserProfile(email);
+      profile.migratedFrom = oldSlug;
+      updateUserProfile(email, profile);
+    } else {
+      updateUserProfile(email, { migratedFrom: oldSlug });
+    }
+
+    // 2. Rename core memory files
+    try {
+      const coreFiles = readdirSync(CORE_MEMORY_DIR);
+      for (const file of coreFiles) {
+        if (file.startsWith(`${oldSlug}_`) && file.endsWith('.json')) {
+          const newFile = file.replace(`${oldSlug}_`, `${newSlug}_`);
+          const oldPath = join(CORE_MEMORY_DIR, file);
+          const newPath = join(CORE_MEMORY_DIR, newFile);
+          if (!existsSync(newPath)) {
+            renameSync(oldPath, newPath);
+            console.log(`  Renamed core memory: ${file} → ${newFile}`);
+          } else {
+            console.log(`  Skipped core memory rename (target exists): ${newFile}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`  Error renaming core memory files for ${oldSlug}:`, err.message);
+    }
+
+    // 3. Rename summary files
+    try {
+      const summaryFiles = readdirSync(SUMMARIES_DIR);
+      for (const file of summaryFiles) {
+        if (file.startsWith(`${oldSlug}_`) && file.endsWith('.json')) {
+          const newFile = file.replace(`${oldSlug}_`, `${newSlug}_`);
+          const oldPath = join(SUMMARIES_DIR, file);
+          const newPath = join(SUMMARIES_DIR, newFile);
+          if (!existsSync(newPath)) {
+            renameSync(oldPath, newPath);
+            console.log(`  Renamed summary: ${file} → ${newFile}`);
+          } else {
+            console.log(`  Skipped summary rename (target exists): ${newFile}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`  Error renaming summary files for ${oldSlug}:`, err.message);
+    }
+
+    // 4. Update relationship.json keys
+    try {
+      const relData = readJSON(RELATIONSHIP_FILE);
+      if (relData && relData[oldSlug] && !relData[newSlug]) {
+        relData[newSlug] = relData[oldSlug];
+        delete relData[oldSlug];
+        writeJSON(RELATIONSHIP_FILE, relData);
+        console.log(`  Migrated relationship key: ${oldSlug} → ${newSlug}`);
+      }
+    } catch (err) {
+      console.error(`  Error migrating relationship data for ${oldSlug}:`, err.message);
+    }
+
+    // 5. Update youtube-favorites.json keys
+    try {
+      const ytData = readJSON(YT_FAVORITES_FILE);
+      if (ytData && ytData[oldSlug] && !ytData[newSlug]) {
+        ytData[newSlug] = ytData[oldSlug];
+        delete ytData[oldSlug];
+        writeJSON(YT_FAVORITES_FILE, ytData);
+        console.log(`  Migrated YouTube favorites key: ${oldSlug} → ${newSlug}`);
+      }
+    } catch (err) {
+      console.error(`  Error migrating YouTube favorites for ${oldSlug}:`, err.message);
+    }
+
+    migrated = true;
+  }
+
+  // Set _migrated flag to prevent re-running
+  if (migrated) {
+    const currentData = readJSON(USERS_FILE) || {};
+    currentData._migrated = true;
+    writeJSON(USERS_FILE, currentData);
+    // Reload profiles to pick up any new entries
+    loadUserProfiles();
+    console.log('Migration complete — _migrated flag set');
+  } else {
+    console.log('No users to migrate — setting _migrated flag');
+    const currentData = readJSON(USERS_FILE) || {};
+    currentData._migrated = true;
+    writeJSON(USERS_FILE, currentData);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Core Memory — structured per-user, per-character memory blocks
 // ---------------------------------------------------------------------------
 
@@ -339,10 +581,10 @@ const CORE_MEMORY_CATEGORIES = {
   insideJokes: 'Inside jokes'
 };
 
-/** @type {Map<string, object>} In-memory cache keyed by `${userId}_${characterId}`. */
+/** @type {Map<string, object>} In-memory cache keyed by `${emailSlug}_${characterId}`. */
 const coreMemoryCache = new Map();
 
-/** @type {Map<string, Array>} In-memory cache for rolling summaries, keyed by `${userId}_${characterId}`. */
+/** @type {Map<string, Array>} In-memory cache for rolling summaries, keyed by `${emailSlug}_${characterId}`. */
 const summaryCache = new Map();
 
 /**
@@ -355,13 +597,13 @@ function defaultCoreMemory() {
 
 /**
  * Resolve the JSON file path for a user+character core memory.
- * @param {string} userId
+ * @param {string} email - User email address
  * @param {string} characterId
  * @returns {string}
  */
-function getCoreMemoryPath(userId, characterId) {
-  // Validate against allowlists to prevent path traversal
-  const safeUser = (userId && KNOWN_USERS[userId]) ? userId : 'guest';
+function getCoreMemoryPath(email, characterId) {
+  // Derive slug from email for filesystem-safe path; validate against user profile store
+  const safeUser = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
   const safeChar = (characterId && CHARACTERS[characterId]) ? characterId : DEFAULT_CHARACTER;
   return join(CORE_MEMORY_DIR, `${safeUser}_${safeChar}.json`);
 }
@@ -369,14 +611,15 @@ function getCoreMemoryPath(userId, characterId) {
 /**
  * Read core memory for a user+character pair (cache-first, then disk).
  * Returns defaultCoreMemory() if the file is missing or corrupt.
- * @param {string} userId
+ * @param {string} email - User email address
  * @param {string} characterId
  * @returns {object}
  */
-function readCoreMemory(userId, characterId) {
-  const key = `${userId}_${characterId}`;
+function readCoreMemory(email, characterId) {
+  const slug = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
+  const key = `${slug}_${characterId}`;
   if (coreMemoryCache.has(key)) return coreMemoryCache.get(key);
-  const filePath = getCoreMemoryPath(userId, characterId);
+  const filePath = getCoreMemoryPath(email, characterId);
   let data;
   try {
     data = JSON.parse(readFileSync(filePath, 'utf-8'));
@@ -390,17 +633,18 @@ function readCoreMemory(userId, characterId) {
 
 /**
  * Persist core memory to disk (atomic write via tmp+rename) and update cache.
- * @param {string} userId
+ * @param {string} email - User email address
  * @param {string} characterId
  * @param {object} data
  */
-function writeCoreMemory(userId, characterId, data) {
+function writeCoreMemory(email, characterId, data) {
   data._updated = new Date().toISOString();
-  const filePath = getCoreMemoryPath(userId, characterId);
+  const filePath = getCoreMemoryPath(email, characterId);
   const tmpPath = filePath + '.tmp';
   writeFileSync(tmpPath, JSON.stringify(data, null, 2));
   renameSync(tmpPath, filePath);
-  coreMemoryCache.set(`${userId}_${characterId}`, data);
+  const slug = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
+  coreMemoryCache.set(`${slug}_${characterId}`, data);
 }
 
 /**
@@ -436,12 +680,12 @@ const MAX_SUMMARIES = 20;
 /**
  * Resolve the JSON file path for a user+character summary file.
  * Validates against allowlists to prevent path traversal.
- * @param {string} userId
+ * @param {string} email - User email address
  * @param {string} characterId
  * @returns {string}
  */
-function getSummaryPath(userId, characterId) {
-  const safeUser = (userId && KNOWN_USERS[userId]) ? userId : 'guest';
+function getSummaryPath(email, characterId) {
+  const safeUser = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
   const safeChar = (characterId && CHARACTERS[characterId]) ? characterId : DEFAULT_CHARACTER;
   return join(SUMMARIES_DIR, `${safeUser}_${safeChar}.json`);
 }
@@ -449,14 +693,15 @@ function getSummaryPath(userId, characterId) {
 /**
  * Read summaries for a user+character pair (cache-first, then disk).
  * Returns empty array if the file is missing or corrupt.
- * @param {string} userId
+ * @param {string} email - User email address
  * @param {string} characterId
  * @returns {Array}
  */
-function readSummaries(userId, characterId) {
-  const key = `${userId}_${characterId}`;
+function readSummaries(email, characterId) {
+  const slug = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
+  const key = `${slug}_${characterId}`;
   if (summaryCache.has(key)) return summaryCache.get(key);
-  const filePath = getSummaryPath(userId, characterId);
+  const filePath = getSummaryPath(email, characterId);
   let data;
   try {
     data = JSON.parse(readFileSync(filePath, 'utf-8'));
@@ -472,38 +717,40 @@ function readSummaries(userId, characterId) {
 /**
  * Append a summary object and persist to disk (atomic write via tmp+rename).
  * Enforces MAX_SUMMARIES cap, dropping oldest entries when exceeded.
- * @param {string} userId
+ * @param {string} email - User email address
  * @param {string} characterId
  * @param {object} summaryObj - { date, exchangeCount, summary, sessionId, characterId }
  */
-function writeSummary(userId, characterId, summaryObj) {
-  const summaries = readSummaries(userId, characterId);
+function writeSummary(email, characterId, summaryObj) {
+  const summaries = readSummaries(email, characterId);
   summaries.push(summaryObj);
   // Drop oldest if over cap
   while (summaries.length > MAX_SUMMARIES) summaries.shift();
-  const filePath = getSummaryPath(userId, characterId);
+  const filePath = getSummaryPath(email, characterId);
   const tmpPath = filePath + '.tmp';
   writeFileSync(tmpPath, JSON.stringify(summaries, null, 2));
   renameSync(tmpPath, filePath);
-  summaryCache.set(`${userId}_${characterId}`, summaries);
+  const slug = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
+  summaryCache.set(`${slug}_${characterId}`, summaries);
 }
 
 /**
  * Delete a summary by index. Returns true on success, false on invalid index.
- * @param {string} userId
+ * @param {string} email - User email address
  * @param {string} characterId
  * @param {number} index - Zero-based index of the summary to remove
  * @returns {boolean}
  */
-function deleteSummary(userId, characterId, index) {
-  const summaries = readSummaries(userId, characterId);
+function deleteSummary(email, characterId, index) {
+  const summaries = readSummaries(email, characterId);
   if (index < 0 || index >= summaries.length) return false;
   summaries.splice(index, 1);
-  const filePath = getSummaryPath(userId, characterId);
+  const filePath = getSummaryPath(email, characterId);
   const tmpPath = filePath + '.tmp';
   writeFileSync(tmpPath, JSON.stringify(summaries, null, 2));
   renameSync(tmpPath, filePath);
-  summaryCache.set(`${userId}_${characterId}`, summaries);
+  const slug = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
+  summaryCache.set(`${slug}_${characterId}`, summaries);
   return true;
 }
 
@@ -978,35 +1225,25 @@ const MODEL_CONFIG = {
  * and writes back. Triggers milestones at 10, 25, 50, 100, 250, 500, 1000 chats.
  * Supports per-user keyed structure with automatic migration from flat format.
  *
- * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest'). When omitted, uses legacy flat format for backward compatibility.
+ * @param {string} email - User email address. Keys relationship data by email slug.
  * @returns {RelationshipStats} Updated relationship data for the specified user
  */
-function updateRelationship(userId) {
+function updateRelationship(email) {
   const data = readJSON(RELATIONSHIP_FILE) || {};
 
   // Migration: convert flat format to keyed format
   if (!data._version) {
     const legacy = { ...data };
     const migrated = { _version: 2, _legacy: legacy };
-    for (const key of Object.keys(KNOWN_USERS)) {
-      migrated[key] = {
-        firstChat: null,
-        totalChats: 0,
-        lastChatDate: null,
-        streakDays: 0,
-        lastStreakDate: null,
-        milestones: []
-      };
-    }
     writeJSON(RELATIONSHIP_FILE, migrated);
-    // If no userId, return legacy data for backward compat
-    if (!userId) return legacy;
+    // If no email, return legacy data for backward compat
+    if (!email) return legacy;
     // Re-read so we work with the migrated structure
-    return updateRelationship(userId);
+    return updateRelationship(email);
   }
 
-  // Determine which key to use
-  const userKey = userId && KNOWN_USERS[userId] ? userId : '_legacy';
+  // Determine which key to use — email slug for identified users
+  const userKey = email ? getEmailSlug(email) : '_legacy';
   const rel = data[userKey] || {};
   const today = new Date().toISOString().slice(0, 10);
 
@@ -1049,12 +1286,12 @@ function updateRelationship(userId) {
  *
  * Includes days together, total chats, streak, recent milestones, and absence gaps.
  *
- * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest'). When omitted, reads legacy flat format for backward compatibility.
+ * @param {string} email - User email address. When omitted, reads legacy flat format for backward compatibility.
  * @returns {string} Formatted context string (empty if no first chat recorded)
  */
-function getRelationshipContext(userId) {
+function getRelationshipContext(email) {
   const data = readJSON(RELATIONSHIP_FILE) || {};
-  const userKey = (userId && data._version && KNOWN_USERS[userId]) ? userId : (data._version ? '_legacy' : null);
+  const userKey = (email && data._version) ? getEmailSlug(email) : (data._version ? '_legacy' : null);
 
   // If no keyed structure yet, use flat data (backward compat)
   const rel = userKey ? (data[userKey] || {}) : data;
@@ -1094,18 +1331,18 @@ function getRelationshipContext(userId) {
  * Search the user memory track in mem0 for relevant memories.
  *
  * @param {string} query - Search query (typically the user's message)
- * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest'). When omitted, uses MEM0_USER_ID fallback for backward compatibility.
+ * @param {string} email - User email address.
  * @returns {Promise<Object[]>} Array of memory objects (max 10), empty on failure
  * @throws {Error} Swallowed — logs to console and returns empty array
  */
-async function searchMemories(query, userId) {
+async function searchMemories(query, email) {
   try {
     const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
       method: 'POST',
       headers: mem0Headers(),
       body: JSON.stringify({
         query,
-        filters: { user_id: getUserMemId(userId) },
+        filters: { user_id: getUserMemId(email) },
         top_k: 10,
         rerank: true
       })
@@ -1192,19 +1429,19 @@ async function searchCrossCharacterMemories(query, activeCharacterId) {
 /**
  * Save a chat exchange to both mem0 memory tracks (fire-and-forget).
  *
- * User track stores facts about the friend (skipped for guest users).
+ * User track stores facts about the friend.
  * Agent track stores Melody's evolving personality and opinions (always saved,
  * shared across all users). Both calls are non-blocking — errors are logged
  * but do not propagate.
  *
  * @param {string} userMessage - The user's message text
  * @param {string} assistantReply - The active character's response text
- * @param {string} [userId] - User key (e.g., 'amelia', 'lonnie', 'guest'). When omitted, uses MEM0_USER_ID fallback. Guest users skip the user track save.
+ * @param {string} email - User email address.
  * @param {Object} [meta] - Optional metadata context (source, sessionId, hasImage)
  * @param {Object|null} [character] - Character config object (from getCharacter()). When null, uses the default Melody agent ID for backward compatibility.
  * @returns {void}
  */
-function saveToMemory(userMessage, assistantReply, userId, meta = {}, character = null) {
+function saveToMemory(userMessage, assistantReply, email, meta = {}, character = null) {
   const characterName = character ? character.name : 'My Melody';
   const attributedReply = `[${characterName} speaking]: ${assistantReply}`;
   const metadata = {
@@ -1216,24 +1453,22 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}, character 
     character_name: characterName
   };
 
-  // User track: facts about the friend (skip for guest — no persistent identity)
-  if (userId !== 'guest') {
-    fetch(`${MEM0_BASE}/v1/memories/`, {
-      method: 'POST',
-      headers: {
-        ...mem0Headers()
-      },
-      body: JSON.stringify({
-        messages: [
-          { role: 'user', content: userMessage },
-          { role: 'assistant', content: attributedReply }
-        ],
-        user_id: getUserMemId(userId),
-        infer: true,
-        metadata
-      })
-    }).catch(err => console.error('mem0 user save error:', err.message));
-  }
+  // User track: facts about the friend
+  fetch(`${MEM0_BASE}/v1/memories/`, {
+    method: 'POST',
+    headers: {
+      ...mem0Headers()
+    },
+    body: JSON.stringify({
+      messages: [
+        { role: 'user', content: userMessage },
+        { role: 'assistant', content: attributedReply }
+      ],
+      user_id: getUserMemId(email),
+      infer: true,
+      metadata
+    })
+  }).catch(err => console.error('mem0 user save error:', err.message));
 
   // Agent track: character's own evolving personality, opinions, experiences
   // Skip for Straight Talk to avoid polluting character's persona with out-of-character content
@@ -1297,11 +1532,11 @@ function mergeCoreMemory(existing, extracted) {
  * Uses EXTRACTION_MODEL_ID (lightweight) for extraction. Fire-and-forget.
  * @param {string} userMessage
  * @param {string} assistantReply
- * @param {string} userId
+ * @param {string} email - User email address
  * @param {string} characterId
  */
-async function extractCoreMemory(userMessage, assistantReply, userId, characterId) {
-  if (!userId || userId === 'guest') return;
+async function extractCoreMemory(userMessage, assistantReply, email, characterId) {
+  if (!email) return;
 
   const response = await ai.models.generateContent({
     model: EXTRACTION_MODEL_ID,
@@ -1319,11 +1554,11 @@ async function extractCoreMemory(userMessage, assistantReply, userId, characterI
     console.error('Core memory extraction: invalid JSON from model');
     return;
   }
-  const existing = readCoreMemory(userId, characterId);
+  const existing = readCoreMemory(email, characterId);
   const changed = mergeCoreMemory(existing, extracted);
   if (changed) {
-    writeCoreMemory(userId, characterId, existing);
-    console.log(`Core memory updated for ${userId}/${characterId}`);
+    writeCoreMemory(email, characterId, existing);
+    console.log(`Core memory updated for ${getEmailSlug(email)}/${characterId}`);
   }
 }
 
@@ -1331,11 +1566,11 @@ async function extractCoreMemory(userMessage, assistantReply, userId, characterI
  * Generate a rolling summary of a conversation session before it is pruned.
  * Uses EXTRACTION_MODEL_ID (lightweight) for cheap summarization. Fire-and-forget — never throws.
  * @param {Array<{role: string, parts: Array<{text: string}>}>} buffer - Session conversation history
- * @param {string} userId
+ * @param {string} email - User email address
  * @param {string} characterId
  * @param {string} sessionId
  */
-async function generateSessionSummary(buffer, userId, characterId, sessionId) {
+async function generateSessionSummary(buffer, email, characterId, sessionId) {
   try {
     if (!buffer || buffer.length < 6) return; // Need at least 3 exchanges
 
@@ -1365,8 +1600,8 @@ async function generateSessionSummary(buffer, userId, characterId, sessionId) {
       characterId
     };
 
-    writeSummary(userId, characterId, summaryObj);
-    console.log(`Session summary generated for ${userId}/${characterId}`);
+    writeSummary(email, characterId, summaryObj);
+    console.log(`Session summary generated for ${getEmailSlug(email)}/${characterId}`);
   } catch (err) {
     console.error('Session summary generation failed:', err.message || err);
   }
@@ -1392,11 +1627,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
  * Validates UUID format and enforces a global session cap.
  *
  * @param {string} sessionId - Client-generated UUID
- * @param {string} [userId] - User identifier (stored on session for summary generation)
+ * @param {string} [email] - User email (stored on session for summary generation)
  * @param {string} [characterId] - Character identifier (stored on session for summary generation)
  * @returns {Array<{role: string, parts: Array<{text: string}>}>} Conversation history array
  */
-function getSessionBuffer(sessionId, userId, characterId) {
+function getSessionBuffer(sessionId, email, characterId) {
   if (!sessionId || !UUID_RE.test(sessionId)) return [];
   if (!sessionBuffers.has(sessionId)) {
     // Enforce max session cap — evict oldest session if at limit
@@ -1407,12 +1642,12 @@ function getSessionBuffer(sessionId, userId, characterId) {
       }
       if (oldest) sessionBuffers.delete(oldest);
     }
-    sessionBuffers.set(sessionId, { contents: [], lastAccess: Date.now(), userId: userId || null, characterId: characterId || null });
+    sessionBuffers.set(sessionId, { contents: [], lastAccess: Date.now(), userEmail: email || null, characterId: characterId || null });
   }
   const session = sessionBuffers.get(sessionId);
   session.lastAccess = Date.now();
-  // Update userId/characterId if provided (may not be set on first call)
-  if (userId) session.userId = userId;
+  // Update email/characterId if provided (may not be set on first call)
+  if (email) session.userEmail = email;
   if (characterId) session.characterId = characterId;
   return session.contents;
 }
@@ -1446,13 +1681,64 @@ setInterval(() => {
   for (const [id, session] of sessionBuffers) {
     if (session.lastAccess < cutoff) {
       // Generate summary before pruning (fire-and-forget)
-      if (session.contents.length >= 6 && session.userId && session.characterId) {
-        generateSessionSummary(session.contents, session.userId, session.characterId, id);
+      if (session.contents.length >= 6 && session.userEmail && session.characterId) {
+        generateSessionSummary(session.contents, session.userEmail, session.characterId, id);
       }
       sessionBuffers.delete(id);
     }
   }
 }, 10 * 60 * 1000);
+
+// ---------------------------------------------------------------------------
+// Multi-User Prompt Constants
+// ---------------------------------------------------------------------------
+
+/** @type {string} Injected into system prompt after cross-user context to prevent leaking sensitive details. */
+const ETIQUETTE_GUARDRAIL = 'You may mention that you\'ve chatted with other friends, but never share health details, personal struggles, relationship issues, financial info, or embarrassing moments. Keep cross-user references light, positive, and general.';
+
+// ---------------------------------------------------------------------------
+// Identity Middleware — resolve user from Cloudflare Access header
+// ---------------------------------------------------------------------------
+
+/**
+ * Express middleware that identifies the current user from the Cloudflare Access
+ * authenticated email header, with env-var and hardcoded fallbacks.
+ * Looks up or auto-creates a profile in data/users.json.
+ * Sets req.userEmail and req.userProfile on the request object.
+ */
+function identifyUser(req, res, next) {
+  const cfEmail = req.headers['cf-access-authenticated-user-email'];
+  const email = cfEmail || DEFAULT_USER_EMAIL;
+
+  let profile = getUserProfile(email);
+  if (!profile) {
+    profile = createUserProfile(email);
+  }
+
+  req.userEmail = email;
+  req.userProfile = profile;
+  next();
+}
+
+// Apply identity middleware to all API routes
+app.use('/api', identifyUser);
+
+/**
+ * GET /api/me — Return the current user's profile.
+ *
+ * @route GET /api/me
+ * @returns {Object} 200 - { email, displayName, accentColor, joinedAt, needsOnboarding }
+ */
+app.get('/api/me', (req, res) => {
+  const profile = req.userProfile;
+  res.json({
+    email: req.userEmail,
+    displayName: profile.displayName || null,
+    accentColor: profile.accentColor || null,
+    joinedAt: profile.joinedAt || null,
+    needsOnboarding: profile.displayName === null || profile.displayName === undefined
+  });
+});
 
 /**
  * POST /api/chat — Send a message to My Melody.
@@ -1469,7 +1755,8 @@ setInterval(() => {
  */
 app.post('/api/chat', async (req, res) => {
   try {
-    const { message, imageBase64, imageMime, replyStyle, sessionId, userId, characterId } = req.body;
+    const { message, imageBase64, imageMime, replyStyle, sessionId, characterId } = req.body;
+    const email = req.userEmail; // Canonical identity from middleware — ignore any client-sent userId
     if (!message && !imageBase64) {
       return res.status(400).json({ error: 'Message or image is required' });
     }
@@ -1477,33 +1764,37 @@ app.post('/api/chat', async (req, res) => {
     const character = getCharacter(characterId || 'melody');
 
     // Update relationship stats for this user
-    const relationship = updateRelationship(userId);
-    const relationshipContext = getRelationshipContext(userId);
+    const relationship = updateRelationship(email);
+    const relationshipContext = getRelationshipContext(email);
 
     // Build identity context for the system prompt
-    const userName = (userId && KNOWN_USERS[userId]) ? KNOWN_USERS[userId].name : null;
+    const userName = req.userProfile?.displayName || null;
+
+    // Build list of OTHER known user display names (used for identity guard, agent memory filtering, and cross-user search)
+    const otherDisplayNames = [];
+    for (const [otherEmail, profile] of userProfileCache) {
+      if (otherEmail !== email && profile.displayName) {
+        otherDisplayNames.push(profile.displayName);
+      }
+    }
+    const otherNamesLower = otherDisplayNames.map(n => n.toLowerCase());
+
     let identityContext = '';
-    if (userId === 'guest') {
-      identityContext = '\n\nYou are talking to a guest friend. Be welcoming but don\'t assume you know them well.';
-    } else if (userName) {
-      // Build list of OTHER known user names for the identity guard
-      const otherNames = Object.entries(KNOWN_USERS)
-        .filter(([k]) => k !== userId && k !== 'guest')
-        .map(([, v]) => v.name);
-      const otherNamesStr = otherNames.length > 0
-        ? ` You also chat with ${otherNames.join(' and ')}, but they are NOT here right now. Do not address ${userName} as ${otherNames.join(' or ')} — they are different people.`
+    if (userName) {
+      const otherNamesStr = otherDisplayNames.length > 0
+        ? ` You also chat with ${otherDisplayNames.join(' and ')}, but they are NOT here right now. Do not address ${userName} as ${otherDisplayNames.join(' or ')} — they are different people.`
         : '';
       identityContext = `\n\n[CURRENT USER] You are currently talking to your friend ${userName}. Address them as ${userName}. Do not confuse them with anyone else.${otherNamesStr}`;
     }
 
     // Read core memory (always-injected context)
-    const coreMemory = readCoreMemory(userId, characterId || 'melody');
+    const coreMemory = readCoreMemory(email, characterId || 'melody');
     const coreMemoryContext = buildCoreMemoryContext(coreMemory);
 
     // Search all memory tracks in parallel (own + cross-character)
     const searchQuery = message || 'image shared';
     const [userMemories, agentMemories, crossCharacterMemories] = await Promise.all([
-      searchMemories(searchQuery, userId),
+      searchMemories(searchQuery, email),
       searchAgentMemories(searchQuery, characterId),
       searchCrossCharacterMemories(searchQuery, characterId || DEFAULT_CHARACTER)
     ]);
@@ -1514,13 +1805,10 @@ app.post('/api/chat', async (req, res) => {
       : '';
 
     // Filter agent memories: deprioritize memories about other users to avoid identity bleed
-    const otherUserNames = Object.entries(KNOWN_USERS)
-      .filter(([k]) => k !== userId && k !== 'guest')
-      .map(([, v]) => v.name.toLowerCase());
     const filteredAgentMemories = agentMemories.filter(m => {
       const text = (m.memory || m.text || m.content || '').toLowerCase();
       // Keep if it mentions the current user or doesn't mention any other user
-      return !otherUserNames.some(name => text.includes(name));
+      return !otherNamesLower.some(name => text.includes(name));
     });
 
     const agentMemoryContext = filteredAgentMemories.length > 0
@@ -1541,22 +1829,21 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // Cross-user memory access: check if user mentions another family member
+    // Cross-user memory access: check if user mentions another user by display name
     let crossUserContext = '';
     if (message) {
       const msgLower = message.toLowerCase();
-      for (const [key, config] of Object.entries(KNOWN_USERS)) {
-        // Skip self, skip guest (privacy)
-        if (key === userId || key === 'guest') continue;
-        if (msgLower.includes(config.name.toLowerCase())) {
+      for (const [otherEmail, profile] of userProfileCache) {
+        if (otherEmail === email || !profile.displayName) continue;
+        if (msgLower.includes(profile.displayName.toLowerCase())) {
           try {
-            const crossMemories = await searchMemories(message, key);
+            const crossMemories = await searchMemories(message, otherEmail);
             if (crossMemories.length > 0) {
-              crossUserContext += `\n\nThings ${config.name} has been chatting about recently:\n` +
+              crossUserContext += `\n\nThings ${profile.displayName} has been chatting about recently:\n` +
                 crossMemories.slice(0, 5).map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n');
             }
           } catch (err) {
-            console.error(`Cross-user memory search error for ${key}:`, err.message);
+            console.error(`Cross-user memory search error for ${getEmailSlug(otherEmail)}:`, err.message);
           }
           break; // Only cross-reference one user per message
         }
@@ -1565,7 +1852,7 @@ app.post('/api/chat', async (req, res) => {
 
     // Cross-user instruction (always present when user is identified)
     const crossUserInstruction = userName
-      ? '\n\nYou know multiple family members. If someone asks about another family member, you can share casual, friendly info about what they\'ve been chatting about. Frame it naturally (e.g. "Oh~! Lonnie told me about..."). Never share Guest conversations — guests get privacy.'
+      ? '\n\nYou know multiple friends. If someone asks about another friend, you can share casual, friendly info about what they\'ve been chatting about. Frame it naturally (e.g. "Oh~! Lonnie told me about...").'
       : '';
 
     // Reply style instruction
@@ -1580,12 +1867,13 @@ app.post('/api/chat', async (req, res) => {
 
     const isStraightTalk = replyStyle === 'straightTalk';
     // Read conversation summaries (rolling temporal context)
-    const summaries = readSummaries(userId, characterId || 'melody');
+    const summaries = readSummaries(email, characterId || 'melody');
     const summaryContext = buildSummaryContext(summaries);
-    const systemInstruction = character.getPrompt() + (isStraightTalk ? '' : CHARACTER_CONTEXT) + identityContext + crossUserInstruction + coreMemoryContext + summaryContext + relationshipContext + userMemoryContext + agentMemoryContext + crossCharacterContext + crossUserContext + styleInstruction;
+    const etiquetteGuardrail = (crossUserInstruction || crossUserContext) ? '\n\n' + ETIQUETTE_GUARDRAIL : '';
+    const systemInstruction = character.getPrompt() + (isStraightTalk ? '' : CHARACTER_CONTEXT) + identityContext + crossUserInstruction + coreMemoryContext + summaryContext + relationshipContext + userMemoryContext + agentMemoryContext + crossCharacterContext + crossUserContext + etiquetteGuardrail + styleInstruction;
 
     // Build message contents (prepend conversation buffer for multi-turn context)
-    const historyBuffer = getSessionBuffer(sessionId, userId, characterId);
+    const historyBuffer = getSessionBuffer(sessionId, email, characterId);
     const contents = [...historyBuffer];
     if (imageBase64) {
       contents.push({
@@ -1704,7 +1992,7 @@ app.post('/api/chat', async (req, res) => {
 
     // Save to mem0 asynchronously (per-user track, with metadata)
     // Skip agent-track save for Straight Talk to avoid polluting character's persona with out-of-character content
-    saveToMemory(message || '[shared an image]', reply, userId, {
+    saveToMemory(message || '[shared an image]', reply, email, {
       source: 'chat',
       sessionId,
       hasImage: !!imageBase64,
@@ -1713,7 +2001,7 @@ app.post('/api/chat', async (req, res) => {
     }, character);
 
     // Extract core memory facts (fire-and-forget, non-blocking)
-    extractCoreMemory(message || '[shared an image]', reply, userId, characterId || 'melody')
+    extractCoreMemory(message || '[shared an image]', reply, email, characterId || 'melody')
       .catch(err => console.error('Core memory extraction error:', err.message));
 
     res.json({ reply, sources, wikiSource });
@@ -1876,8 +2164,9 @@ app.get('/api/wiki-search', async (req, res) => {
  */
 app.get('/api/memories', async (req, res) => {
   try {
-    const { userId, characterId } = req.query;
-    const memUserId = getUserMemId(userId);
+    const { characterId } = req.query;
+    const email = req.userEmail;
+    const memUserId = getUserMemId(email);
     const agentId = characterId ? getCharacter(characterId).agentId : MEM0_AGENT_ID;
     // Fetch both user memories and the character's own memories
     const [userRes, agentRes] = await Promise.all([
@@ -1933,15 +2222,14 @@ app.delete('/api/memories/:id', async (req, res) => {
  * GET /api/core-memory — Retrieve core memory blocks for a user+character pair.
  *
  * @route GET /api/core-memory
- * @param {string} [req.query.userId] - User key (default: 'guest')
  * @param {string} [req.query.characterId] - Character key (default: 'melody')
  * @returns {Object} 200 - Core memory object with all categories
  */
 app.get('/api/core-memory', (req, res) => {
   try {
-    const userId = req.query.userId || 'guest';
+    const email = req.userEmail;
     const characterId = req.query.characterId || 'melody';
-    const data = readCoreMemory(userId, characterId);
+    const data = readCoreMemory(email, characterId);
     res.json(data);
   } catch (err) {
     console.error('Core memory read error:', err.message);
@@ -1953,13 +2241,14 @@ app.get('/api/core-memory', (req, res) => {
  * PUT /api/core-memory — Update a single category's entries in core memory.
  *
  * @route PUT /api/core-memory
- * @param {Object} req.body - { userId, characterId, category, entries }
+ * @param {Object} req.body - { characterId, category, entries }
  * @returns {Object} 200 - { ok: true, category, count }
  * @returns {Object} 400 - { error: string } on invalid category or entries
  */
 app.put('/api/core-memory', (req, res) => {
   try {
-    const { userId = 'guest', characterId = 'melody', category, entries } = req.body;
+    const email = req.userEmail;
+    const { characterId = 'melody', category, entries } = req.body;
     if (!category || !CORE_MEMORY_CATEGORIES[category]) {
       return res.status(400).json({ error: `Invalid category. Must be one of: ${Object.keys(CORE_MEMORY_CATEGORIES).join(', ')}` });
     }
@@ -1967,9 +2256,9 @@ app.put('/api/core-memory', (req, res) => {
       return res.status(400).json({ error: 'entries must be an array of strings' });
     }
     const capped = entries.slice(0, 10).map(String);
-    const data = readCoreMemory(userId, characterId);
+    const data = readCoreMemory(email, characterId);
     data[category] = capped;
-    writeCoreMemory(userId, characterId, data);
+    writeCoreMemory(email, characterId, data);
     res.json({ ok: true, category, count: capped.length });
   } catch (err) {
     console.error('Core memory update error:', err.message);
@@ -1983,7 +2272,6 @@ app.put('/api/core-memory', (req, res) => {
  * @route DELETE /api/core-memory/:category/:index
  * @param {string} req.params.category - Category key (e.g., 'aboutYou')
  * @param {string} req.params.index - Numeric index of entry to delete
- * @param {string} [req.query.userId] - User key (default: 'guest')
  * @param {string} [req.query.characterId] - Character key (default: 'melody')
  * @returns {Object} 200 - { ok: true }
  * @returns {Object} 400 - { error: string } on invalid category or index
@@ -1995,14 +2283,14 @@ app.delete('/api/core-memory/:category/:index', (req, res) => {
       return res.status(400).json({ error: `Invalid category. Must be one of: ${Object.keys(CORE_MEMORY_CATEGORIES).join(', ')}` });
     }
     const index = parseInt(req.params.index, 10);
-    const userId = req.query.userId || 'guest';
+    const email = req.userEmail;
     const characterId = req.query.characterId || 'melody';
-    const data = readCoreMemory(userId, characterId);
+    const data = readCoreMemory(email, characterId);
     if (isNaN(index) || index < 0 || index >= (data[category] || []).length) {
       return res.status(400).json({ error: `Invalid index. Must be 0-${(data[category] || []).length - 1}` });
     }
     data[category].splice(index, 1);
-    writeCoreMemory(userId, characterId, data);
+    writeCoreMemory(email, characterId, data);
     res.json({ ok: true });
   } catch (err) {
     console.error('Core memory delete error:', err.message);
@@ -2014,24 +2302,21 @@ app.delete('/api/core-memory/:category/:index', (req, res) => {
  * GET /api/summaries — List conversation summaries for a user+character pair.
  *
  * @route GET /api/summaries
- * @param {string} req.query.userId - User key (required)
  * @param {string} req.query.characterId - Character key (required)
  * @returns {Array} 200 - Summary array, newest first
  * @returns {Object} 400 - { error: string } on missing/invalid params
  */
 app.get('/api/summaries', (req, res) => {
   try {
-    const { userId, characterId } = req.query;
-    if (!userId || !characterId) {
-      return res.status(400).json({ error: 'userId and characterId are required' });
-    }
-    if (!KNOWN_USERS[userId]) {
-      return res.status(400).json({ error: 'Invalid userId' });
+    const email = req.userEmail;
+    const { characterId } = req.query;
+    if (!characterId) {
+      return res.status(400).json({ error: 'characterId is required' });
     }
     if (!CHARACTERS[characterId]) {
       return res.status(400).json({ error: 'Invalid characterId' });
     }
-    const summaries = readSummaries(userId, characterId);
+    const summaries = readSummaries(email, characterId);
     // Return newest first
     res.json([...summaries].reverse());
   } catch (err) {
@@ -2045,7 +2330,6 @@ app.get('/api/summaries', (req, res) => {
  *
  * @route DELETE /api/summaries/:index
  * @param {string} req.params.index - Zero-based index (in stored order, oldest-first)
- * @param {string} req.query.userId - User key (required)
  * @param {string} req.query.characterId - Character key (required)
  * @returns {Object} 200 - { ok: true }
  * @returns {Object} 400 - { error: string } on missing/invalid params
@@ -2053,12 +2337,10 @@ app.get('/api/summaries', (req, res) => {
  */
 app.delete('/api/summaries/:index', (req, res) => {
   try {
-    const { userId, characterId } = req.query;
-    if (!userId || !characterId) {
-      return res.status(400).json({ error: 'userId and characterId are required' });
-    }
-    if (!KNOWN_USERS[userId]) {
-      return res.status(400).json({ error: 'Invalid userId' });
+    const email = req.userEmail;
+    const { characterId } = req.query;
+    if (!characterId) {
+      return res.status(400).json({ error: 'characterId is required' });
     }
     if (!CHARACTERS[characterId]) {
       return res.status(400).json({ error: 'Invalid characterId' });
@@ -2067,7 +2349,7 @@ app.delete('/api/summaries/:index', (req, res) => {
     if (isNaN(index)) {
       return res.status(400).json({ error: 'Index must be a number' });
     }
-    const success = deleteSummary(userId, characterId, index);
+    const success = deleteSummary(email, characterId, index);
     if (!success) {
       return res.status(404).json({ error: 'Summary not found at that index' });
     }
@@ -2086,9 +2368,9 @@ app.delete('/api/summaries/:index', (req, res) => {
  */
 app.get('/api/relationship', (req, res) => {
   const data = readJSON(RELATIONSHIP_FILE) || {};
-  const { userId } = req.query;
-  // Read from keyed structure if available
-  const userKey = (userId && data._version && KNOWN_USERS[userId]) ? userId : (data._version ? '_legacy' : null);
+  const email = req.userEmail;
+  // Read from keyed structure if available — key by email slug
+  const userKey = (email && data._version) ? getEmailSlug(email) : (data._version ? '_legacy' : null);
   const rel = userKey ? (data[userKey] || {}) : data;
   const today = new Date();
   const first = rel.firstChat ? new Date(rel.firstChat) : today;
@@ -2112,20 +2394,20 @@ app.get('/api/relationship', (req, res) => {
  */
 app.get('/api/welcome-status', async (req, res) => {
   try {
-    const { userId } = req.query;
+    const email = req.userEmail;
     const data = readJSON(RELATIONSHIP_FILE) || {};
-    // Read from keyed structure if available
-    const userKey = (userId && data._version && KNOWN_USERS[userId]) ? userId : (data._version ? '_legacy' : null);
+    // Read from keyed structure if available — key by email slug
+    const userKey = (email && data._version) ? getEmailSlug(email) : (data._version ? '_legacy' : null);
     const rel = userKey ? (data[userKey] || {}) : data;
 
     if (!rel.firstChat) {
       return res.json({ status: 'new' });
     }
 
-    // Returning user — try to find their name from mem0
-    let friendName = (userId && KNOWN_USERS[userId]) ? KNOWN_USERS[userId].name : null;
+    // Returning user — try to find their name from profile or mem0
+    let friendName = req.userProfile?.displayName || null;
     if (!friendName) try {
-      const memories = await searchMemories('friend name', userId);
+      const memories = await searchMemories('friend name', email);
       for (const m of memories) {
         const text = m.memory || m.text || m.content || '';
         const nameMatch = text.match(/(?:friend'?s?\s+name\s+is|name\s+is|called)\s+(\w+)/i);
@@ -2167,7 +2449,8 @@ app.get('/api/welcome-status', async (req, res) => {
  */
 app.post('/api/welcome', async (req, res) => {
   try {
-    const { type, value, userId } = req.body;
+    const { type, value } = req.body;
+    const email = req.userEmail; // Canonical identity from middleware
     if (!type || !value) return res.status(400).json({ error: 'type and value required' });
     if (typeof value !== 'string' || value.length > 200) {
       return res.status(400).json({ error: 'Invalid value' });
@@ -2191,8 +2474,8 @@ app.post('/api/welcome', async (req, res) => {
         return res.status(400).json({ error: 'Invalid type' });
     }
 
-    // Save to mem0 user track (per-user, skip for guest)
-    if (userId !== 'guest') {
+    // Save to mem0 user track (per-user) — fire-and-forget, don't block welcome flow
+    try {
       await fetch(`${MEM0_BASE}/v1/memories/`, {
         method: 'POST',
         headers: {
@@ -2200,15 +2483,25 @@ app.post('/api/welcome', async (req, res) => {
         },
         body: JSON.stringify({
           messages: [{ role: 'user', content: memoryText }],
-          user_id: getUserMemId(userId),
+          user_id: getUserMemId(email),
           infer: true
         })
       });
+    } catch (memErr) {
+      console.error('Welcome mem0 save failed (non-fatal):', memErr.message);
+    }
+
+    // Persist to user profile store (data/users.json)
+    if (type === 'name') {
+      const firstName = value.split(/[\s,]+/)[0].replace(/[^a-zA-Z'-]/g, '') || value.trim();
+      updateUserProfile(email, { displayName: firstName });
+    } else if (type === 'color') {
+      updateUserProfile(email, { accentColor: value });
     }
 
     // Initialize relationship on first welcome interaction (per-user)
     const data = readJSON(RELATIONSHIP_FILE) || {};
-    const userKey = (userId && data._version && KNOWN_USERS[userId]) ? userId : (data._version ? '_legacy' : null);
+    const userKey = (email && data._version) ? getEmailSlug(email) : (data._version ? '_legacy' : null);
     const rel = userKey ? (data[userKey] || {}) : data;
     if (!rel.firstChat) {
       rel.firstChat = new Date().toISOString().slice(0, 10);
@@ -2990,33 +3283,32 @@ app.get('/api/nws-discussion', async (req, res) => {
 // ---------------------------------------------------------------------------
 
 /**
- * GET /api/youtube-favorites — List saved YouTube favorites for a user.
- * @query {string} userId - The user ID (e.g. "amelia", "lonnie")
+ * GET /api/youtube-favorites — List saved YouTube favorites for the current user.
  */
 app.get('/api/youtube-favorites', (req, res) => {
-  const userId = req.query.userId || 'guest';
+  const userKey = getEmailSlug(req.userEmail);
   const data = readJSON(YT_FAVORITES_FILE) || {};
-  res.json(data[userId] || []);
+  res.json(data[userKey] || []);
 });
 
 /**
  * POST /api/youtube-favorites — Save a YouTube video to favorites.
- * @body {string} userId - The user ID
  * @body {string} videoId - YouTube video ID
  * @body {string} url - Full YouTube URL
  * @body {string} title - Video title
  * @body {string} thumbnail - Thumbnail URL
  */
 app.post('/api/youtube-favorites', (req, res) => {
-  const { userId = 'guest', videoId, url, title, thumbnail } = req.body;
+  const userKey = getEmailSlug(req.userEmail);
+  const { videoId, url, title, thumbnail } = req.body;
   if (!videoId || !url) return res.status(400).json({ error: 'videoId and url required' });
 
   const data = readJSON(YT_FAVORITES_FILE) || {};
-  if (!data[userId]) data[userId] = [];
+  if (!data[userKey]) data[userKey] = [];
 
   // Prevent duplicates
-  if (data[userId].some(f => f.videoId === videoId)) {
-    return res.json({ message: 'already saved', favorites: data[userId] });
+  if (data[userKey].some(f => f.videoId === videoId)) {
+    return res.json({ message: 'already saved', favorites: data[userKey] });
   }
 
   const favorite = {
@@ -3027,29 +3319,35 @@ app.post('/api/youtube-favorites', (req, res) => {
     thumbnail: thumbnail || '',
     savedAt: new Date().toISOString()
   };
-  data[userId].push(favorite);
+  data[userKey].push(favorite);
   writeJSON(YT_FAVORITES_FILE, data);
   res.json(favorite);
 });
 
 /**
  * DELETE /api/youtube-favorites/:id — Remove a YouTube favorite.
- * @query {string} userId - The user ID
  * @param {string} id - The favorite entry UUID
  */
 app.delete('/api/youtube-favorites/:id', (req, res) => {
-  const userId = req.query.userId || 'guest';
+  const userKey = getEmailSlug(req.userEmail);
   const data = readJSON(YT_FAVORITES_FILE) || {};
-  if (!data[userId]) return res.json({ success: true });
+  if (!data[userKey]) return res.json({ success: true });
 
-  data[userId] = data[userId].filter(f => f.id !== req.params.id);
+  data[userKey] = data[userKey].filter(f => f.id !== req.params.id);
   writeJSON(YT_FAVORITES_FILE, data);
   res.json({ success: true });
 });
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`✿ My Melody Chat is running on port ${PORT} ✿`);
   console.log(`  mem0 mode: ${MEM0_MODE} → ${MEM0_BASE}`);
+
+  // Run one-time data migration (idempotent — checks _migrated flag)
+  try {
+    await migrateOldUsers();
+  } catch (err) {
+    console.error('Migration error (non-fatal):', err.message);
+  }
 });
