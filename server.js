@@ -374,6 +374,7 @@ function loadUserProfiles() {
   try {
     const profiles = JSON.parse(readFileSync(USERS_FILE, 'utf-8'));
     if (profiles && typeof profiles === 'object' && !Array.isArray(profiles)) {
+      userProfileCache.clear();
       for (const [email, profile] of Object.entries(profiles)) {
         userProfileCache.set(email, profile);
       }
@@ -2490,10 +2491,12 @@ app.post('/api/welcome', async (req, res) => {
       console.error('Welcome mem0 save failed (non-fatal):', memErr.message);
     }
 
-    // Persist display name to user profile store (data/users.json)
+    // Persist to user profile store (data/users.json)
     if (type === 'name') {
       const firstName = value.split(/[\s,]+/)[0].replace(/[^a-zA-Z'-]/g, '') || value.trim();
       updateUserProfile(email, { displayName: firstName });
+    } else if (type === 'color') {
+      updateUserProfile(email, { accentColor: value });
     }
 
     // Initialize relationship on first welcome interaction (per-user)

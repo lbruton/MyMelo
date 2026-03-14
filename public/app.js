@@ -2483,6 +2483,10 @@ async function runWelcomeFlow() {
   // Fetch current user profile — identity derived from Cloudflare header
   await fetchCurrentUser();
 
+  if (!currentUser) {
+    // /api/me failed — retry once before giving up
+    await fetchCurrentUser();
+  }
   if (!currentUser || !currentUser.needsOnboarding) {
     // Returning user — show personalized greeting
     try {
