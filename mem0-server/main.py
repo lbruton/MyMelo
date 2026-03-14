@@ -34,11 +34,11 @@ EMBED_MODEL = os.getenv("EMBED_MODEL", "models/text-embedding-004")
 EMBED_DIMS = int(os.getenv("EMBED_DIMS", "768"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
-# ─── Reranker Configuration (Ollama LXC) ───
+# ─── Reranker Configuration (Gaming Rig GTX 3080, Gemini fallback) ───
 
 RERANK_ENABLED = os.getenv("RERANK_ENABLED", "false").lower() == "true"
-RERANK_OLLAMA_URL = os.getenv("RERANK_OLLAMA_URL", "http://192.168.1.67:11434")
-RERANK_MODEL = os.getenv("RERANK_MODEL", "qwen2.5:3b")
+RERANK_OLLAMA_URL = os.getenv("RERANK_OLLAMA_URL", "http://192.168.1.95:11434")
+RERANK_MODEL = os.getenv("RERANK_MODEL", "llama3.2")
 RERANK_FETCH_MULTIPLIER = int(os.getenv("RERANK_FETCH_MULTIPLIER", "3"))
 
 logging.basicConfig(level=getattr(logging, LOG_LEVEL), format="%(asctime)s %(levelname)s %(message)s")
