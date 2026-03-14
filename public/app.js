@@ -2303,7 +2303,57 @@ async function loadJournalTab() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const summaries = await res.json();
     journalList.innerHTML = '';
-    renderSummaries(summaries, charId, journalList, loadJournalTab);
+
+    if (!summaries.length) {
+      journalList.innerHTML = '<p class="empty-state">No journal entries yet — keep chatting!</p>';
+      return;
+    }
+
+    // Render each summary as a standalone journal card (no accordion)
+    summaries.forEach((s, displayIdx) => {
+      const card = document.createElement('div');
+      card.className = 'journal-card';
+
+      const cardHeader = document.createElement('div');
+      cardHeader.className = 'journal-card-header';
+
+      const dateSpan = document.createElement('span');
+      dateSpan.className = 'journal-card-date';
+      const d = new Date(s.date);
+      dateSpan.textContent = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+      const countBadge = document.createElement('span');
+      countBadge.className = 'journal-card-count';
+      countBadge.textContent = `${s.exchangeCount} exchanges`;
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'summary-delete-btn';
+      delBtn.textContent = '\u00D7';
+      delBtn.title = 'Delete entry';
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('Delete this journal entry?')) return;
+        try {
+          const storedIndex = summaries.length - 1 - displayIdx;
+          await fetch(`/api/summaries/${storedIndex}?characterId=${charId}`, { method: 'DELETE' });
+          loadJournalTab();
+        } catch (err) {
+          console.error('Journal delete error:', err);
+        }
+      });
+
+      cardHeader.appendChild(dateSpan);
+      cardHeader.appendChild(countBadge);
+      cardHeader.appendChild(delBtn);
+
+      const textDiv = document.createElement('div');
+      textDiv.className = 'journal-card-text';
+      textDiv.textContent = s.summary || '';
+
+      card.appendChild(cardHeader);
+      card.appendChild(textDiv);
+      journalList.appendChild(card);
+    });
   } catch (err) {
     journalList.innerHTML = '<p class="empty-state">Could not load journal entries</p>';
   }
