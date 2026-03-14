@@ -1,25 +1,33 @@
 /**
  * @file My Melody Chat — Service worker for PWA caching.
  *
- * Implements app shell caching with stale-while-revalidate for static assets
- * and network-only for API and data routes. Cache versioning uses melody-vX.Y format.
+ * Update architecture (never requires manual cache busting):
  *
- * @version 3.6.0
+ * 1. sw.js registered with updateViaCache:'none' — browser always fetches
+ *    sw.js from network, never HTTP cache. Any byte change triggers install.
+ * 2. install: pre-caches APP_SHELL with versioned URLs (?v=VERSION),
+ *    then skipWaiting() to activate immediately.
+ * 3. activate: deletes ALL old caches, then clients.claim() to take control.
+ * 4. fetch (navigate): network-first — always gets fresh index.html from server.
+ *    Cache is offline-only fallback.
+ * 5. fetch (assets): network-first with cache fallback. NOT stale-while-revalidate.
+ *    This means every load fetches fresh assets from the server. The cache only
+ *    serves when offline. This trades a few ms of latency for guaranteed freshness.
+ * 6. index.html has a version gate <script> that fetches /api/version (bypasses SW)
+ *    and hard-reloads if the version mismatches. Belt-and-suspenders.
+ *
+ * To deploy an update: bump VERSION here + APP_VERSION in server.js + ?v= params
+ * in index.html. That's it. Every client self-updates within 1 page load.
  */
 
-/**
- * Cache version identifier. Bump on each deploy to invalidate stale assets.
- * Format: melody-vMAJOR.MINOR.PATCH (e.g., melody-v2.6.0).
- * @type {string}
- */
-
-const CACHE_NAME = 'melody-v3.11.1';
+const VERSION = '3.12.0';
+const CACHE_NAME = `melody-v${VERSION}`;
 
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/style.css?v=3.11.1',
-  '/app.js?v=3.11.1',
+  `/style.css?v=${VERSION}`,
+  `/app.js?v=${VERSION}`,
   '/manifest.json',
   '/images/melody-avatar.png',
   '/images/kuromi-avatar.png',
@@ -28,16 +36,7 @@ const APP_SHELL = [
   '/images/icon-512.png'
 ];
 
-/**
- * Handles the install event -- pre-caches the app shell.
- *
- * Opens the versioned cache, adds all {@link APP_SHELL} URLs, then calls
- * {@link ServiceWorkerGlobalScope.skipWaiting skipWaiting} so the new
- * service worker activates immediately without waiting for existing clients
- * to close.
- *
- * @listens InstallEvent
- */
+// Install: pre-cache app shell, activate immediately
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME)
@@ -46,15 +45,7 @@ self.addEventListener('install', (e) => {
   );
 });
 
-/**
- * Handles the activate event -- purges outdated caches.
- *
- * Iterates all cache keys and deletes any that do not match the current
- * {@link CACHE_NAME}, then calls {@link Clients.claim claim} so this
- * service worker takes control of all open clients immediately.
- *
- * @listens ExtendableEvent
- */
+// Activate: delete ALL old caches, take control immediately
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then(keys =>
@@ -65,54 +56,25 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-/**
- * Handles the fetch event -- routes requests by path prefix.
- *
- * - `/api/*` and `/data/*` requests are **network-only** (the handler returns
- *   without calling {@link FetchEvent.respondWith respondWith}, so the browser
- *   performs a normal network fetch).
- * - All other requests use **stale-while-revalidate**: the cached response is
- *   returned immediately if available while a network fetch runs in the
- *   background to update the cache. If no cached response exists, the network
- *   response is awaited. If the network fetch fails, the stale cached copy is
- *   used as a fallback.
- *
- * @listens FetchEvent
- */
+// Fetch: network-first for everything. Cache is offline-only fallback.
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // Network-only for API calls and user data
+  // Network-only for API calls and user data (no caching ever)
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/data/')) {
     return;
   }
 
-  // Network-first for HTML (ensures SW registration updates propagate)
-  if (e.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
-    e.respondWith(
-      fetch(e.request).then(response => {
+  // Network-first for all static assets — cache is offline fallback only
+  e.respondWith(
+    fetch(e.request)
+      .then(response => {
         if (response.ok) {
-          caches.open(CACHE_NAME).then(cache => cache.put(e.request, response.clone()));
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
         }
         return response;
-      }).catch(() => caches.match(e.request))
-    );
-    return;
-  }
-
-  // Stale-while-revalidate for other static assets (js, css, images)
-  e.respondWith(
-    caches.open(CACHE_NAME).then(cache =>
-      cache.match(e.request).then(cached => {
-        const fetchPromise = fetch(e.request).then(response => {
-          if (response.ok) {
-            cache.put(e.request, response.clone());
-          }
-          return response;
-        }).catch(() => cached);
-
-        return cached || fetchPromise;
       })
-    )
+      .catch(() => caches.match(e.request))
   );
 });

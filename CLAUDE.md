@@ -161,6 +161,40 @@ Deployed via Portainer on VM 101 (`192.168.1.81`), Stack ID 9. Do NOT run Docker
 
 - **Redeploy:** Portainer UI or git redeploy API (note: env vars must be included in the request body)
 
+## PWA Update Architecture
+
+**Every deploy MUST update the version string in exactly 3 places.** This is the ONLY thing needed to push updates to all clients — no manual cache busting, no user action required.
+
+### Version bump checklist (all 3 required)
+
+| File | Location | Example |
+|------|----------|---------|
+| `server.js` | `APP_VERSION` constant | `const APP_VERSION = '3.12.0';` |
+| `public/sw.js` | `VERSION` constant | `const VERSION = '3.12.0';` |
+| `public/index.html` | Version gate + `?v=` params | `d.version !== '3.12.0'` + `app.js?v=3.12.0` + `style.css?v=3.12.0` |
+
+### How updates propagate (no user action needed)
+
+1. **SW registration** uses `updateViaCache: 'none'` — browser always fetches `sw.js` from network
+2. **New `sw.js`** has a different `VERSION` → byte-level mismatch → browser installs new SW
+3. **New SW** calls `skipWaiting()` + `clients.claim()` → activates immediately, deletes old caches
+4. **All fetch requests** are network-first — cache is offline-only fallback, never serves stale content
+5. **Version gate** in `<head>` of `index.html` fetches `/api/version` (bypasses SW via `/api/` exclusion), compares to hardcoded version, and if mismatched: unregisters all SWs, clears all caches, hard-reloads
+6. **`?v=` query params** on `app.js` and `style.css` bust Chrome's HTTP disk cache
+
+### Design principles (never violate these)
+
+- **NEVER** use stale-while-revalidate for `index.html` or navigation requests
+- **NEVER** register `sw.js` without `updateViaCache: 'none'`
+- **NEVER** reference `app.js` or `style.css` without `?v=` params in HTML
+- **ALWAYS** keep version strings in sync across all 3 files
+- Cache exists **only** for offline support, **never** for performance
+- `/api/*` routes are **always** network-only — the version gate depends on this
+
+### Emergency: `/bust-cache` endpoint
+
+If a client is stuck (should never happen with this architecture), visiting `https://mymelo.lbruton.cc/bust-cache` unregisters all SWs, deletes all caches, clears localStorage, and redirects to `/`. This is a server-rendered route — it bypasses the SW entirely.
+
 ## My Melody Character Guide
 
 The system prompt is based on deep research into the REAL My Melody character from Sanrio anime/media. Key points for anyone editing the prompt:
@@ -204,7 +238,7 @@ Uses Ali:Chat format (example dialogues in system prompt) per SillyTavern commun
 - **safesearch=strict** — Required for Brave image/video API (does not accept "moderate" — returns 422)
 - **Hardcoded #FFFFFF on avatars** — Avatar backgrounds use `#FFFFFF` not `var(--white)` to prevent dark mode from inverting Melody's skin color
 - **Web Audio API for sounds** — Synthesized chimes (sine waves), zero audio files. Reply chime = C5+E5 ascending, typing tick = A5 blip
-- **PWA with service worker** — Stale-while-revalidate for static assets, network-only for `/api/` and `/data/`. Cache name `melody-v3.11.0`
+- **PWA with service worker** — Network-first for all assets (cache is offline-only fallback), network-only for `/api/` and `/data/`. See "PWA Update Architecture" below
 - **Welcome flow in client** — First-time onboarding captures name/color/interests via interactive chat, saves each to mem0 via `/api/welcome`. Returning users get personalized greeting via `/api/welcome-status`
 - **Accent color from favorite color** — Mapped via `COLOR_MAP` object, applied as `--accent-highlight` CSS variable on tab indicators
 
@@ -242,7 +276,7 @@ API keys are stored in Infisical under the StakTrakr project, dev environment.
 | "oh my ribbons" in responses | Old prompt artifact | This phrase is fabricated — not in any Sanrio media. Remove from prompt. |
 | Repetitive/dry responses | Temperature too low or prompt too vague | Keep temp at 1.0, use Ali:Chat examples in prompt, add anti-pattern guards |
 | Model looping | Temperature below 1.0 on Gemini 3.x | Gemini 3 requires temp >= 1.0 |
-| Stale CSS/JS after deploy | Service worker serving old cache | Bump `CACHE_NAME` in `sw.js` (e.g. `melody-v2.3`) |
+| Stale CSS/JS after deploy | Version mismatch | Bump version in 3 places (see PWA Update Architecture). Auto-corrects within 1 load. |
 | No install prompt on Android | Already installed, or not served over HTTPS | PWA install requires HTTPS (localhost exempt). Check Chrome DevTools > Application > Manifest |
 | Sounds not playing on Android | AudioContext suspended until user gesture | Audio is unlocked on first touch/click — ensure user interacts before sounds are expected |
 | Welcome flow re-triggers | `melodyWelcomeDone` cleared from localStorage | Flow only runs once; clearing localStorage or using incognito will restart it |

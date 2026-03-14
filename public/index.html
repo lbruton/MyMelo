@@ -15,16 +15,25 @@
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Bebas+Neue&family=Permanent+Marker&display=swap" rel="stylesheet">
   <script>
     // Version gate — runs before any cached assets load.
-    // /api/ routes bypass the service worker (network-only), so this always hits the server.
-    (async()=>{try{const r=await fetch('/api/version');const d=await r.json();
-    if(d.version!=='3.11.1'){
-      // Nuke all SWs and caches, then hard reload
-      if('serviceWorker'in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const reg of regs)await reg.unregister();}
-      const keys=await caches.keys();for(const k of keys)await caches.delete(k);
-      window.location.reload(true);
-    }}catch(e){}})();
+    // /api/ routes bypass the SW (network-only), so this always hits the server.
+    // If version mismatches: nuke all SWs + caches, hard reload. Guarantees freshness.
+    (async () => {
+      try {
+        const r = await fetch('/api/version');
+        const d = await r.json();
+        if (d.version !== '3.12.0') {
+          if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            for (const reg of regs) await reg.unregister();
+          }
+          const keys = await caches.keys();
+          for (const k of keys) await caches.delete(k);
+          window.location.reload(true);
+        }
+      } catch (e) { /* offline or first load — proceed normally */ }
+    })();
   </script>
-  <link rel="stylesheet" href="style.css?v=3.11.1">
+  <link rel="stylesheet" href="style.css?v=3.12.0">
 </head>
 <body>
   <!-- Character Picker Overlay -->
@@ -230,7 +239,7 @@
     </div>
   </div>
 
-  <script src="app.js?v=3.11.1"></script>
+  <script src="app.js?v=3.12.0"></script>
   <script>
     // Service Worker registration — updateViaCache:'none' forces network fetch of sw.js
     // on every navigation so cache version bumps propagate immediately
