@@ -53,10 +53,12 @@ const __dirname = dirname(__filename);
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 
-// Prevent caching of sw.js so service worker updates propagate immediately
-app.get('/sw.js', (req, res, next) => {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.set('Pragma', 'no-cache');
+// Prevent proxy/CDN caching of static assets so updates propagate immediately
+app.use((req, res, next) => {
+  if (req.path.match(/\.(js|css|html)$/) || req.path === '/') {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+  }
   next();
 });
 app.use(express.static(join(__dirname, 'public')));
