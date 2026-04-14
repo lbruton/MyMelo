@@ -6,6 +6,6 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.23.1
+    rev: 7bad9f7654cf9701b62400281748c0e8efd97666
     hooks:
       - id: gitleaks
