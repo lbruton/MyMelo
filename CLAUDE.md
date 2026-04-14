@@ -4,6 +4,22 @@
 
 A My Melody (Sanrio) companion chat app with persistent memory, image vision, web search, game wiki integration, a growing friendship system, PWA install, notification sounds, and a first-time welcome flow.
 
+## DocVault — Project Documentation
+
+Technical documentation lives in **DocVault** at `/Volumes/DATA/GitHub/DocVault/Projects/MyMelo/`. mem0 supplements with session context, past decisions, and operational notes. **Read DocVault pages and check mem0 before discussing architecture or planning changes.**
+
+Key pages: Start at `/Volumes/DATA/GitHub/DocVault/Projects/MyMelo/_Index.md` and follow the index.
+
+```
+# Read a specific page
+Read /Volumes/DATA/GitHub/DocVault/Projects/MyMelo/Overview.md
+
+# Search MyMelo docs
+Grep pattern="<topic>" path="/Volumes/DATA/GitHub/DocVault/Projects/MyMelo"
+```
+
+When making changes that affect documented behavior, run `/vault-update` before pushing.
+
 ## Branching & Workflow
 
 - **`main`** — Protected via Codacy PR gate. Never push directly.
@@ -29,7 +45,7 @@ This project runs on Portainer (VM 101, `192.168.1.81`, Stack ID 9, port 3030) b
 - **Spec-workflow for features** — Requirements → Design → Tasks → Implementation with dashboard approvals. Bug fixes with clear root cause may skip the spec.
 - **PR gate** — All code reaches `main` via PR. Codacy quality gate enforced.
 - **Implementation logging** — `log-implementation` before marking tasks `[x]`.
-- **Wiki updates** — `/wiki-update` for changes affecting documented behavior.
+- **DocVault updates** — `/vault-update` for changes affecting documented behavior.
 - **Test on Portainer after merge** — Redeploy the stack on VM 101 and verify.
 
 ## Architecture
@@ -197,36 +213,7 @@ If a client is stuck (should never happen with this architecture), visiting `htt
 
 ## My Melody Character Guide
 
-The system prompt is based on deep research into the REAL My Melody character from Sanrio anime/media. Key points for anyone editing the prompt:
-
-### Authentic Speech Patterns (English — rotate naturally)
-Based on English translations and the 2025 50th anniversary branding. The Japanese verbal tics (Yaaan, Onegai, Meh) were dropped in the English dub of My Melody & Kuromi because they don't translate well. We use natural English equivalents:
-- **"Mama always says..."** — Her signature habit. Quotes mama's advice, sometimes hilariously off-topic
-- **"Oh~!" / "Oh my~!"** — When startled, distressed, or overwhelmed by cuteness (English equivalent of "Yaaan~!")
-- **"Pretty please?" / "Please?"** — When encouraging someone (English equivalent of "Onegai?" — use sparingly)
-- **"That's not very nice!"** — Gentle scold/finger-wag (English equivalent of "Meh!")
-- **"Ahh~ this tea is so nice..."** — Serene deflection during stress (iconic running gag)
-- **"Melly-melly~!"** — Her 2025 50th anniversary catchphrase. Use occasionally when excited.
-
-### Personality Traits
-- Gentle, polite, genuinely kind — but also an innocent ditz
-- Accidentally too honest (quotes Mama without filtering for social context)
-- Calm and serene by default — NOT hyperactive
-- Excellent baker/cook (almond pound cake is her specialty)
-- Considers Kuromi her close friend (oblivious to the rivalry)
-- Supports people by cheering them on — her magic is powered by encouragement
-- Close friends: Flat (blue mouse), My Sweet Piano (pink sheep)
-- Family: Mama, Papa, Grandpa, Grandma, brother Rhythm
-
-### NEVER DO
-- Say "oh my ribbons" — **completely fabricated**, not from any Sanrio media
-- Be generically sweet with no personality quirks
-- Be uniformly agreeable — Mama's advice can be accidentally devastating
-- Repeat the same phrase structure in consecutive messages
-- Ignore the user's emotional state
-
-### Prompting Approach
-Uses Ali:Chat format (example dialogues in system prompt) per SillyTavern community best practices. The model learns behavioral patterns from dialogue examples far better than from trait lists alone.
+Character personality, speech patterns, and prompting approach are documented in DocVault `[[Character Guide]]`. Key rule: **never say "oh my ribbons"** — it's completely fabricated, not from any Sanrio media. Uses Ali:Chat format for system prompt examples.
 
 ## Key Design Decisions
 
@@ -283,28 +270,8 @@ API keys are stored in Infisical under the StakTrakr project, dev environment.
 
 ## Future Plans
 
-### Emotion-Based Avatars
-Different My Melody icons based on her emotional state in each message:
-- States: `happy` (default), `sad`, `excited`, `thinking`, `love`, `surprised`, `startled`
-- LLM will emit `[EMOTION: state]` tag per message
-- Frontend swaps avatar `src` on the message bubble
-- Images need to be sourced/created first, then placed in `public/images/`
-- File naming: `melody-happy.png`, `melody-sad.png`, etc.
-- Saved to mem0 for future session reference
+Tracked in DocVault issues (prefix `MEL`). Key planned features: emotion-based avatars, rolling summary memory, entity graph, closeness score.
 
-### Speed Optimization (DONE in v2.1)
-- Swapped to `gemini-3-flash-preview` — 3x faster than 3.1 Pro, same SDK/tools
+## Hooks
 
-### Memory Architecture Improvements (from research)
-- **Layer 2: Rolling summary** — Summarize older conversations into a condensed context, injected alongside raw mem0 results
-- **Layer 4: Entity graph** — Track relationships between entities mentioned in chat (people, pets, places) for richer callbacks
-- **Closeness score** — Numeric friendship level that subtly shifts Melody's openness and playfulness over time
-- **Author's Note injection** — Brief character reinforcement injected ~4 messages back in conversation context
-
-### Research Sources (saved for reference)
-- SillyTavern character design: https://docs.sillytavern.app/usage/core-concepts/characterdesign/
-- Ali:Chat format: https://rentry.co/alichat
-- Gemini 3.1 Pro docs: https://ai.google.dev/gemini-api/docs/gemini-3
-- My Melody (Onegai) wiki: https://onegaimymelo.fandom.com/wiki/My_Melody
-- Mem0 companion guide: https://mem0.ai/blog/how-to-add-long-term-memory-to-ai-companions-a-step-by-step-guide
-- Character.AI reducing repetition: https://blog.character.ai/reducing-repetition-in-character-conversations/
+- **gitleaks**: Pre-commit hook scans for accidental secret commits (`github-pat`, `aws`, `stripe`, etc.). Runs via `pre-commit` framework. Installed 2026-04-14 (OPS-116).
