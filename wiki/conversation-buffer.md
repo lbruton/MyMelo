@@ -44,10 +44,10 @@ const sessionBuffers = new Map();
 
 Each entry is keyed by a UUID `sessionId` and stores:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `contents` | `Array<{role: string, parts: Array<{text: string}>}>` | Gemini-formatted message history |
-| `lastAccess` | `number` | `Date.now()` timestamp of last read/write |
+| Field        | Type                                                  | Description                               |
+| ------------ | ----------------------------------------------------- | ----------------------------------------- |
+| `contents`   | `Array<{role: string, parts: Array<{text: string}>}>` | Gemini-formatted message history          |
+| `lastAccess` | `number`                                              | `Date.now()` timestamp of last read/write |
 
 The `contents` array uses Gemini's expected format:
 
@@ -63,11 +63,13 @@ The `contents` array uses Gemini's expected format:
 On page load, the client generates or retrieves a session ID:
 
 ```js
-const sessionId = sessionStorage.getItem('melodySessionId') || (() => {
-  const id = crypto.randomUUID();
-  sessionStorage.setItem('melodySessionId', id);
-  return id;
-})();
+const sessionId =
+  sessionStorage.getItem('melodySessionId') ||
+  (() => {
+    const id = crypto.randomUUID();
+    sessionStorage.setItem('melodySessionId', id);
+    return id;
+  })();
 ```
 
 The ID is stored in `sessionStorage` (not `localStorage`), so it is scoped to the browser tab. Closing the tab discards the ID. Opening a new tab creates a new session.
@@ -89,9 +91,13 @@ function getSessionBuffer(sessionId) {
     // Enforce max session cap
     if (sessionBuffers.size >= MAX_SESSIONS) {
       // Evict oldest session by lastAccess
-      let oldest = null, oldestTime = Infinity;
+      let oldest = null,
+        oldestTime = Infinity;
       for (const [id, s] of sessionBuffers) {
-        if (s.lastAccess < oldestTime) { oldest = id; oldestTime = s.lastAccess; }
+        if (s.lastAccess < oldestTime) {
+          oldest = id;
+          oldestTime = s.lastAccess;
+        }
       }
       if (oldest) sessionBuffers.delete(oldest);
     }
@@ -129,10 +135,7 @@ The buffer enforces a maximum of 12 items (6 user-model exchange pairs):
 function addToSessionBuffer(sessionId, userMessage, assistantReply) {
   if (!sessionId) return;
   const buffer = getSessionBuffer(sessionId);
-  buffer.push(
-    { role: 'user',  parts: [{ text: userMessage }] },
-    { role: 'model', parts: [{ text: assistantReply }] }
-  );
+  buffer.push({ role: 'user', parts: [{ text: userMessage }] }, { role: 'model', parts: [{ text: assistantReply }] });
   while (buffer.length > 12) {
     buffer.shift(); // drop oldest user message
     buffer.shift(); // drop oldest model reply
@@ -144,8 +147,8 @@ Oldest exchanges are dropped in pairs (user + model together) to maintain role a
 
 ## Max Concurrent Sessions
 
-| Constant | Value | Purpose |
-|----------|-------|---------|
+| Constant       | Value  | Purpose                                                 |
+| -------------- | ------ | ------------------------------------------------------- |
 | `MAX_SESSIONS` | `1000` | Prevent memory exhaustion from unbounded session growth |
 
 When the limit is reached, the oldest session (by `lastAccess` timestamp) is evicted to make room for the new one. This is a linear scan of all sessions.
@@ -155,26 +158,29 @@ When the limit is reached, the oldest session (by `lastAccess` timestamp) is evi
 An interval timer prunes expired sessions every 10 minutes. Before deleting a session, the prune hook generates a rolling conversation summary (fire-and-forget) if the session has at least 3 exchanges and has `userId`/`characterId` attached:
 
 ```js
-setInterval(() => {
-  const cutoff = Date.now() - 60 * 60 * 1000;  // 1 hour ago
-  for (const [id, session] of sessionBuffers) {
-    if (session.lastAccess < cutoff) {
-      // Generate summary before pruning (fire-and-forget)
-      if (session.contents.length >= 6 && session.userId && session.characterId) {
-        generateSessionSummary(session.contents, session.userId, session.characterId, id);
+setInterval(
+  () => {
+    const cutoff = Date.now() - 60 * 60 * 1000; // 1 hour ago
+    for (const [id, session] of sessionBuffers) {
+      if (session.lastAccess < cutoff) {
+        // Generate summary before pruning (fire-and-forget)
+        if (session.contents.length >= 6 && session.userId && session.characterId) {
+          generateSessionSummary(session.contents, session.userId, session.characterId, id);
+        }
+        sessionBuffers.delete(id);
       }
-      sessionBuffers.delete(id);
     }
-  }
-}, 10 * 60 * 1000);  // every 10 minutes
+  },
+  10 * 60 * 1000,
+); // every 10 minutes
 ```
 
-| Parameter | Value |
-|-----------|-------|
-| Cleanup interval | 10 minutes |
-| Session TTL | 1 hour of inactivity |
-| Summary trigger | Session has >= 6 items (3 exchanges) + userId + characterId |
-| Summary model | `gemini-2.0-flash` (async, fire-and-forget) |
+| Parameter        | Value                                                       |
+| ---------------- | ----------------------------------------------------------- |
+| Cleanup interval | 10 minutes                                                  |
+| Session TTL      | 1 hour of inactivity                                        |
+| Summary trigger  | Session has >= 6 items (3 exchanges) + userId + characterId |
+| Summary model    | `gemini-2.0-flash` (async, fire-and-forget)                 |
 
 The generated summaries are stored in `data/summaries/` and injected into the system prompt on subsequent requests. See [Memory Architecture](memory-flow.md#2-rolling-summaries-temporal-memory) for full details.
 
@@ -201,12 +207,12 @@ Long-term memory is handled by [mem0](mem0-memory-system.md), which stores extra
 
 ## Why This Design
 
-| Alternative | Why not |
-|-------------|---------|
-| Database (SQLite, Redis) | Adds infrastructure complexity for data that is inherently temporary |
-| localStorage persistence | Conversation history does not need to survive across sessions; mem0 handles long-term recall |
-| Unlimited buffer | Gemini context window has limits; 6 exchanges provides enough context for coherent multi-turn conversation without excessive token usage |
-| No buffer at all | Without recent context, Melody cannot reference anything said earlier in the same session, leading to disjointed conversations |
+| Alternative              | Why not                                                                                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Database (SQLite, Redis) | Adds infrastructure complexity for data that is inherently temporary                                                                     |
+| localStorage persistence | Conversation history does not need to survive across sessions; mem0 handles long-term recall                                             |
+| Unlimited buffer         | Gemini context window has limits; 6 exchanges provides enough context for coherent multi-turn conversation without excessive token usage |
+| No buffer at all         | Without recent context, Melody cannot reference anything said earlier in the same session, leading to disjointed conversations           |
 
 The design prioritizes simplicity: an in-memory Map with automatic cleanup, no external dependencies, and graceful degradation (chat works without a session ID).
 

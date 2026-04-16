@@ -34,18 +34,18 @@ const reactionMatch = text.match(/\[REACTION:\s*(\w+)\]/);
 
 ## Supported Emotions
 
-| Emotion | nekos.best Categories | Typical Trigger |
-|---------|----------------------|-----------------|
-| `happy` | `happy`, `smile`, `dance` | Good news, celebrations |
-| `love` | `hug`, `cuddle`, `pat` | Comforting, affection, heartfelt moments |
-| `shy` | `blush`, `wave`, `wink` | Compliments, embarrassment |
-| `sad` | `cry`, `pout` | Bad news, empathy |
-| `think` | `think`, `nod`, `shrug` | Pondering, uncertainty |
-| `playful` | `tickle`, `poke`, `nom` | Teasing, fun, silly moments |
-| `angry` | `angry`, `facepalm`, `baka` | Frustration, mild annoyance (in character) |
-| `sassy` | `smug`, `thumbsup`, `yeet` | Witty remarks, confidence |
-| `tired` | `yawn`, `bored`, `sleep` | Late night chats, low energy |
-| `excited` | `highfive`, `thumbsup`, `dance` | Excitement, big announcements |
+| Emotion   | nekos.best Categories           | Typical Trigger                            |
+| --------- | ------------------------------- | ------------------------------------------ |
+| `happy`   | `happy`, `smile`, `dance`       | Good news, celebrations                    |
+| `love`    | `hug`, `cuddle`, `pat`          | Comforting, affection, heartfelt moments   |
+| `shy`     | `blush`, `wave`, `wink`         | Compliments, embarrassment                 |
+| `sad`     | `cry`, `pout`                   | Bad news, empathy                          |
+| `think`   | `think`, `nod`, `shrug`         | Pondering, uncertainty                     |
+| `playful` | `tickle`, `poke`, `nom`         | Teasing, fun, silly moments                |
+| `angry`   | `angry`, `facepalm`, `baka`     | Frustration, mild annoyance (in character) |
+| `sassy`   | `smug`, `thumbsup`, `yeet`      | Witty remarks, confidence                  |
+| `tired`   | `yawn`, `bored`, `sleep`        | Late night chats, low energy               |
+| `excited` | `highfive`, `thumbsup`, `dance` | Excitement, big announcements              |
 
 ## Emotion-to-Endpoint Mapping
 
@@ -53,16 +53,16 @@ The mapping is defined in the `REACTION_MAP` object in `app.js`:
 
 ```js
 const REACTION_MAP = {
-  happy:    ['happy', 'smile', 'dance'],
-  love:     ['hug', 'cuddle', 'pat'],
-  shy:      ['blush', 'wave', 'wink'],
-  sad:      ['cry', 'pout'],
-  think:    ['think', 'nod', 'shrug'],
-  playful:  ['tickle', 'poke', 'nom'],
-  angry:    ['angry', 'facepalm', 'baka'],
-  sassy:    ['smug', 'thumbsup', 'yeet'],
-  tired:    ['yawn', 'bored', 'sleep'],
-  excited:  ['highfive', 'thumbsup', 'dance']
+  happy: ['happy', 'smile', 'dance'],
+  love: ['hug', 'cuddle', 'pat'],
+  shy: ['blush', 'wave', 'wink'],
+  sad: ['cry', 'pout'],
+  think: ['think', 'nod', 'shrug'],
+  playful: ['tickle', 'poke', 'nom'],
+  angry: ['angry', 'facepalm', 'baka'],
+  sassy: ['smug', 'thumbsup', 'yeet'],
+  tired: ['yawn', 'bored', 'sleep'],
+  excited: ['highfive', 'thumbsup', 'dance'],
 };
 ```
 
@@ -146,8 +146,8 @@ The GIF is appended to the **last assistant message bubble** in the chat area:
 ```js
 const lastBubble = chatArea.querySelector('.message.assistant:last-child .message-bubble');
 fetch(`https://nekos.best/api/v2/${category}?amount=1`)
-  .then(r => r.json())
-  .then(data => {
+  .then((r) => r.json())
+  .then((data) => {
     const url = data.results?.[0]?.url;
     if (url && lastBubble) {
       const gif = document.createElement('img');
@@ -158,19 +158,21 @@ fetch(`https://nekos.best/api/v2/${category}?amount=1`)
       lastBubble.appendChild(gif);
     }
   })
-  .catch(() => { /* silently skip */ });
+  .catch(() => {
+    /* silently skip */
+  });
 ```
 
 ### Styling
 
 Inline styles applied to the GIF element:
 
-| Property | Value | Purpose |
-|----------|-------|---------|
-| `max-width` | `200px` | Keep GIFs compact in the message bubble |
-| `border-radius` | `8px` | Match the app's rounded corner aesthetic |
-| `margin-top` | `8px` | Spacing between message text and GIF |
-| `display` | `block` | Force GIF onto its own line |
+| Property        | Value   | Purpose                                  |
+| --------------- | ------- | ---------------------------------------- |
+| `max-width`     | `200px` | Keep GIFs compact in the message bubble  |
+| `border-radius` | `8px`   | Match the app's rounded corner aesthetic |
+| `margin-top`    | `8px`   | Spacing between message text and GIF     |
+| `display`       | `block` | Force GIF onto its own line              |
 
 ### Error Handling
 

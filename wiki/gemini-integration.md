@@ -12,15 +12,15 @@ My Melody Chat uses the Google Gemini API via the `@google/genai` SDK to power a
 
 ## Model Configuration
 
-| Parameter | Value | Notes |
-|-----------|-------|-------|
-| SDK | `@google/genai` | `GoogleGenAI` class |
-| Model ID | `gemini-3-flash-preview` | Fast variant; swap to `gemini-3.1-pro-preview` for richer responses |
-| Temperature | `1.0` | **Must be >= 1.0 on Gemini 3.x** to prevent looping |
-| topP | `0.95` | Nucleus sampling threshold |
-| thinkingBudget | `-1` | Auto (let the model decide thinking depth) |
-| Tools | `[{ googleSearch: {} }]` | Google Search grounding enabled |
-| JSON body limit | `10mb` | Express `express.json({ limit: '10mb' })` |
+| Parameter       | Value                    | Notes                                                               |
+| --------------- | ------------------------ | ------------------------------------------------------------------- |
+| SDK             | `@google/genai`          | `GoogleGenAI` class                                                 |
+| Model ID        | `gemini-3-flash-preview` | Fast variant; swap to `gemini-3.1-pro-preview` for richer responses |
+| Temperature     | `1.0`                    | **Must be >= 1.0 on Gemini 3.x** to prevent looping                 |
+| topP            | `0.95`                   | Nucleus sampling threshold                                          |
+| thinkingBudget  | `-1`                     | Auto (let the model decide thinking depth)                          |
+| Tools           | `[{ googleSearch: {} }]` | Google Search grounding enabled                                     |
+| JSON body limit | `10mb`                   | Express `express.json({ limit: '10mb' })`                           |
 
 ```js
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -30,7 +30,7 @@ const MODEL_CONFIG = {
   temperature: 1.0,
   topP: 0.95,
   thinkingConfig: { thinkingBudget: -1 },
-  tools: [{ googleSearch: {} }]
+  tools: [{ googleSearch: {} }],
 };
 ```
 
@@ -89,7 +89,7 @@ The system prompt is rebuilt on every request. It is never cached. The `systemIn
 const response = await ai.models.generateContent({
   model: MODEL_ID,
   contents,
-  config: { ...MODEL_CONFIG, systemInstruction }
+  config: { ...MODEL_CONFIG, systemInstruction },
 });
 ```
 
@@ -111,8 +111,8 @@ contents.push({
   role: 'user',
   parts: [
     { inlineData: { mimeType: imageMime || 'image/jpeg', data: imageBase64 } },
-    { text: message || 'What do you see in this image?' }
-  ]
+    { text: message || 'What do you see in this image?' },
+  ],
 });
 ```
 
@@ -120,11 +120,11 @@ contents.push({
 
 Images are sent as inline base64 data in the `parts` array alongside the text message. The client compresses images to 1024px max width at JPEG 0.8 quality before sending.
 
-| Field | Source | Default |
-|-------|--------|---------|
-| `inlineData.mimeType` | `req.body.imageMime` | `image/jpeg` |
-| `inlineData.data` | `req.body.imageBase64` | (required) |
-| `text` | `req.body.message` | `'What do you see in this image?'` |
+| Field                 | Source                 | Default                            |
+| --------------------- | ---------------------- | ---------------------------------- |
+| `inlineData.mimeType` | `req.body.imageMime`   | `image/jpeg`                       |
+| `inlineData.data`     | `req.body.imageBase64` | (required)                         |
+| `text`                | `req.body.message`     | `'What do you see in this image?'` |
 
 When an image is provided, it is also saved to disk (`data/images/`) with a UUID filename and metadata recorded in `images-meta.json`.
 
@@ -148,8 +148,8 @@ const grounding = candidate?.groundingMetadata;
 let sources = [];
 if (grounding?.groundingChunks) {
   sources = grounding.groundingChunks
-    .filter(c => c.web)
-    .map(c => ({ title: c.web.title || '', url: c.web.uri || '' }));
+    .filter((c) => c.web)
+    .map((c) => ({ title: c.web.title || '', url: c.web.uri || '' }));
 }
 ```
 
@@ -191,10 +191,10 @@ When Gemini's reply contains a `[WIKI_SEARCH: wikiId query]` tag, the server int
 
 ### Wiki Registry
 
-| Wiki ID | Game | API Base |
-|---------|------|----------|
-| `hkia` | Hello Kitty Island Adventure | `hellokittyislandadventure.wiki.gg` |
-| `minecraft` | Minecraft | `minecraft.wiki` |
+| Wiki ID     | Game                         | API Base                            |
+| ----------- | ---------------------------- | ----------------------------------- |
+| `hkia`      | Hello Kitty Island Adventure | `hellokittyislandadventure.wiki.gg` |
+| `minecraft` | Minecraft                    | `minecraft.wiki`                    |
 
 New wikis are added by inserting one entry into the `WIKIS` object.
 
@@ -206,13 +206,13 @@ New wikis are added by inserting one entry into the `WIKIS` object.
 
 ## Error Handling
 
-| Scenario | Behavior |
-|----------|----------|
-| No message or image | 400: `'Message or image is required'` |
-| Gemini API failure | 500: `'Something went wrong, my sweet friend!'` |
+| Scenario              | Behavior                                                  |
+| --------------------- | --------------------------------------------------------- |
+| No message or image   | 400: `'Message or image is required'`                     |
+| Gemini API failure    | 500: `'Something went wrong, my sweet friend!'`           |
 | Wiki pipeline failure | Falls back to original reply (tag stripped), error logged |
-| mem0 search failure | Graceful degradation: chat works without memories |
-| mem0 save failure | Fire-and-forget: errors logged but not propagated |
+| mem0 search failure   | Graceful degradation: chat works without memories         |
+| mem0 save failure     | Fire-and-forget: errors logged but not propagated         |
 
 All errors in the main chat handler are caught by a top-level try/catch that returns a 500 with a friendly error message.
 
@@ -226,9 +226,9 @@ All errors in the main chat handler are caught by a top-level try/catch that ret
 
 ## Environment Variables
 
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `GEMINI_API_KEY` | Yes | Google AI Studio API key |
+| Variable         | Required | Purpose                  |
+| ---------------- | -------- | ------------------------ |
+| `GEMINI_API_KEY` | Yes      | Google AI Studio API key |
 
 ---
 

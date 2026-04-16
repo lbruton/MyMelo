@@ -33,26 +33,26 @@ const APP_SHELL = [
   '/images/kuromi-avatar.png',
   '/images/retsuko-avatar.png',
   '/images/icon-192.png',
-  '/images/icon-512.png'
+  '/images/icon-512.png',
 ];
 
 // Install: pre-cache app shell, activate immediately
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(APP_SHELL))
-      .then(() => self.skipWaiting())
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => cache.addAll(APP_SHELL))
+      .then(() => self.skipWaiting()),
   );
 });
 
 // Activate: delete ALL old caches, take control immediately
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
-      )
-    ).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
   );
 });
 
@@ -68,13 +68,13 @@ self.addEventListener('fetch', (e) => {
   // Network-first for all static assets — cache is offline fallback only
   e.respondWith(
     fetch(e.request)
-      .then(response => {
+      .then((response) => {
         if (response.ok) {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
         }
         return response;
       })
-      .catch(() => caches.match(e.request))
+      .catch(() => caches.match(e.request)),
   );
 });

@@ -1,274 +1,346 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#FF69B4">
-  <link rel="manifest" href="/manifest.json">
-  <link rel="icon" href="/images/icon-192.png">
-  <link rel="apple-touch-icon" href="/images/icon-192.png">
-  <title>My Melody Chat ♡</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Bebas+Neue&family=Permanent+Marker&display=swap" rel="stylesheet">
-  <script>
-    // Version gate — runs before any cached assets load.
-    // /api/ routes bypass the SW (network-only), so this always hits the server.
-    // If version mismatches: nuke all SWs + caches, redirect with cache-bust param.
-    // Uses sessionStorage flag to prevent infinite reload loops.
-    (async () => {
-      try {
-        if (sessionStorage.getItem('_versionBusting')) {
-          sessionStorage.removeItem('_versionBusting');
-          return; // Already tried once this session — don't loop
-        }
-        const r = await fetch('/api/version');
-        const d = await r.json();
-        if (d.version !== '3.12.0') {
-          sessionStorage.setItem('_versionBusting', '1');
-          if ('serviceWorker' in navigator) {
-            const regs = await navigator.serviceWorker.getRegistrations();
-            for (const reg of regs) await reg.unregister();
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#FF69B4" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/images/icon-192.png" />
+    <link rel="apple-touch-icon" href="/images/icon-192.png" />
+    <title>My Melody Chat ♡</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Bebas+Neue&family=Permanent+Marker&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      // Version gate — runs before any cached assets load.
+      // /api/ routes bypass the SW (network-only), so this always hits the server.
+      // If version mismatches: nuke all SWs + caches, redirect with cache-bust param.
+      // Uses sessionStorage flag to prevent infinite reload loops.
+      (async () => {
+        try {
+          if (sessionStorage.getItem('_versionBusting')) {
+            sessionStorage.removeItem('_versionBusting');
+            return; // Already tried once this session — don't loop
           }
-          const keys = await caches.keys();
-          for (const k of keys) await caches.delete(k);
-          // Redirect with cache-bust param to force fresh index.html from server
-          window.location.href = '/?_cb=' + Date.now();
-        }
-      } catch (e) { /* offline or first load — proceed normally */ }
-    })();
-  </script>
-  <link rel="stylesheet" href="style.css?v=3.12.0">
-</head>
-<body>
-  <!-- Character Picker Overlay -->
-  <div id="characterPicker" class="user-picker-overlay hidden">
-    <div class="user-picker-title">Choose your companion</div>
-    <div class="character-picker-buttons">
-      <button class="character-picker-btn" data-character="melody">
-        <img src="/images/melody-avatar.png" alt="My Melody" class="character-picker-avatar">
-        <span>My Melody</span>
-      </button>
-      <button class="character-picker-btn" data-character="kuromi">
-        <img src="/images/kuromi-avatar.png" alt="Kuromi" class="character-picker-avatar">
-        <span>Kuromi</span>
-      </button>
-      <button class="character-picker-btn" data-character="retsuko">
-        <img src="/images/retsuko-avatar.png" alt="Aggretsuko" class="character-picker-avatar">
-        <span>Aggretsuko</span>
-      </button>
-    </div>
-  </div>
-
-  <div class="app-container">
-    <!-- Header -->
-    <header class="chat-header">
-      <img src="/images/melody-avatar.png" alt="My Melody" class="header-avatar">
-      <div class="header-text">
-        <h1>My Melody</h1>
-        <p id="headerSubtitle" class="subtitle">Your Sweet Sanrio Friend ♡</p>
-      </div>
-      <div class="header-spacer"></div>
-      <div class="settings-container">
-        <button id="settingsBtn" class="settings-btn" aria-label="Settings">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
-        </button>
-        <div id="settingsDropdown" class="settings-dropdown hidden">
-          <div class="setting-row">
-            <span>Dark Mode</span>
-            <button id="darkModeToggle" class="toggle-btn">Off</button>
-          </div>
-          <div class="setting-row">
-            <span>Sounds</span>
-            <button id="soundToggle" class="toggle-btn">On</button>
-          </div>
-          <div class="setting-row">
-            <span>Reply Style</span>
-            <select id="replyStyleSelect">
-              <option value="default">Normal</option>
-              <option value="brief">Brief</option>
-              <option value="detailed">Detailed</option>
-              <option value="straightTalk">Straight Talk</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </header>
-
-    <!-- Tab content -->
-    <div class="tab-content">
-
-      <!-- Chat Tab -->
-      <div id="tabChat" class="tab-pane active">
-        <main class="chat-area" id="chatArea">
-          <div class="welcome-message">
-            <p>Hello! I was just having some tea and thinking about you~ Tell me, how are you doing today? ♡</p>
-          </div>
-        </main>
-
-        <div class="typing-indicator" id="typingIndicator">
-          <img src="/images/melody-avatar.png" alt="" class="typing-avatar-img">
-          <div class="typing-bubbles">
-            <span></span><span></span><span></span>
-          </div>
-        </div>
-
-        <div class="image-preview" id="imagePreview">
-          <img id="previewImg" src="" alt="Preview">
-          <button id="removeImageBtn" aria-label="Remove image">&times;</button>
-        </div>
-
-        <footer class="chat-input-area">
-          <div class="input-wrapper">
-            <button id="imageBtn" class="icon-btn" aria-label="Attach image">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-            </button>
-            <input type="file" id="imageInput" accept="image/*" hidden>
-            <input
-              type="text"
-              id="messageInput"
-              placeholder="Say something sweet... ♡"
-              autocomplete="off"
-              enterkeyhint="send"
-            >
-            <button id="sendBtn" aria-label="Send message">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-              </svg>
-            </button>
-          </div>
-        </footer>
-      </div>
-
-      <!-- Images Tab -->
-      <div id="tabImages" class="tab-pane">
-        <div class="tab-header">
-          <h2>Image Gallery</h2>
-        </div>
-        <div class="gallery-grid" id="galleryGrid">
-          <p class="empty-state">No images shared yet! Send a photo in chat ♡</p>
-        </div>
-      </div>
-
-      <!-- Memories Tab -->
-      <div id="tabMemories" class="tab-pane">
-        <div class="tab-header">
-          <h2>Memories</h2>
-          <button id="refreshMemoriesBtn" class="action-btn">Refresh</button>
-        </div>
-        <div class="relationship-stats" id="relationshipStats"></div>
-        <div class="memory-list" id="memoryList">
-          <p class="empty-state">Loading memories...</p>
-        </div>
-      </div>
-
-      <!-- Journal Tab -->
-      <div id="tabJournal" class="tab-pane">
-        <div class="tab-header">
-          <h2>Journal</h2>
-          <button id="refreshJournalBtn" class="action-btn">Refresh</button>
-        </div>
-        <div class="journal-list" id="journalList">
-          <p class="empty-state">Loading journal...</p>
-        </div>
-      </div>
-
-      <!-- Videos Tab -->
-      <div id="tabVideos" class="tab-pane">
-        <div class="videos-container" id="videosContainer">
-          <div class="videos-section" id="savedSection">
-            <h3 class="videos-section-title">Saved</h3>
-            <div class="videos-grid" id="savedGrid"></div>
-          </div>
-          <div class="videos-section" id="historySection">
-            <h3 class="videos-section-title">Recently Played</h3>
-            <div class="videos-grid" id="historyGrid"></div>
-          </div>
-          <div class="videos-empty" id="videosEmpty">
-            <p>No videos yet!</p>
-            <p>Play or save videos from chat using the &#9825; button.</p>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Bottom tab bar -->
-    <nav class="tab-bar">
-      <button class="tab-btn active" data-tab="tabChat" aria-label="Chat">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-        <span>Chat</span>
-      </button>
-      <button class="tab-btn" data-tab="tabImages" aria-label="Images">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-          <circle cx="8.5" cy="8.5" r="1.5"/>
-          <polyline points="21 15 16 10 5 21"/>
-        </svg>
-        <span>Images</span>
-      </button>
-      <button class="tab-btn" data-tab="tabMemories" aria-label="Memories">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-        </svg>
-        <span>Memories</span>
-      </button>
-      <button class="tab-btn" data-tab="tabJournal" aria-label="Journal">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-        </svg>
-        <span>Journal</span>
-      </button>
-      <button class="tab-btn" data-tab="tabVideos" aria-label="Videos">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="5 3 19 12 5 21 5 3"/>
-        </svg>
-        <span>Videos</span>
-      </button>
-    </nav>
-
-    <!-- Lightbox -->
-    <div class="lightbox" id="lightbox">
-      <button class="lightbox-close" id="lightboxClose">&times;</button>
-      <img id="lightboxImg" src="" alt="Full size">
-    </div>
-  </div>
-
-  <script src="app.js?v=3.12.0"></script>
-  <script>
-    // Service Worker registration — updateViaCache:'none' forces network fetch of sw.js
-    // on every navigation so cache version bumps propagate immediately
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
-        .then(reg => {
-          // Check for updates on every page load
-          reg.update().catch(() => {});
-          // When a new SW is waiting, tell it to activate immediately
-          reg.addEventListener('updatefound', () => {
-            const newSW = reg.installing;
-            if (newSW) {
-              newSW.addEventListener('statechange', () => {
-                if (newSW.state === 'activated') {
-                  window.location.reload();
-                }
-              });
+          const r = await fetch('/api/version');
+          const d = await r.json();
+          if (d.version !== '3.12.0') {
+            sessionStorage.setItem('_versionBusting', '1');
+            if ('serviceWorker' in navigator) {
+              const regs = await navigator.serviceWorker.getRegistrations();
+              for (const reg of regs) await reg.unregister();
             }
-          });
-        })
-        .catch(() => {});
-    }
-  </script>
-</body>
+            const keys = await caches.keys();
+            for (const k of keys) await caches.delete(k);
+            // Redirect with cache-bust param to force fresh index.html from server
+            window.location.href = '/?_cb=' + Date.now();
+          }
+        } catch (e) {
+          /* offline or first load — proceed normally */
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="style.css?v=3.12.0" />
+  </head>
+  <body>
+    <!-- Character Picker Overlay -->
+    <div id="characterPicker" class="user-picker-overlay hidden">
+      <div class="user-picker-title">Choose your companion</div>
+      <div class="character-picker-buttons">
+        <button class="character-picker-btn" data-character="melody">
+          <img src="/images/melody-avatar.png" alt="My Melody" class="character-picker-avatar" />
+          <span>My Melody</span>
+        </button>
+        <button class="character-picker-btn" data-character="kuromi">
+          <img src="/images/kuromi-avatar.png" alt="Kuromi" class="character-picker-avatar" />
+          <span>Kuromi</span>
+        </button>
+        <button class="character-picker-btn" data-character="retsuko">
+          <img src="/images/retsuko-avatar.png" alt="Aggretsuko" class="character-picker-avatar" />
+          <span>Aggretsuko</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="app-container">
+      <!-- Header -->
+      <header class="chat-header">
+        <img src="/images/melody-avatar.png" alt="My Melody" class="header-avatar" />
+        <div class="header-text">
+          <h1>My Melody</h1>
+          <p id="headerSubtitle" class="subtitle">Your Sweet Sanrio Friend ♡</p>
+        </div>
+        <div class="header-spacer"></div>
+        <div class="settings-container">
+          <button id="settingsBtn" class="settings-btn" aria-label="Settings">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+              />
+            </svg>
+          </button>
+          <div id="settingsDropdown" class="settings-dropdown hidden">
+            <div class="setting-row">
+              <span>Dark Mode</span>
+              <button id="darkModeToggle" class="toggle-btn">Off</button>
+            </div>
+            <div class="setting-row">
+              <span>Sounds</span>
+              <button id="soundToggle" class="toggle-btn">On</button>
+            </div>
+            <div class="setting-row">
+              <span>Reply Style</span>
+              <select id="replyStyleSelect">
+                <option value="default">Normal</option>
+                <option value="brief">Brief</option>
+                <option value="detailed">Detailed</option>
+                <option value="straightTalk">Straight Talk</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Tab content -->
+      <div class="tab-content">
+        <!-- Chat Tab -->
+        <div id="tabChat" class="tab-pane active">
+          <main class="chat-area" id="chatArea">
+            <div class="welcome-message">
+              <p>Hello! I was just having some tea and thinking about you~ Tell me, how are you doing today? ♡</p>
+            </div>
+          </main>
+
+          <div class="typing-indicator" id="typingIndicator">
+            <img src="/images/melody-avatar.png" alt="" class="typing-avatar-img" />
+            <div class="typing-bubbles"><span></span><span></span><span></span></div>
+          </div>
+
+          <div class="image-preview" id="imagePreview">
+            <img id="previewImg" src="" alt="Preview" />
+            <button id="removeImageBtn" aria-label="Remove image">&times;</button>
+          </div>
+
+          <footer class="chat-input-area">
+            <div class="input-wrapper">
+              <button id="imageBtn" class="icon-btn" aria-label="Attach image">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <polyline points="21 15 16 10 5 21" />
+                </svg>
+              </button>
+              <input type="file" id="imageInput" accept="image/*" hidden />
+              <input
+                type="text"
+                id="messageInput"
+                placeholder="Say something sweet... ♡"
+                autocomplete="off"
+                enterkeyhint="send"
+              />
+              <button id="sendBtn" aria-label="Send message">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                </svg>
+              </button>
+            </div>
+          </footer>
+        </div>
+
+        <!-- Images Tab -->
+        <div id="tabImages" class="tab-pane">
+          <div class="tab-header">
+            <h2>Image Gallery</h2>
+          </div>
+          <div class="gallery-grid" id="galleryGrid">
+            <p class="empty-state">No images shared yet! Send a photo in chat ♡</p>
+          </div>
+        </div>
+
+        <!-- Memories Tab -->
+        <div id="tabMemories" class="tab-pane">
+          <div class="tab-header">
+            <h2>Memories</h2>
+            <button id="refreshMemoriesBtn" class="action-btn">Refresh</button>
+          </div>
+          <div class="relationship-stats" id="relationshipStats"></div>
+          <div class="memory-list" id="memoryList">
+            <p class="empty-state">Loading memories...</p>
+          </div>
+        </div>
+
+        <!-- Journal Tab -->
+        <div id="tabJournal" class="tab-pane">
+          <div class="tab-header">
+            <h2>Journal</h2>
+            <button id="refreshJournalBtn" class="action-btn">Refresh</button>
+          </div>
+          <div class="journal-list" id="journalList">
+            <p class="empty-state">Loading journal...</p>
+          </div>
+        </div>
+
+        <!-- Videos Tab -->
+        <div id="tabVideos" class="tab-pane">
+          <div class="videos-container" id="videosContainer">
+            <div class="videos-section" id="savedSection">
+              <h3 class="videos-section-title">Saved</h3>
+              <div class="videos-grid" id="savedGrid"></div>
+            </div>
+            <div class="videos-section" id="historySection">
+              <h3 class="videos-section-title">Recently Played</h3>
+              <div class="videos-grid" id="historyGrid"></div>
+            </div>
+            <div class="videos-empty" id="videosEmpty">
+              <p>No videos yet!</p>
+              <p>Play or save videos from chat using the &#9825; button.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom tab bar -->
+      <nav class="tab-bar">
+        <button class="tab-btn active" data-tab="tabChat" aria-label="Chat">
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          <span>Chat</span>
+        </button>
+        <button class="tab-btn" data-tab="tabImages" aria-label="Images">
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <polyline points="21 15 16 10 5 21" />
+          </svg>
+          <span>Images</span>
+        </button>
+        <button class="tab-btn" data-tab="tabMemories" aria-label="Memories">
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+            />
+          </svg>
+          <span>Memories</span>
+        </button>
+        <button class="tab-btn" data-tab="tabJournal" aria-label="Journal">
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          </svg>
+          <span>Journal</span>
+        </button>
+        <button class="tab-btn" data-tab="tabVideos" aria-label="Videos">
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg>
+          <span>Videos</span>
+        </button>
+      </nav>
+
+      <!-- Lightbox -->
+      <div class="lightbox" id="lightbox">
+        <button class="lightbox-close" id="lightboxClose">&times;</button>
+        <img id="lightboxImg" src="" alt="Full size" />
+      </div>
+    </div>
+
+    <script src="app.js?v=3.12.0"></script>
+    <script>
+      // Service Worker registration — updateViaCache:'none' forces network fetch of sw.js
+      // on every navigation so cache version bumps propagate immediately
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker
+          .register('/sw.js', { updateViaCache: 'none' })
+          .then((reg) => {
+            // Check for updates on every page load
+            reg.update().catch(() => {});
+            // When a new SW is waiting, tell it to activate immediately
+            reg.addEventListener('updatefound', () => {
+              const newSW = reg.installing;
+              if (newSW) {
+                newSW.addEventListener('statechange', () => {
+                  if (newSW.state === 'activated') {
+                    window.location.reload();
+                  }
+                });
+              }
+            });
+          })
+          .catch(() => {});
+      }
+    </script>
+  </body>
 </html>

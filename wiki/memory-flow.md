@@ -4,13 +4,13 @@
 
 Five independent memory layers work together to give characters context:
 
-| Layer | Storage | Scope | Lifetime |
-|-------|---------|-------|----------|
-| **Conversation Buffer** | Server RAM (`Map`) | Per browser tab (sessionId) | 1 hour, max 6 exchanges |
-| **Rolling Summaries** | `data/summaries/*.json` (Docker volume) | Per user + per character | Permanent, max 20 per pair |
-| **Core Memory Blocks** | `data/core-memory/*.json` (Docker volume) | Per user + per character | Permanent (until deleted) |
-| **mem0 Dual-Track** | mem0 cloud API | Per user + global agent | Permanent (until deleted) |
-| **Relationship Stats** | `data/relationship.json` | Per user | Permanent (Docker volume) |
+| Layer                   | Storage                                   | Scope                       | Lifetime                   |
+| ----------------------- | ----------------------------------------- | --------------------------- | -------------------------- |
+| **Conversation Buffer** | Server RAM (`Map`)                        | Per browser tab (sessionId) | 1 hour, max 6 exchanges    |
+| **Rolling Summaries**   | `data/summaries/*.json` (Docker volume)   | Per user + per character    | Permanent, max 20 per pair |
+| **Core Memory Blocks**  | `data/core-memory/*.json` (Docker volume) | Per user + per character    | Permanent (until deleted)  |
+| **mem0 Dual-Track**     | mem0 cloud API                            | Per user + global agent     | Permanent (until deleted)  |
+| **Relationship Stats**  | `data/relationship.json`                  | Per user                    | Permanent (Docker volume)  |
 
 ---
 

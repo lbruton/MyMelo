@@ -16,26 +16,26 @@ The user track is **shared across all characters** — the same friend facts app
 
 The app supports two mem0 backends, toggled via the `MEM0_MODE` environment variable:
 
-| Mode | `MEM0_MODE` | Base URL | Auth |
-|------|-------------|----------|------|
-| Cloud | `cloud` (default) | `https://api.mem0.ai` | `Token ${MEM0_API_KEY}` header |
-| Self-hosted | `selfhosted` | `MEM0_SELF_URL` env var | None (local network) |
+| Mode        | `MEM0_MODE`       | Base URL                | Auth                           |
+| ----------- | ----------------- | ----------------------- | ------------------------------ |
+| Cloud       | `cloud` (default) | `https://api.mem0.ai`   | `Token ${MEM0_API_KEY}` header |
+| Self-hosted | `selfhosted`      | `MEM0_SELF_URL` env var | None (local network)           |
 
 Self-hosted mode uses a custom FastAPI server (`mem0-server/`) that wraps the `mem0ai` Python library and exposes cloud-API-compatible endpoints. This eliminates the 1,000 req/month cloud API cap.
 
 ### Self-Hosted Stack (Portainer Stack ID 21)
 
-| Service | Image | Port | Purpose |
-|---------|-------|------|---------|
-| `qdrant` | `qdrant/qdrant:latest` | 6333 | Vector store for embeddings |
-| `mem0-server` | `mymelo-mem0:latest` | 8769 | FastAPI wrapper + dashboard |
+| Service       | Image                  | Port | Purpose                     |
+| ------------- | ---------------------- | ---- | --------------------------- |
+| `qdrant`      | `qdrant/qdrant:latest` | 6333 | Vector store for embeddings |
+| `mem0-server` | `mymelo-mem0:latest`   | 8769 | FastAPI wrapper + dashboard |
 
-| Config | Value |
-|--------|-------|
-| LLM | `gemini-2.5-flash-lite` (fact extraction) |
-| Embedder | `gemini-embedding-001` (768 dims) |
-| Collection | `mymelo` |
-| Dashboard | `http://192.168.1.81:8769/` |
+| Config     | Value                                     |
+| ---------- | ----------------------------------------- |
+| LLM        | `gemini-2.5-flash-lite` (fact extraction) |
+| Embedder   | `gemini-embedding-001` (768 dims)         |
+| Collection | `mymelo`                                  |
+| Dashboard  | `http://192.168.1.81:8769/`               |
 
 ### Rollback
 
@@ -77,10 +77,10 @@ Set `MEM0_MODE=cloud` (or remove it) in the HKF stack env vars. Cloud memories a
 Each character in the `CHARACTERS` registry has its own isolated `agentId` in mem0:
 
 | Character key | Display name | mem0 `agent_id` |
-|---------------|-------------|-----------------|
-| `melody` | My Melody | `my-melody` |
-| `kuromi` | Kuromi | `kuromi` |
-| `retsuko` | Aggretsuko | `retsuko` |
+| ------------- | ------------ | --------------- |
+| `melody`      | My Melody    | `my-melody`     |
+| `kuromi`      | Kuromi       | `kuromi`        |
+| `retsuko`     | Aggretsuko   | `retsuko`       |
 
 The `MEM0_AGENT_ID` constant (`'my-melody'`) is the backward-compatibility fallback used when no character is passed. It is also the hardcoded default for any code path that does not yet pass a character object.
 
@@ -92,7 +92,7 @@ Each known user has an isolated user track in mem0. The `KNOWN_USERS` map define
 const KNOWN_USERS = {
   amelia: { name: 'Amelia', mem0Id: 'melody-friend-amelia' },
   lonnie: { name: 'Lonnie', mem0Id: 'melody-friend-lonnie' },
-  guest:  { name: 'Guest',  mem0Id: 'melody-friend-guest' }
+  guest: { name: 'Guest', mem0Id: 'melody-friend-guest' },
 };
 ```
 
@@ -107,11 +107,11 @@ function getUserMemId(userId) {
 }
 ```
 
-| Input | Output |
-|-------|--------|
-| `'amelia'` | `'melody-friend-amelia'` |
-| `'lonnie'` | `'melody-friend-lonnie'` |
-| `'guest'` | `'melody-friend-guest'` |
+| Input       | Output                               |
+| ----------- | ------------------------------------ |
+| `'amelia'`  | `'melody-friend-amelia'`             |
+| `'lonnie'`  | `'melody-friend-lonnie'`             |
+| `'guest'`   | `'melody-friend-guest'`              |
 | `undefined` | `'melody-friend'` (env var fallback) |
 | `'unknown'` | `'melody-friend'` (env var fallback) |
 
@@ -119,13 +119,13 @@ The fallback `MEM0_USER_ID` defaults to `'melody-friend'` and can be overridden 
 
 ## API Endpoints Used
 
-| Operation | mem0 Endpoint | Method | Notes |
-|-----------|---------------|--------|-------|
-| Search memories | `/v2/memories/search/` | POST | Semantic search with filters, `rerank: true` |
-| List memories | `/v1/memories/?user_id=X` | GET | List all for a user track |
-| List memories | `/v1/memories/?agent_id=X` | GET | List all for an agent track |
-| Save memories | `/v1/memories/` | POST | With `infer: true` |
-| Delete memory | `/v1/memories/:id/` | DELETE | By mem0 ID |
+| Operation       | mem0 Endpoint              | Method | Notes                                        |
+| --------------- | -------------------------- | ------ | -------------------------------------------- |
+| Search memories | `/v2/memories/search/`     | POST   | Semantic search with filters, `rerank: true` |
+| List memories   | `/v1/memories/?user_id=X`  | GET    | List all for a user track                    |
+| List memories   | `/v1/memories/?agent_id=X` | GET    | List all for an agent track                  |
+| Save memories   | `/v1/memories/`            | POST   | With `infer: true`                           |
+| Delete memory   | `/v1/memories/:id/`        | DELETE | By mem0 ID                                   |
 
 In cloud mode, all requests include the header `Authorization: Token ${MEM0_KEY}`. In self-hosted mode, the auth header is omitted (local network trust). The `mem0Headers()` helper in `server.js` handles this automatically based on `MEM0_MODE`.
 
@@ -174,8 +174,8 @@ body: JSON.stringify({
   query,
   filters: { user_id: getUserMemId(userId) },
   top_k: 10,
-  rerank: true
-})
+  rerank: true,
+});
 ```
 
 Returns `data.results || data || []`. Returns empty array on any error.
@@ -192,16 +192,16 @@ async function searchAgentMemories(query, characterId = null) {
     query,
     filters: { agent_id: agentId },
     top_k: 5,
-    rerank: true
-  })
+    rerank: true,
+  });
 }
 ```
 
-| `characterId` | Resolved `agent_id` |
-|---------------|---------------------|
-| `'melody'` | `'my-melody'` |
-| `'kuromi'` | `'kuromi'` |
-| `'retsuko'` | `'retsuko'` |
+| `characterId`    | Resolved `agent_id`             |
+| ---------------- | ------------------------------- |
+| `'melody'`       | `'my-melody'`                   |
+| `'kuromi'`       | `'kuromi'`                      |
+| `'retsuko'`      | `'retsuko'`                     |
 | `null` / omitted | `MEM0_AGENT_ID` (`'my-melody'`) |
 
 Same return pattern and error handling as the user track search.
@@ -217,13 +217,15 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}, character 
     fetch(`${MEM0_BASE}/v1/memories/`, {
       // ...
       body: JSON.stringify({
-        messages: [ { role: 'user', content: userMessage },
-                    { role: 'assistant', content: assistantReply } ],
+        messages: [
+          { role: 'user', content: userMessage },
+          { role: 'assistant', content: assistantReply },
+        ],
         user_id: getUserMemId(userId),
         infer: true,
-        metadata
-      })
-    }).catch(err => console.error('mem0 user save error:', err.message));
+        metadata,
+      }),
+    }).catch((err) => console.error('mem0 user save error:', err.message));
   }
 
   // Agent track: character's own evolving personality
@@ -232,17 +234,20 @@ function saveToMemory(userMessage, assistantReply, userId, meta = {}, character 
   fetch(`${MEM0_BASE}/v1/memories/`, {
     // ...
     body: JSON.stringify({
-      messages: [ { role: 'user', content: userMessage },
-                  { role: 'assistant', content: assistantReply } ],
+      messages: [
+        { role: 'user', content: userMessage },
+        { role: 'assistant', content: assistantReply },
+      ],
       agent_id: agentId,
       infer: true,
-      metadata
-    })
-  }).catch(err => console.error('mem0 agent save error:', err.message));
+      metadata,
+    }),
+  }).catch((err) => console.error('mem0 agent save error:', err.message));
 }
 ```
 
 Key behaviors:
+
 - The `infer: true` flag tells mem0 to extract and store structured facts automatically
 - Both tracks receive the full `[user, assistant]` message pair plus optional `metadata` (source, sessionId, hasImage, replyStyle)
 - Guest users (`userId === 'guest'`) skip the user track save entirely
@@ -257,13 +262,13 @@ Key behaviors:
 saveToMemory(userMessage, assistantReply, userId, meta?, character?)
 ```
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `userMessage` | `string` | Yes | User's message text |
-| `assistantReply` | `string` | Yes | Character's response text |
-| `userId` | `string` | Yes | User key (`'amelia'`, `'lonnie'`, `'guest'`) |
-| `meta` | `Object` | No | `{ source, sessionId, hasImage, replyStyle, skipAgentTrack }` |
-| `character` | `Object\|null` | No | Character config from `getCharacter()`. When `null`, uses `MEM0_AGENT_ID` fallback. |
+| Parameter        | Type           | Required | Description                                                                         |
+| ---------------- | -------------- | -------- | ----------------------------------------------------------------------------------- |
+| `userMessage`    | `string`       | Yes      | User's message text                                                                 |
+| `assistantReply` | `string`       | Yes      | Character's response text                                                           |
+| `userId`         | `string`       | Yes      | User key (`'amelia'`, `'lonnie'`, `'guest'`)                                        |
+| `meta`           | `Object`       | No       | `{ source, sessionId, hasImage, replyStyle, skipAgentTrack }`                       |
+| `character`      | `Object\|null` | No       | Character config from `getCharacter()`. When `null`, uses `MEM0_AGENT_ID` fallback. |
 
 ## Memory Injection into System Prompt
 
@@ -271,18 +276,18 @@ Memories are formatted and appended to the system prompt as labeled sections:
 
 ```js
 // User track
-const userMemoryContext = userMemories.length > 0
-  ? `\n\nThings you remember about ${userName || 'your friend'}:\n` +
-    userMemories.map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`)
-      .join('\n')
-  : '';
+const userMemoryContext =
+  userMemories.length > 0
+    ? `\n\nThings you remember about ${userName || 'your friend'}:\n` +
+      userMemories.map((m) => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
+    : '';
 
 // Agent track
-const agentMemoryContext = agentMemories.length > 0
-  ? '\n\nYour own memories and experiences as My Melody:\n' +
-    agentMemories.map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`)
-      .join('\n')
-  : '';
+const agentMemoryContext =
+  agentMemories.length > 0
+    ? '\n\nYour own memories and experiences as My Melody:\n' +
+      agentMemories.map((m) => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
+    : '';
 ```
 
 The memory field accessor chain (`m.memory || m.text || m.content || JSON.stringify(m)`) handles different mem0 response formats gracefully.
@@ -293,11 +298,11 @@ When a known user mentions another known user's name in their message, the serve
 
 ```js
 for (const [key, config] of Object.entries(KNOWN_USERS)) {
-  if (key === userId || key === 'guest') continue;  // skip self, skip guest
+  if (key === userId || key === 'guest') continue; // skip self, skip guest
   if (msgLower.includes(config.name.toLowerCase())) {
     const crossMemories = await searchMemories(message, key);
     // inject up to 5 memories as cross-user context
-    break;  // only one cross-reference per message
+    break; // only one cross-reference per message
   }
 }
 ```
@@ -308,23 +313,21 @@ for (const [key, config] of Object.entries(KNOWN_USERS)) {
 
 ## Guest User Behavior
 
-| Operation | Guest behavior |
-|-----------|---------------|
-| Memory search | Searches `melody-friend-guest` track |
-| Memory save (user track) | **Skipped** — no persistent identity |
+| Operation                 | Guest behavior                                          |
+| ------------------------- | ------------------------------------------------------- |
+| Memory search             | Searches `melody-friend-guest` track                    |
+| Memory save (user track)  | **Skipped** — no persistent identity                    |
 | Memory save (agent track) | Saved (character still learns from guest conversations) |
-| Cross-user access | Never shared (guest privacy protected) |
-| Welcome onboarding | User track save skipped |
+| Cross-user access         | Never shared (guest privacy protected)                  |
+| Welcome onboarding        | User track save skipped                                 |
 
 ## Frontend Memories Tab
 
 The `GET /api/memories` endpoint fetches both tracks in parallel and labels them:
 
 ```js
-const userMemories = (userData.results || userData || [])
-  .map(m => ({ ...m, track: 'friend' }));
-const agentMemories = (agentData.results || agentData || [])
-  .map(m => ({ ...m, track: 'melody' }));
+const userMemories = (userData.results || userData || []).map((m) => ({ ...m, track: 'friend' }));
+const agentMemories = (agentData.results || agentData || []).map((m) => ({ ...m, track: 'melody' }));
 ```
 
 Combined results are sorted by `updated_at || created_at` descending (newest first). The frontend displays them with "Friend" and "Melody" labels.
@@ -349,26 +352,26 @@ This proxies to mem0's `DELETE /v1/memories/:id/` endpoint. Returns `{ ok: true 
 
 All mem0 operations degrade gracefully:
 
-| Operation | Failure behavior |
-|-----------|-----------------|
-| Search (user track) | Returns `[]`, chat works without user memories |
+| Operation            | Failure behavior                                |
+| -------------------- | ----------------------------------------------- |
+| Search (user track)  | Returns `[]`, chat works without user memories  |
 | Search (agent track) | Returns `[]`, chat works without agent memories |
-| Save (user track) | Error logged, no user impact |
-| Save (agent track) | Error logged, no user impact |
-| List (memories tab) | Returns 500 with `'Failed to fetch memories'` |
-| Delete | Returns mem0's HTTP status code |
-| Cross-user search | Error logged, cross-user context omitted |
+| Save (user track)    | Error logged, no user impact                    |
+| Save (agent track)   | Error logged, no user impact                    |
+| List (memories tab)  | Returns 500 with `'Failed to fetch memories'`   |
+| Delete               | Returns mem0's HTTP status code                 |
+| Cross-user search    | Error logged, cross-user context omitted        |
 
 Chat always works even when mem0 is completely unavailable. The system prompt simply has no memory sections injected.
 
 ## Environment Variables
 
-| Variable | Required | Default | Purpose |
-|----------|----------|---------|---------|
-| `MEM0_API_KEY` | Cloud mode | -- | mem0.ai API authentication token |
-| `MEM0_MODE` | No | `'cloud'` | `'cloud'` or `'selfhosted'` |
-| `MEM0_SELF_URL` | Self-hosted | -- | Self-hosted mem0 server URL (e.g., `http://192.168.1.81:8769`) |
-| `MEM0_USER_ID` | No | `'melody-friend'` | Default user track ID (fallback) |
+| Variable        | Required    | Default           | Purpose                                                        |
+| --------------- | ----------- | ----------------- | -------------------------------------------------------------- |
+| `MEM0_API_KEY`  | Cloud mode  | --                | mem0.ai API authentication token                               |
+| `MEM0_MODE`     | No          | `'cloud'`         | `'cloud'` or `'selfhosted'`                                    |
+| `MEM0_SELF_URL` | Self-hosted | --                | Self-hosted mem0 server URL (e.g., `http://192.168.1.81:8769`) |
+| `MEM0_USER_ID`  | No          | `'melody-friend'` | Default user track ID (fallback)                               |
 
 > **Note:** `MEM0_AGENT_ID` is not an environment variable — it is hardcoded as `'my-melody'` in `server.js` and serves only as the backward-compatibility fallback when no character is passed to `searchAgentMemories` or `saveToMemory`. Character-specific agent IDs are defined in the `CHARACTERS` registry.
 

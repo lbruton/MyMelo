@@ -2,7 +2,7 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     ports:
-      - "6333:6333"
+      - '6333:6333'
     volumes:
       - qdrant_storage:/qdrant/storage
     restart: unless-stopped
@@ -10,7 +10,7 @@ services:
   mem0-server:
     build: .
     ports:
-      - "8769:8080"
+      - '8769:8080'
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - QDRANT_HOST=qdrant

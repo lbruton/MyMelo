@@ -49,17 +49,17 @@ Each character in the `characters` array has the following fields:
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | Yes | Character display name |
-| `species` | string | Yes | Animal type (e.g., "Cat", "Dog", "Rabbit") |
-| `birthday` | string\|null | No | Birthday date (e.g., "November 1") |
-| `debutYear` | number | No | Year the character was introduced by Sanrio |
-| `personality` | string | Yes | Character description and personality traits |
-| `relationships` | object | No | Named relationships (bestFriend, friends, rivals, family, etc.) |
-| `universe` | string | No | Franchise grouping (e.g., "hello-kitty", "my-melody", "cinnamoroll") |
-| `likes` | string | No | Things the character enjoys |
-| `hometown` | string | No | Where the character lives |
+| Field           | Type         | Required | Description                                                          |
+| --------------- | ------------ | -------- | -------------------------------------------------------------------- |
+| `name`          | string       | Yes      | Character display name                                               |
+| `species`       | string       | Yes      | Animal type (e.g., "Cat", "Dog", "Rabbit")                           |
+| `birthday`      | string\|null | No       | Birthday date (e.g., "November 1")                                   |
+| `debutYear`     | number       | No       | Year the character was introduced by Sanrio                          |
+| `personality`   | string       | Yes      | Character description and personality traits                         |
+| `relationships` | object       | No       | Named relationships (bestFriend, friends, rivals, family, etc.)      |
+| `universe`      | string       | No       | Franchise grouping (e.g., "hello-kitty", "my-melody", "cinnamoroll") |
+| `likes`         | string       | No       | Things the character enjoys                                          |
+| `hometown`      | string       | No       | Where the character lives                                            |
 
 ## How It Loads at Startup
 
@@ -107,10 +107,10 @@ Each character is condensed into a single line for prompt efficiency:
 The condensing logic in `loadCharacterData()`:
 
 ```js
-const lines = chars.map(c => {
+const lines = chars.map((c) => {
   const rel = c.relationships || {};
   const relStr = Object.entries(rel)
-    .filter(([, v]) => typeof v === 'string')  // only string values (skip arrays)
+    .filter(([, v]) => typeof v === 'string') // only string values (skip arrays)
     .map(([k, v]) => `${k}: ${v}`)
     .join(', ');
   const bday = c.birthday ? ` Birthday: ${c.birthday}.` : '';
@@ -125,9 +125,16 @@ Note: Only string-valued relationships are included in the condensed format. Arr
 The condensed character context is appended to the system prompt on every chat request at line 722:
 
 ```js
-const systemInstruction = SYSTEM_PROMPT + CHARACTER_CONTEXT + identityContext
-  + crossUserInstruction + relationshipContext + userMemoryContext
-  + agentMemoryContext + crossUserContext + styleInstruction;
+const systemInstruction =
+  SYSTEM_PROMPT +
+  CHARACTER_CONTEXT +
+  identityContext +
+  crossUserInstruction +
+  relationshipContext +
+  userMemoryContext +
+  agentMemoryContext +
+  crossUserContext +
+  styleInstruction;
 ```
 
 `CHARACTER_CONTEXT` is always present in the prompt. It is loaded once and reused for all requests (not re-read from disk).
@@ -136,12 +143,12 @@ const systemInstruction = SYSTEM_PROMPT + CHARACTER_CONTEXT + identityContext
 
 The app works fully without the `sanrio-characters.json` file:
 
-| Scenario | Behavior |
-|----------|----------|
-| File missing | Warning logged: `sanrio-characters.json not found — character context disabled`. `CHARACTER_CONTEXT` is empty string. |
-| File exists but invalid JSON | Warning logged: `Failed to load character data: {error}`. `CHARACTER_CONTEXT` is empty string. |
-| File exists but `characters` array is empty | `CHARACTER_CONTEXT` is empty string. No warning. |
-| File exists and valid | All characters loaded and injected into every prompt. |
+| Scenario                                    | Behavior                                                                                                              |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| File missing                                | Warning logged: `sanrio-characters.json not found — character context disabled`. `CHARACTER_CONTEXT` is empty string. |
+| File exists but invalid JSON                | Warning logged: `Failed to load character data: {error}`. `CHARACTER_CONTEXT` is empty string.                        |
+| File exists but `characters` array is empty | `CHARACTER_CONTEXT` is empty string. No warning.                                                                      |
+| File exists and valid                       | All characters loaded and injected into every prompt.                                                                 |
 
 In all failure cases, the app continues to function normally — Melody simply has less knowledge about the broader Sanrio universe and falls back to her base system prompt knowledge.
 
@@ -175,14 +182,14 @@ The condensing logic handles any character structure — no code changes are nee
 
 The 46 characters span multiple Sanrio franchises:
 
-| Universe | Example Characters |
-|----------|--------------------|
-| `my-melody` | My Sweet Piano, Flat, Kuromi, Baku, Rhythm, Mama, Papa, Grandma, Grandpa, Kuma, Kitsune, Zou, Risu, Fukurou |
-| `hello-kitty` | Hello Kitty, Mimmy, Dear Daniel |
-| `cinnamoroll` | Cinnamoroll, Cappuccino, Mocha, Chiffon, Espresso, Milk |
-| `pompompurin` | Pompompurin, Muffin, Macaroon |
-| `aggretsuko` | Aggretsuko (Retsuko), Haida, Fenneko, Director Ton |
-| Various others | Keroppi, Badtz-Maru, Tuxedo Sam, Gudetama, KeroKeroKeroppi, and more |
+| Universe       | Example Characters                                                                                          |
+| -------------- | ----------------------------------------------------------------------------------------------------------- |
+| `my-melody`    | My Sweet Piano, Flat, Kuromi, Baku, Rhythm, Mama, Papa, Grandma, Grandpa, Kuma, Kitsune, Zou, Risu, Fukurou |
+| `hello-kitty`  | Hello Kitty, Mimmy, Dear Daniel                                                                             |
+| `cinnamoroll`  | Cinnamoroll, Cappuccino, Mocha, Chiffon, Espresso, Milk                                                     |
+| `pompompurin`  | Pompompurin, Muffin, Macaroon                                                                               |
+| `aggretsuko`   | Aggretsuko (Retsuko), Haida, Fenneko, Director Ton                                                          |
+| Various others | Keroppi, Badtz-Maru, Tuxedo Sam, Gudetama, KeroKeroKeroppi, and more                                        |
 
 ---
 

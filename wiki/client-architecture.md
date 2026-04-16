@@ -10,11 +10,11 @@
 
 My Melody Chat is a single-page application built with vanilla HTML, CSS, and JavaScript. There is no framework, no bundler, and no build step. The entire client lives in three files:
 
-| File | Purpose |
-|------|---------|
+| File                | Purpose                                               |
+| ------------------- | ----------------------------------------------------- |
 | `public/index.html` | SPA shell, DOM structure, service worker registration |
-| `public/style.css` | All styles, theming, dark mode, responsive layout |
-| `public/app.js` | All client-side logic (v2.5.1) |
+| `public/style.css`  | All styles, theming, dark mode, responsive layout     |
+| `public/app.js`     | All client-side logic (v2.5.1)                        |
 
 The app loads via a single `<script src="app.js"></script>` tag at the bottom of the body. Service worker registration is inlined in a separate `<script>` block in `index.html`.
 
@@ -45,12 +45,12 @@ Tabs use a show/hide pattern on `.tab-pane` elements. No routing, no hash change
 ```js
 // All tab panes hidden by default (display: none)
 // Active pane gets class "active" (display: flex)
-document.querySelectorAll('.tab-btn').forEach(btn => {
+document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     const target = btn.dataset.tab;
     // Remove active from all buttons and panes
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach((p) => p.classList.remove('active'));
     // Activate selected
     btn.classList.add('active');
     document.getElementById(target).classList.add('active');
@@ -63,11 +63,11 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 Tab IDs:
 
-| Tab Button `data-tab` | Pane ID | Content |
-|------------------------|---------|---------|
-| `tabChat` | `tabChat` | Chat area, typing indicator, image preview, input footer |
-| `tabImages` | `tabImages` | Gallery grid (lazy-loaded on tab switch) |
-| `tabMemories` | `tabMemories` | Relationship stats + memory list (lazy-loaded) |
+| Tab Button `data-tab` | Pane ID       | Content                                                  |
+| --------------------- | ------------- | -------------------------------------------------------- |
+| `tabChat`             | `tabChat`     | Chat area, typing indicator, image preview, input footer |
+| `tabImages`           | `tabImages`   | Gallery grid (lazy-loaded on tab switch)                 |
+| `tabMemories`         | `tabMemories` | Relationship stats + memory list (lazy-loaded)           |
 
 ## Module Breakdown (app.js)
 
@@ -77,11 +77,11 @@ Tab IDs:
 
 Full-screen overlay (`#userPicker`) shown on first load if no user is stored in `localStorage('melodyActiveUser')`.
 
-| User ID | Display Name |
-|---------|-------------|
-| `amelia` | Amelia |
-| `lonnie` | Lonnie |
-| `guest` | Guest |
+| User ID  | Display Name |
+| -------- | ------------ |
+| `amelia` | Amelia       |
+| `lonnie` | Lonnie       |
+| `guest`  | Guest        |
 
 - Buttons use `data-user` attributes wired via `querySelectorAll('[data-user]')`
 - Selected user is persisted to `localStorage` and sent as `userId` in chat API requests
@@ -98,17 +98,17 @@ Defined at the top of `app.js`, this object maps character IDs to display metada
 
 ```js
 const CHARACTER_CONFIG = {
-  melody:  { name: 'My Melody',  avatar: '/images/melody-avatar.png',  color: '#FF69B4' },
-  kuromi:  { name: 'Kuromi',      avatar: '/images/kuromi-avatar.png',   color: '#FF1493' },
-  retsuko: { name: 'Aggretsuko',  avatar: '/images/retsuko-avatar.png',  color: '#FF4500' }
+  melody: { name: 'My Melody', avatar: '/images/melody-avatar.png', color: '#FF69B4' },
+  kuromi: { name: 'Kuromi', avatar: '/images/kuromi-avatar.png', color: '#FF1493' },
+  retsuko: { name: 'Aggretsuko', avatar: '/images/retsuko-avatar.png', color: '#FF4500' },
 };
 ```
 
-| Field | Type | Purpose |
-|-------|------|---------|
-| `name` | string | Display name shown in the header and picker |
-| `avatar` | string | Path to the character's avatar image |
-| `color` | string | Hex accent color applied to `--accent-highlight` CSS variable |
+| Field    | Type   | Purpose                                                       |
+| -------- | ------ | ------------------------------------------------------------- |
+| `name`   | string | Display name shown in the header and picker                   |
+| `avatar` | string | Path to the character's avatar image                          |
+| `color`  | string | Hex accent color applied to `--accent-highlight` CSS variable |
 
 #### activeCharacter
 
@@ -146,15 +146,15 @@ The picker reuses the `.user-picker-overlay` CSS class from the user picker patt
   <div class="user-picker-title">Choose your companion</div>
   <div class="character-picker-buttons">
     <button class="character-picker-btn" data-character="melody" onclick="selectCharacter('melody')">
-      <img src="/images/melody-avatar.png" alt="My Melody" class="character-picker-avatar">
+      <img src="/images/melody-avatar.png" alt="My Melody" class="character-picker-avatar" />
       <span>My Melody</span>
     </button>
     <button class="character-picker-btn" data-character="kuromi" onclick="selectCharacter('kuromi')">
-      <img src="/images/kuromi-avatar.png" alt="Kuromi" class="character-picker-avatar">
+      <img src="/images/kuromi-avatar.png" alt="Kuromi" class="character-picker-avatar" />
       <span>Kuromi</span>
     </button>
     <button class="character-picker-btn" data-character="retsuko" onclick="selectCharacter('retsuko')">
-      <img src="/images/retsuko-avatar.png" alt="Aggretsuko" class="character-picker-avatar">
+      <img src="/images/retsuko-avatar.png" alt="Aggretsuko" class="character-picker-avatar" />
       <span>Aggretsuko</span>
     </button>
   </div>
@@ -167,24 +167,24 @@ The picker reuses the `.user-picker-overlay` CSS class from the user picker patt
 
 #### How activeCharacter Flows Downstream
 
-| Call site | Usage |
-|-----------|-------|
-| `addMessage()` | When `role === 'assistant'`, reads `CHARACTER_CONFIG[activeCharacter].avatar` and `.name` for the message bubble avatar |
-| `sendMessage()` | Includes `characterId: activeCharacter` in the `POST /api/chat` request body so the server routes to the correct character's system prompt and memory tracks |
+| Call site        | Usage                                                                                                                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `addMessage()`   | When `role === 'assistant'`, reads `CHARACTER_CONFIG[activeCharacter].avatar` and `.name` for the message bubble avatar                                                                                   |
+| `sendMessage()`  | Includes `characterId: activeCharacter` in the `POST /api/chat` request body so the server routes to the correct character's system prompt and memory tracks                                              |
 | `loadMemories()` | Fetches `/api/memories?characterId=${activeCharacter}&userId=${activeUser}` so the memory list shows records for the active character; also updates the memories tab header to `"<Character>'s Memories"` |
 
 ### Chat UI
 
 The chat tab consists of:
 
-| Element | ID | Purpose |
-|---------|----|---------|
-| Chat area | `chatArea` | Scrollable message container |
-| Message input | `messageInput` | Text input with `enterkeyhint="send"` |
-| Send button | `sendBtn` | Triggers `sendMessage()` |
+| Element          | ID                | Purpose                                         |
+| ---------------- | ----------------- | ----------------------------------------------- |
+| Chat area        | `chatArea`        | Scrollable message container                    |
+| Message input    | `messageInput`    | Text input with `enterkeyhint="send"`           |
+| Send button      | `sendBtn`         | Triggers `sendMessage()`                        |
 | Typing indicator | `typingIndicator` | Animated dots, shown/hidden via `.active` class |
-| Image button | `imageBtn` | Opens file picker |
-| Image preview | `imagePreview` | Thumbnail strip before send |
+| Image button     | `imageBtn`        | Opens file picker                               |
+| Image preview    | `imagePreview`    | Thumbnail strip before send                     |
 
 **Message flow:**
 
@@ -206,6 +206,7 @@ User types → Enter or click Send
 **Auto-scroll:** `chatArea.scrollTop = chatArea.scrollHeight` after every `addMessage()` call.
 
 **Message rendering:**
+
 - User messages: `textContent` (plain text, XSS-safe)
 - Assistant messages: basic markdown via regex (bold, italic, bullet lists), set via `innerHTML`
 - Markdown transform chain: escape HTML entities, `**bold**`, `*italic*`, bullet lists, newlines to `<br>`
@@ -220,16 +221,18 @@ function compressAndStage(file) {
   reader.onload = (e) => {
     const img = new Image();
     img.onload = () => {
-      const maxW = 1024;                    // Max width in pixels
-      let w = img.width, h = img.height;
+      const maxW = 1024; // Max width in pixels
+      let w = img.width,
+        h = img.height;
       if (w > maxW) {
-        h = Math.round(h * (maxW / w));     // Maintain aspect ratio
+        h = Math.round(h * (maxW / w)); // Maintain aspect ratio
         w = maxW;
       }
       const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
+      canvas.width = w;
+      canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      const dataURL = canvas.toDataURL('image/jpeg', 0.8);  // JPEG quality 0.8
+      const dataURL = canvas.toDataURL('image/jpeg', 0.8); // JPEG quality 0.8
       const base64 = dataURL.split(',')[1];
       // Stage for upload
       pendingImageBase64 = base64;
@@ -242,12 +245,12 @@ function compressAndStage(file) {
 }
 ```
 
-| Parameter | Value |
-|-----------|-------|
-| Max width | 1024px |
-| Output format | JPEG |
-| Quality | 0.8 |
-| Aspect ratio | Maintained (height scaled proportionally) |
+| Parameter     | Value                                     |
+| ------------- | ----------------------------------------- |
+| Max width     | 1024px                                    |
+| Output format | JPEG                                      |
+| Quality       | 0.8                                       |
+| Aspect ratio  | Maintained (height scaled proportionally) |
 
 The preview thumbnail appears in the `.image-preview` strip. The `x` button calls `clearImagePreview()` to reset all pending state.
 
@@ -274,12 +277,12 @@ Memory track labels use CSS classes `.friend` (pink) and `.melody` (lavender) fo
 
 Gear icon button (`#settingsBtn`) toggles `#settingsDropdown` visibility via `.hidden` class.
 
-| Setting | Control | Storage Key | Default |
-|---------|---------|-------------|---------|
-| Dark Mode | Toggle button | `darkMode` | `false` |
-| Sounds | Toggle button | `soundEnabled` | `true` (not 'false') |
-| Reply Style | Select dropdown | `replyStyle` | `'default'` |
-| User | Switch button | `melodyActiveUser` | None (shows picker) |
+| Setting     | Control         | Storage Key        | Default              |
+| ----------- | --------------- | ------------------ | -------------------- |
+| Dark Mode   | Toggle button   | `darkMode`         | `false`              |
+| Sounds      | Toggle button   | `soundEnabled`     | `true` (not 'false') |
+| Reply Style | Select dropdown | `replyStyle`       | `'default'`          |
+| User        | Switch button   | `melodyActiveUser` | None (shows picker)  |
 
 The dropdown is dismissed by clicking outside (document-level click listener checks `contains`).
 
@@ -304,12 +307,13 @@ Listens for the `beforeinstallprompt` event, defers it, and shows a banner at th
 
 Synthesized sounds using the Web Audio API. Zero audio files.
 
-| Sound | Function | Notes | Duration |
-|-------|----------|-------|----------|
+| Sound       | Function           | Notes                                        | Duration |
+| ----------- | ------------------ | -------------------------------------------- | -------- |
 | Reply chime | `playReplyChime()` | C5 (523.25Hz) then E5 (659.25Hz), sine waves | 2 x 0.3s |
-| Typing tick | `playTypingTick()` | A5 (880Hz), sine wave | 0.08s |
+| Typing tick | `playTypingTick()` | A5 (880Hz), sine wave                        | 0.08s    |
 
 Implementation details:
+
 - Lazy `AudioContext` creation via `getAudioContext()`
 - Falls back to `webkitAudioContext` for older browsers
 - Auto-resumes suspended context (browser policy)
@@ -322,11 +326,13 @@ Implementation details:
 Each browser tab gets a unique `sessionId` via `crypto.randomUUID()`, stored in `sessionStorage`.
 
 ```js
-const sessionId = sessionStorage.getItem('melodySessionId') || (() => {
-  const id = crypto.randomUUID();
-  sessionStorage.setItem('melodySessionId', id);
-  return id;
-})();
+const sessionId =
+  sessionStorage.getItem('melodySessionId') ||
+  (() => {
+    const id = crypto.randomUUID();
+    sessionStorage.setItem('melodySessionId', id);
+    return id;
+  })();
 ```
 
 - `sessionStorage` scopes the ID to the tab (new tab = new session)
@@ -337,29 +343,29 @@ const sessionId = sessionStorage.getItem('melodySessionId') || (() => {
 
 The `processReply()` function parses special tags from assistant responses using regex, fetches media, and renders results inline.
 
-| Tag | Regex | API Called | Rendering |
-|-----|-------|-----------|-----------|
-| `[IMAGE_SEARCH: query]` | `/\[IMAGE_SEARCH:\s*(.+?)\]/` | `GET /api/image-search?q=` | Random pick from top 4 results, displayed as clickable image |
-| `[VIDEO_SEARCH: query]` | `/\[VIDEO_SEARCH:\s*(.+?)\]/` | `GET /api/video-search?q=` | First result as clickable card with thumbnail |
-| `[GALLERY_SEARCH: keywords]` | `/\[GALLERY_SEARCH:\s*(.+?)\]/` | `GET /api/gallery-search?q=` | Saved photo from `/data/images/` |
-| `[WIKI_SEARCH: wiki query]` | `/\[WIKI_SEARCH:\s*.+?\]/` | Server-side (intercepted) | Wiki source card (lavender themed) |
-| `[REACTION: emotion]` | `/\[REACTION:\s*(\w+)\]/` | `nekos.best/api/v2/{category}` | Anime GIF appended to bubble (async, non-blocking) |
+| Tag                          | Regex                           | API Called                     | Rendering                                                    |
+| ---------------------------- | ------------------------------- | ------------------------------ | ------------------------------------------------------------ |
+| `[IMAGE_SEARCH: query]`      | `/\[IMAGE_SEARCH:\s*(.+?)\]/`   | `GET /api/image-search?q=`     | Random pick from top 4 results, displayed as clickable image |
+| `[VIDEO_SEARCH: query]`      | `/\[VIDEO_SEARCH:\s*(.+?)\]/`   | `GET /api/video-search?q=`     | First result as clickable card with thumbnail                |
+| `[GALLERY_SEARCH: keywords]` | `/\[GALLERY_SEARCH:\s*(.+?)\]/` | `GET /api/gallery-search?q=`   | Saved photo from `/data/images/`                             |
+| `[WIKI_SEARCH: wiki query]`  | `/\[WIKI_SEARCH:\s*.+?\]/`      | Server-side (intercepted)      | Wiki source card (lavender themed)                           |
+| `[REACTION: emotion]`        | `/\[REACTION:\s*(\w+)\]/`       | `nekos.best/api/v2/{category}` | Anime GIF appended to bubble (async, non-blocking)           |
 
 All tags are stripped from display text before rendering. Image search picks a random result from the first 4 valid results. Gallery search only fires if no image search result was found.
 
 **Reaction GIF mapping** (`REACTION_MAP`):
 
-| Emotion | nekos.best Categories |
-|---------|----------------------|
-| `happy` | happy, smile, dance |
-| `love` | hug, cuddle, pat |
-| `shy` | blush, wave, wink |
-| `sad` | cry, pout |
-| `think` | think, nod, shrug |
-| `playful` | tickle, poke, nom |
-| `angry` | angry, facepalm, baka |
-| `sassy` | smug, thumbsup, yeet |
-| `tired` | yawn, bored, sleep |
+| Emotion   | nekos.best Categories     |
+| --------- | ------------------------- |
+| `happy`   | happy, smile, dance       |
+| `love`    | hug, cuddle, pat          |
+| `shy`     | blush, wave, wink         |
+| `sad`     | cry, pout                 |
+| `think`   | think, nod, shrug         |
+| `playful` | tickle, poke, nom         |
+| `angry`   | angry, facepalm, baka     |
+| `sassy`   | smug, thumbsup, yeet      |
+| `tired`   | yawn, bored, sleep        |
 | `excited` | highfive, thumbsup, dance |
 
 ### Welcome Flow

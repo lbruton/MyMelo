@@ -41,36 +41,36 @@ File: `public/manifest.json`
 }
 ```
 
-| Property | Value | Notes |
-|----------|-------|-------|
-| `name` | My Melody Chat | Full app name (splash screen, app drawer) |
-| `short_name` | Melody | Home screen label |
-| `display` | standalone | No browser chrome, native app feel |
-| `orientation` | portrait | Lock to portrait mode |
-| `theme_color` | `#FF69B4` | Status bar color on Android, title bar on desktop |
-| `background_color` | `#FFF0F5` | Splash screen background (pale pink) |
-| `start_url` | `/` | Entry point when launched from home screen |
+| Property           | Value          | Notes                                             |
+| ------------------ | -------------- | ------------------------------------------------- |
+| `name`             | My Melody Chat | Full app name (splash screen, app drawer)         |
+| `short_name`       | Melody         | Home screen label                                 |
+| `display`          | standalone     | No browser chrome, native app feel                |
+| `orientation`      | portrait       | Lock to portrait mode                             |
+| `theme_color`      | `#FF69B4`      | Status bar color on Android, title bar on desktop |
+| `background_color` | `#FFF0F5`      | Splash screen background (pale pink)              |
+| `start_url`        | `/`            | Entry point when launched from home screen        |
 
 ### Icons
 
 Two icons provided, both with `purpose: "any maskable"`:
 
-| Size | File | Usage |
-|------|------|-------|
+| Size    | File                   | Usage                                            |
+| ------- | ---------------------- | ------------------------------------------------ |
 | 192x192 | `/images/icon-192.png` | Android adaptive icon, favicon, Apple touch icon |
-| 512x512 | `/images/icon-512.png` | Splash screen, Play Store listing |
+| 512x512 | `/images/icon-512.png` | Splash screen, Play Store listing                |
 
 The `<link rel="icon">` and `<link rel="apple-touch-icon">` in `index.html` both point to `icon-192.png`.
 
 ### HTML Meta Tags
 
 ```html
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#FF69B4">
-<link rel="manifest" href="/manifest.json">
-<link rel="icon" href="/images/icon-192.png">
-<link rel="apple-touch-icon" href="/images/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#FF69B4" />
+<link rel="manifest" href="/manifest.json" />
+<link rel="icon" href="/images/icon-192.png" />
+<link rel="apple-touch-icon" href="/images/icon-192.png" />
 ```
 
 ## Service Worker Registration
@@ -114,7 +114,7 @@ const APP_SHELL = [
   '/images/kuromi-avatar.png',
   '/images/retsuko-avatar.png',
   '/images/icon-192.png',
-  '/images/icon-512.png'
+  '/images/icon-512.png',
 ];
 ```
 
@@ -122,11 +122,11 @@ These 10 resources are cached during the `install` event before the service work
 
 ### Strategy by Route Type
 
-| Route Pattern | Strategy | Rationale |
-|---------------|----------|-----------|
-| `/api/*` | Network-only | API responses must be fresh (chat, memories, search) |
-| `/data/*` | Network-only | User-uploaded images must be current |
-| Everything else | Stale-while-revalidate | Serve cached immediately, update in background |
+| Route Pattern   | Strategy               | Rationale                                            |
+| --------------- | ---------------------- | ---------------------------------------------------- |
+| `/api/*`        | Network-only           | API responses must be fresh (chat, memories, search) |
+| `/data/*`       | Network-only           | User-uploaded images must be current                 |
+| Everything else | Stale-while-revalidate | Serve cached immediately, update in background       |
 
 ### Stale-While-Revalidate Flow
 
@@ -150,17 +150,19 @@ self.addEventListener('fetch', (e) => {
 
   // Stale-while-revalidate for everything else
   e.respondWith(
-    caches.open(CACHE_NAME).then(cache =>
-      cache.match(e.request).then(cached => {
-        const fetchPromise = fetch(e.request).then(response => {
-          if (response.ok) {
-            cache.put(e.request, response.clone());
-          }
-          return response;
-        }).catch(() => cached);
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.match(e.request).then((cached) => {
+        const fetchPromise = fetch(e.request)
+          .then((response) => {
+            if (response.ok) {
+              cache.put(e.request, response.clone());
+            }
+            return response;
+          })
+          .catch(() => cached);
         return cached || fetchPromise;
-      })
-    )
+      }),
+    ),
   );
 });
 ```
@@ -203,10 +205,10 @@ Implemented in `app.js`:
 let deferredInstallPrompt = null;
 
 window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();                           // Suppress browser's default prompt
-  deferredInstallPrompt = e;                     // Store the event
+  e.preventDefault(); // Suppress browser's default prompt
+  deferredInstallPrompt = e; // Store the event
   if (sessionStorage.getItem('installDismissed')) return;
-  showInstallBanner();                           // Show custom banner
+  showInstallBanner(); // Show custom banner
 });
 ```
 
@@ -230,23 +232,23 @@ The custom install banner:
 
 PWA installation requires HTTPS. The exception is `localhost`, which is treated as a secure context by browsers for development purposes.
 
-| Environment | Protocol | Install Prompt |
-|-------------|----------|----------------|
-| Production | HTTPS | Available |
-| `localhost` | HTTP | Available (secure context exemption) |
-| Non-localhost HTTP | HTTP | Not available |
+| Environment        | Protocol | Install Prompt                       |
+| ------------------ | -------- | ------------------------------------ |
+| Production         | HTTPS    | Available                            |
+| `localhost`        | HTTP     | Available (secure context exemption) |
+| Non-localhost HTTP | HTTP     | Not available                        |
 
 ## Offline Behavior
 
 With the service worker active:
 
-| Resource | Offline Behavior |
-|----------|-----------------|
-| App shell (HTML, CSS, JS, icons) | Served from cache -- app loads fully |
-| Chat API (`/api/chat`) | Fails -- error message shown in chat ("I couldn't reach the server...") |
-| Memory/gallery APIs | Fails -- empty state message shown |
-| Image search/video search | Fails silently -- no media appended to message |
-| Previously cached static assets | Served from stale cache |
+| Resource                         | Offline Behavior                                                        |
+| -------------------------------- | ----------------------------------------------------------------------- |
+| App shell (HTML, CSS, JS, icons) | Served from cache -- app loads fully                                    |
+| Chat API (`/api/chat`)           | Fails -- error message shown in chat ("I couldn't reach the server...") |
+| Memory/gallery APIs              | Fails -- empty state message shown                                      |
+| Image search/video search        | Fails silently -- no media appended to message                          |
+| Previously cached static assets  | Served from stale cache                                                 |
 
 The app shell loads offline, but all interactive features (chat, memories, gallery) require a network connection because API routes use network-only strategy.
 

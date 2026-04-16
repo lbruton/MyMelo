@@ -25,22 +25,22 @@ When `characterId` is omitted the server defaults to `melody`, preserving full b
 
 ## Endpoint Summary
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/api/chat` | Send a message to a character |
-| GET | `/api/images` | List saved image metadata |
-| DELETE | `/api/images/:id` | Delete a saved image |
-| GET | `/api/image-search?q=` | Search images via Brave |
-| GET | `/api/video-search?q=` | Search videos via Brave |
-| GET | `/api/gallery-search?q=` | Search saved images by keyword |
-| GET | `/api/wiki-search?wiki=&q=` | Search a game wiki (MediaWiki) |
-| GET | `/api/summaries?userId=&characterId=` | List rolling conversation summaries |
-| DELETE | `/api/summaries/:index?userId=&characterId=` | Delete a conversation summary |
-| GET | `/api/memories?userId=&characterId=` | List all mem0 memories (dual-track) |
-| DELETE | `/api/memories/:id` | Delete a specific memory |
-| GET | `/api/relationship?userId=` | Get friendship stats |
-| GET | `/api/welcome-status?userId=` | Check new vs returning user |
-| POST | `/api/welcome` | Save onboarding data to mem0 |
+| Method | Path                                         | Purpose                             |
+| ------ | -------------------------------------------- | ----------------------------------- |
+| POST   | `/api/chat`                                  | Send a message to a character       |
+| GET    | `/api/images`                                | List saved image metadata           |
+| DELETE | `/api/images/:id`                            | Delete a saved image                |
+| GET    | `/api/image-search?q=`                       | Search images via Brave             |
+| GET    | `/api/video-search?q=`                       | Search videos via Brave             |
+| GET    | `/api/gallery-search?q=`                     | Search saved images by keyword      |
+| GET    | `/api/wiki-search?wiki=&q=`                  | Search a game wiki (MediaWiki)      |
+| GET    | `/api/summaries?userId=&characterId=`        | List rolling conversation summaries |
+| DELETE | `/api/summaries/:index?userId=&characterId=` | Delete a conversation summary       |
+| GET    | `/api/memories?userId=&characterId=`         | List all mem0 memories (dual-track) |
+| DELETE | `/api/memories/:id`                          | Delete a specific memory            |
+| GET    | `/api/relationship?userId=`                  | Get friendship stats                |
+| GET    | `/api/welcome-status?userId=`                | Check new vs returning user         |
+| POST   | `/api/welcome`                               | Save onboarding data to mem0        |
 
 ---
 
@@ -50,24 +50,22 @@ Send a message (and/or image) to a character. Triggers the full pipeline: memory
 
 ### Request Body
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `message` | `string` | Conditional | Chat message text. Required unless `imageBase64` is provided. |
-| `imageBase64` | `string` | No | Base64-encoded image data |
-| `imageMime` | `string` | No | MIME type of the image. Default: `image/jpeg` |
-| `replyStyle` | `string` | No | Reply verbosity: `default`, `brief`, or `detailed` |
-| `sessionId` | `string` | No | UUID v4 for conversation buffer continuity across requests |
-| `userId` | `string` | No | Active user identity key: `amelia`, `lonnie`, or `guest` |
-| `characterId` | `string` | No | Character to chat with (`melody` \| `kuromi` \| `retsuko`). Default: `melody`. Routes to the correct system prompt and mem0 agent track. |
+| Field         | Type     | Required    | Description                                                                                                                              |
+| ------------- | -------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `message`     | `string` | Conditional | Chat message text. Required unless `imageBase64` is provided.                                                                            |
+| `imageBase64` | `string` | No          | Base64-encoded image data                                                                                                                |
+| `imageMime`   | `string` | No          | MIME type of the image. Default: `image/jpeg`                                                                                            |
+| `replyStyle`  | `string` | No          | Reply verbosity: `default`, `brief`, or `detailed`                                                                                       |
+| `sessionId`   | `string` | No          | UUID v4 for conversation buffer continuity across requests                                                                               |
+| `userId`      | `string` | No          | Active user identity key: `amelia`, `lonnie`, or `guest`                                                                                 |
+| `characterId` | `string` | No          | Character to chat with (`melody` \| `kuromi` \| `retsuko`). Default: `melody`. Routes to the correct system prompt and mem0 agent track. |
 
 ### Response (200)
 
 ```json
 {
   "reply": "Oh~! That's so sweet of you! Mama always says...",
-  "sources": [
-    { "title": "Source Page Title", "url": "https://example.com" }
-  ],
+  "sources": [{ "title": "Source Page Title", "url": "https://example.com" }],
   "wikiSource": {
     "title": "Cinnamoroll",
     "url": "https://hellokittyislandadventure.wiki.gg/wiki/Cinnamoroll",
@@ -76,23 +74,23 @@ Send a message (and/or image) to a character. Triggers the full pipeline: memory
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `reply` | `string` | Character's response text. May contain control tags (`[IMAGE_SEARCH:]`, `[VIDEO_SEARCH:]`, `[REACTION:]`, `[GALLERY_SEARCH:]`) that the client parses and strips. Wiki tags are intercepted server-side and never reach the client. |
-| `sources` | `Object[]` | Google Search grounding sources extracted from Gemini response metadata. Empty array if no grounding. |
-| `sources[].title` | `string` | Source page title |
-| `sources[].url` | `string` | Source page URL |
-| `wikiSource` | `Object\|null` | Present only when the wiki two-step pipeline was triggered |
-| `wikiSource.title` | `string` | Wiki page title |
-| `wikiSource.url` | `string` | Full URL to the wiki page |
-| `wikiSource.wikiName` | `string` | Display name of the wiki (e.g., "Hello Kitty Island Adventure") |
+| Field                 | Type           | Description                                                                                                                                                                                                                         |
+| --------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reply`               | `string`       | Character's response text. May contain control tags (`[IMAGE_SEARCH:]`, `[VIDEO_SEARCH:]`, `[REACTION:]`, `[GALLERY_SEARCH:]`) that the client parses and strips. Wiki tags are intercepted server-side and never reach the client. |
+| `sources`             | `Object[]`     | Google Search grounding sources extracted from Gemini response metadata. Empty array if no grounding.                                                                                                                               |
+| `sources[].title`     | `string`       | Source page title                                                                                                                                                                                                                   |
+| `sources[].url`       | `string`       | Source page URL                                                                                                                                                                                                                     |
+| `wikiSource`          | `Object\|null` | Present only when the wiki two-step pipeline was triggered                                                                                                                                                                          |
+| `wikiSource.title`    | `string`       | Wiki page title                                                                                                                                                                                                                     |
+| `wikiSource.url`      | `string`       | Full URL to the wiki page                                                                                                                                                                                                           |
+| `wikiSource.wikiName` | `string`       | Display name of the wiki (e.g., "Hello Kitty Island Adventure")                                                                                                                                                                     |
 
 ### Error Responses
 
-| Status | Body | Condition |
-|--------|------|-----------|
-| 400 | `{ "error": "Message or image is required" }` | Neither `message` nor `imageBase64` provided |
-| 500 | `{ "error": "Something went wrong, my sweet friend! ♡" }` | Internal server error (Gemini failure, etc.) |
+| Status | Body                                                      | Condition                                    |
+| ------ | --------------------------------------------------------- | -------------------------------------------- |
+| 400    | `{ "error": "Message or image is required" }`             | Neither `message` nor `imageBase64` provided |
+| 500    | `{ "error": "Something went wrong, my sweet friend! ♡" }` | Internal server error (Gemini failure, etc.) |
 
 ### Example Request
 
@@ -135,13 +133,13 @@ List all saved image metadata, sorted newest first.
 ]
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `string` | UUID of the image |
-| `filename` | `string` | Filename on disk (`{uuid}.{ext}`) |
-| `caption` | `string` | User's message when the image was shared |
-| `reply` | `string` | Character's reply (truncated to 200 chars) |
-| `date` | `string` | ISO 8601 timestamp |
+| Field      | Type     | Description                                |
+| ---------- | -------- | ------------------------------------------ |
+| `id`       | `string` | UUID of the image                          |
+| `filename` | `string` | Filename on disk (`{uuid}.{ext}`)          |
+| `caption`  | `string` | User's message when the image was shared   |
+| `reply`    | `string` | Character's reply (truncated to 200 chars) |
+| `date`     | `string` | ISO 8601 timestamp                         |
 
 Image files are served at `/data/images/{filename}` via Express static middleware.
 
@@ -153,9 +151,9 @@ Delete a saved image and its metadata entry.
 
 ### Parameters
 
-| Param | Location | Type | Description |
-|-------|----------|------|-------------|
-| `id` | URL path | `string` | UUID of the image to delete |
+| Param | Location | Type     | Description                 |
+| ----- | -------- | -------- | --------------------------- |
+| `id`  | URL path | `string` | UUID of the image to delete |
 
 ### Response (200)
 
@@ -165,9 +163,9 @@ Delete a saved image and its metadata entry.
 
 ### Error Responses
 
-| Status | Body | Condition |
-|--------|------|-----------|
-| 404 | `{ "error": "Not found" }` | No image with that ID exists |
+| Status | Body                       | Condition                    |
+| ------ | -------------------------- | ---------------------------- |
+| 404    | `{ "error": "Not found" }` | No image with that ID exists |
 
 ### Side Effects
 
@@ -182,9 +180,9 @@ Search for images via the Brave Search API. Used by the client when the LLM emit
 
 ### Query Parameters
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `q` | `string` | Yes | Search query |
+| Param | Type     | Required | Description  |
+| ----- | -------- | -------- | ------------ |
+| `q`   | `string` | Yes      | Search query |
 
 ### Response (200)
 
@@ -200,23 +198,23 @@ Search for images via the Brave Search API. Used by the client when the LLM emit
 ]
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `title` | `string` | Image title from Brave |
-| `imageUrl` | `string` | Full-size image URL |
-| `thumbnailUrl` | `string` | Thumbnail URL |
-| `width` | `number` | Image width in pixels |
-| `height` | `number` | Image height in pixels |
+| Field          | Type     | Description            |
+| -------------- | -------- | ---------------------- |
+| `title`        | `string` | Image title from Brave |
+| `imageUrl`     | `string` | Full-size image URL    |
+| `thumbnailUrl` | `string` | Thumbnail URL          |
+| `width`        | `number` | Image width in pixels  |
+| `height`       | `number` | Image height in pixels |
 
 Returns up to 6 results. Uses `safesearch=strict` (Brave rejects `moderate` with HTTP 422).
 
 ### Error Responses
 
-| Status | Body | Condition |
-|--------|------|-----------|
-| 400 | `{ "error": "Query required" }` | Missing `q` parameter |
-| 500 | `{ "error": "Image search not configured" }` | `BRAVE_API_KEY` not set |
-| 500 | `{ "error": "Image search failed" }` | Brave API call failed |
+| Status | Body                                         | Condition               |
+| ------ | -------------------------------------------- | ----------------------- |
+| 400    | `{ "error": "Query required" }`              | Missing `q` parameter   |
+| 500    | `{ "error": "Image search not configured" }` | `BRAVE_API_KEY` not set |
+| 500    | `{ "error": "Image search failed" }`         | Brave API call failed   |
 
 ---
 
@@ -226,9 +224,9 @@ Search for videos via the Brave Search API. Used by the client when the LLM emit
 
 ### Query Parameters
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `q` | `string` | Yes | Search query |
+| Param | Type     | Required | Description  |
+| ----- | -------- | -------- | ------------ |
+| `q`   | `string` | Yes      | Search query |
 
 ### Response (200)
 
@@ -243,22 +241,22 @@ Search for videos via the Brave Search API. Used by the client when the LLM emit
 ]
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `title` | `string` | Video title |
-| `url` | `string` | Video page URL |
-| `thumbnail` | `string` | Thumbnail image URL |
+| Field         | Type     | Description               |
+| ------------- | -------- | ------------------------- |
+| `title`       | `string` | Video title               |
+| `url`         | `string` | Video page URL            |
+| `thumbnail`   | `string` | Thumbnail image URL       |
 | `description` | `string` | Video description snippet |
 
 Returns up to 4 results. Uses `safesearch=strict`.
 
 ### Error Responses
 
-| Status | Body | Condition |
-|--------|------|-----------|
-| 400 | `{ "error": "Query required" }` | Missing `q` parameter |
-| 500 | `{ "error": "Video search not configured" }` | `BRAVE_API_KEY` not set |
-| 500 | `{ "error": "Video search failed" }` | Brave API call failed |
+| Status | Body                                         | Condition               |
+| ------ | -------------------------------------------- | ----------------------- |
+| 400    | `{ "error": "Query required" }`              | Missing `q` parameter   |
+| 500    | `{ "error": "Video search not configured" }` | `BRAVE_API_KEY` not set |
+| 500    | `{ "error": "Video search failed" }`         | Brave API call failed   |
 
 ---
 
@@ -268,9 +266,9 @@ Search saved images by caption or reply keywords. Case-insensitive substring mat
 
 ### Query Parameters
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `q` | `string` | No | Search keywords. Returns empty array if omitted. |
+| Param | Type     | Required | Description                                      |
+| ----- | -------- | -------- | ------------------------------------------------ |
+| `q`   | `string` | No       | Search keywords. Returns empty array if omitted. |
 
 ### Response (200)
 
@@ -296,10 +294,10 @@ Search a game wiki via MediaWiki API and return results with the top page's cont
 
 ### Query Parameters
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `wiki` | `string` | Yes | Wiki ID from the registry: `hkia` or `minecraft` |
-| `q` | `string` | Yes | Search query |
+| Param  | Type     | Required | Description                                      |
+| ------ | -------- | -------- | ------------------------------------------------ |
+| `wiki` | `string` | Yes      | Wiki ID from the registry: `hkia` or `minecraft` |
+| `q`    | `string` | Yes      | Search query                                     |
 
 ### Response (200)
 
@@ -321,31 +319,31 @@ Search a game wiki via MediaWiki API and return results with the top page's cont
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `results` | `Object[]` | Up to 3 search results from MediaWiki |
-| `results[].title` | `string` | Wiki page title |
-| `results[].pageid` | `number` | MediaWiki page ID |
-| `results[].snippet` | `string` | Search snippet (HTML tags stripped) |
-| `topContent` | `Object\|null` | Parsed intro of the top result page (null if no results or fetch fails) |
-| `topContent.text` | `string` | Plain-text intro content (capped at 1500 chars) |
-| `topContent.url` | `string` | Full URL to the wiki page |
-| `topContent.wikiName` | `string` | Display name of the wiki |
+| Field                 | Type           | Description                                                             |
+| --------------------- | -------------- | ----------------------------------------------------------------------- |
+| `results`             | `Object[]`     | Up to 3 search results from MediaWiki                                   |
+| `results[].title`     | `string`       | Wiki page title                                                         |
+| `results[].pageid`    | `number`       | MediaWiki page ID                                                       |
+| `results[].snippet`   | `string`       | Search snippet (HTML tags stripped)                                     |
+| `topContent`          | `Object\|null` | Parsed intro of the top result page (null if no results or fetch fails) |
+| `topContent.text`     | `string`       | Plain-text intro content (capped at 1500 chars)                         |
+| `topContent.url`      | `string`       | Full URL to the wiki page                                               |
+| `topContent.wikiName` | `string`       | Display name of the wiki                                                |
 
 ### Wiki Registry
 
-| Wiki ID | Game | API Base |
-|---------|------|----------|
-| `hkia` | Hello Kitty Island Adventure | `hellokittyislandadventure.wiki.gg` |
-| `minecraft` | Minecraft | `minecraft.wiki` |
+| Wiki ID     | Game                         | API Base                            |
+| ----------- | ---------------------------- | ----------------------------------- |
+| `hkia`      | Hello Kitty Island Adventure | `hellokittyislandadventure.wiki.gg` |
+| `minecraft` | Minecraft                    | `minecraft.wiki`                    |
 
 ### Error Responses
 
-| Status | Body | Condition |
-|--------|------|-----------|
-| 400 | `{ "error": "wiki and q params required" }` | Missing `wiki` or `q` |
-| 400 | `{ "error": "Unknown wiki: X. Available: hkia, minecraft" }` | Invalid wiki ID |
-| 500 | `{ "error": "Wiki search failed" }` | MediaWiki API error |
+| Status | Body                                                         | Condition             |
+| ------ | ------------------------------------------------------------ | --------------------- |
+| 400    | `{ "error": "wiki and q params required" }`                  | Missing `wiki` or `q` |
+| 400    | `{ "error": "Unknown wiki: X. Available: hkia, minecraft" }` | Invalid wiki ID       |
+| 500    | `{ "error": "Wiki search failed" }`                          | MediaWiki API error   |
 
 ---
 
@@ -355,10 +353,10 @@ List rolling conversation summaries for a user+character pair, sorted newest fir
 
 ### Query Parameters
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `userId` | `string` | Yes | User key (`amelia`, `lonnie`, `guest`) |
-| `characterId` | `string` | Yes | Character key (`melody`, `kuromi`, `retsuko`) |
+| Param         | Type     | Required | Description                                   |
+| ------------- | -------- | -------- | --------------------------------------------- |
+| `userId`      | `string` | Yes      | User key (`amelia`, `lonnie`, `guest`)        |
+| `characterId` | `string` | Yes      | Character key (`melody`, `kuromi`, `retsuko`) |
 
 ### Response (200)
 
@@ -374,22 +372,22 @@ List rolling conversation summaries for a user+character pair, sorted newest fir
 ]
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `date` | `string` | ISO 8601 timestamp when the summary was generated |
+| Field           | Type     | Description                                              |
+| --------------- | -------- | -------------------------------------------------------- |
+| `date`          | `string` | ISO 8601 timestamp when the summary was generated        |
 | `exchangeCount` | `number` | Number of user-model exchanges in the summarized session |
-| `summary` | `string` | Narrative summary of the conversation (2-3 paragraphs) |
-| `sessionId` | `string` | UUID of the original session that was summarized |
-| `characterId` | `string` | Character the conversation was with |
+| `summary`       | `string` | Narrative summary of the conversation (2-3 paragraphs)   |
+| `sessionId`     | `string` | UUID of the original session that was summarized         |
+| `characterId`   | `string` | Character the conversation was with                      |
 
 ### Error Responses
 
-| Status | Body | Condition |
-|--------|------|-----------|
-| 400 | `{ "error": "userId and characterId are required" }` | Missing required params |
-| 400 | `{ "error": "Invalid userId" }` | Unknown user key |
-| 400 | `{ "error": "Invalid characterId" }` | Unknown character key |
-| 500 | `{ "error": "Failed to read summaries" }` | File system error |
+| Status | Body                                                 | Condition               |
+| ------ | ---------------------------------------------------- | ----------------------- |
+| 400    | `{ "error": "userId and characterId are required" }` | Missing required params |
+| 400    | `{ "error": "Invalid userId" }`                      | Unknown user key        |
+| 400    | `{ "error": "Invalid characterId" }`                 | Unknown character key   |
+| 500    | `{ "error": "Failed to read summaries" }`            | File system error       |
 
 ---
 
@@ -399,11 +397,11 @@ Delete a single conversation summary by its zero-based index (in stored order, o
 
 ### Parameters
 
-| Param | Location | Type | Description |
-|-------|----------|------|-------------|
-| `index` | URL path | `number` | Zero-based index of the summary to delete |
-| `userId` | Query string | `string` | User key (required) |
-| `characterId` | Query string | `string` | Character key (required) |
+| Param         | Location     | Type     | Description                               |
+| ------------- | ------------ | -------- | ----------------------------------------- |
+| `index`       | URL path     | `number` | Zero-based index of the summary to delete |
+| `userId`      | Query string | `string` | User key (required)                       |
+| `characterId` | Query string | `string` | Character key (required)                  |
 
 ### Response (200)
 
@@ -413,11 +411,11 @@ Delete a single conversation summary by its zero-based index (in stored order, o
 
 ### Error Responses
 
-| Status | Body | Condition |
-|--------|------|-----------|
-| 400 | `{ "error": "userId and characterId are required" }` | Missing required params |
-| 400 | `{ "error": "Index must be a number" }` | Non-numeric index |
-| 404 | `{ "error": "Summary not found" }` | Index out of range |
+| Status | Body                                                 | Condition               |
+| ------ | ---------------------------------------------------- | ----------------------- |
+| 400    | `{ "error": "userId and characterId are required" }` | Missing required params |
+| 400    | `{ "error": "Index must be a number" }`              | Non-numeric index       |
+| 404    | `{ "error": "Summary not found" }`                   | Index out of range      |
 
 ---
 
@@ -427,10 +425,10 @@ List all mem0 memories from both tracks (user + agent), sorted by most recently 
 
 ### Query Parameters
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `userId` | `string` | No | User key (`amelia`, `lonnie`, `guest`). Determines which user track to query. Falls back to `MEM0_USER_ID` env var if omitted. |
-| `characterId` | `string` | No | Character whose agent memories to fetch (`melody` \| `kuromi` \| `retsuko`). Default: `melody`. Routes to that character's mem0 agent track. |
+| Param         | Type     | Required | Description                                                                                                                                  |
+| ------------- | -------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `userId`      | `string` | No       | User key (`amelia`, `lonnie`, `guest`). Determines which user track to query. Falls back to `MEM0_USER_ID` env var if omitted.               |
+| `characterId` | `string` | No       | Character whose agent memories to fetch (`melody` \| `kuromi` \| `retsuko`). Default: `melody`. Routes to that character's mem0 agent track. |
 
 ### Response (200)
 
@@ -453,19 +451,19 @@ List all mem0 memories from both tracks (user + agent), sorted by most recently 
 ]
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `string` | mem0 memory ID |
-| `memory` | `string` | Memory content text |
-| `created_at` | `string` | ISO 8601 creation timestamp |
-| `updated_at` | `string` | ISO 8601 last update timestamp |
-| `track` | `string` | `friend` (user track) or `melody` (agent track — label is always `melody` regardless of character) |
+| Field        | Type     | Description                                                                                        |
+| ------------ | -------- | -------------------------------------------------------------------------------------------------- |
+| `id`         | `string` | mem0 memory ID                                                                                     |
+| `memory`     | `string` | Memory content text                                                                                |
+| `created_at` | `string` | ISO 8601 creation timestamp                                                                        |
+| `updated_at` | `string` | ISO 8601 last update timestamp                                                                     |
+| `track`      | `string` | `friend` (user track) or `melody` (agent track — label is always `melody` regardless of character) |
 
 ### Error Responses
 
-| Status | Body | Condition |
-|--------|------|-----------|
-| 500 | `{ "error": "Failed to fetch memories" }` | mem0 API failure |
+| Status | Body                                      | Condition        |
+| ------ | ----------------------------------------- | ---------------- |
+| 500    | `{ "error": "Failed to fetch memories" }` | mem0 API failure |
 
 ---
 
@@ -475,9 +473,9 @@ Delete a specific memory from mem0.
 
 ### Parameters
 
-| Param | Location | Type | Description |
-|-------|----------|------|-------------|
-| `id` | URL path | `string` | mem0 memory ID |
+| Param | Location | Type     | Description    |
+| ----- | -------- | -------- | -------------- |
+| `id`  | URL path | `string` | mem0 memory ID |
 
 ### Response (200)
 
@@ -487,10 +485,10 @@ Delete a specific memory from mem0.
 
 ### Error Responses
 
-| Status | Body | Condition |
-|--------|------|-----------|
-| (varies) | `{ "error": "mem0 error" }` | mem0 API returned non-OK status |
-| 500 | `{ "error": "Failed to delete memory" }` | Network/fetch failure |
+| Status   | Body                                     | Condition                       |
+| -------- | ---------------------------------------- | ------------------------------- |
+| (varies) | `{ "error": "mem0 error" }`              | mem0 API returned non-OK status |
+| 500      | `{ "error": "Failed to delete memory" }` | Network/fetch failure           |
 
 ---
 
@@ -500,9 +498,9 @@ Get friendship stats for the specified user. Used by the Memories tab to display
 
 ### Query Parameters
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `userId` | `string` | No | User key. Falls back to legacy flat data if omitted. |
+| Param    | Type     | Required | Description                                          |
+| -------- | -------- | -------- | ---------------------------------------------------- |
+| `userId` | `string` | No       | User key. Falls back to legacy flat data if omitted. |
 
 ### Response (200)
 
@@ -516,13 +514,13 @@ Get friendship stats for the specified user. Used by the Memories tab to display
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `daysTogether` | `number` | Days since first chat (minimum 0) |
-| `totalChats` | `number` | Lifetime message count |
-| `streakDays` | `number` | Consecutive days with at least one chat |
-| `firstChat` | `string\|null` | ISO date of first conversation |
-| `milestones` | `string[]` | Chat count milestones reached (e.g., `chats-10`, `chats-25`, `chats-50`, `chats-100`, `chats-250`, `chats-500`, `chats-1000`) |
+| Field          | Type           | Description                                                                                                                   |
+| -------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `daysTogether` | `number`       | Days since first chat (minimum 0)                                                                                             |
+| `totalChats`   | `number`       | Lifetime message count                                                                                                        |
+| `streakDays`   | `number`       | Consecutive days with at least one chat                                                                                       |
+| `firstChat`    | `string\|null` | ISO date of first conversation                                                                                                |
+| `milestones`   | `string[]`     | Chat count milestones reached (e.g., `chats-10`, `chats-25`, `chats-50`, `chats-100`, `chats-250`, `chats-500`, `chats-1000`) |
 
 ---
 
@@ -532,9 +530,9 @@ Check if a user is new or returning. Used by the client to decide whether to sho
 
 ### Query Parameters
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| `userId` | `string` | No | User key. Falls back to legacy data if omitted. |
+| Param    | Type     | Required | Description                                     |
+| -------- | -------- | -------- | ----------------------------------------------- |
+| `userId` | `string` | No       | User key. Falls back to legacy data if omitted. |
 
 ### Response (200) — New User
 
@@ -554,13 +552,13 @@ Check if a user is new or returning. Used by the client to decide whether to sho
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `status` | `string` | `new` or `returning` |
+| Field        | Type           | Description                                                                      |
+| ------------ | -------------- | -------------------------------------------------------------------------------- |
+| `status`     | `string`       | `new` or `returning`                                                             |
 | `friendName` | `string\|null` | User's name from KNOWN_USERS or extracted from mem0 memories. Null if not found. |
-| `daysSince` | `number` | Days since last chat |
-| `totalChats` | `number` | Lifetime message count |
-| `streakDays` | `number` | Current streak |
+| `daysSince`  | `number`       | Days since last chat                                                             |
+| `totalChats` | `number`       | Lifetime message count                                                           |
+| `streakDays` | `number`       | Current streak                                                                   |
 
 ---
 
@@ -570,19 +568,19 @@ Save onboarding data (name, color, or interests) to mem0. Called during the firs
 
 ### Request Body
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | `string` | Yes | Data type: `name`, `color`, or `interests` |
-| `value` | `string` | Yes | The value to save (max 200 characters) |
-| `userId` | `string` | No | User key. Skips mem0 save for `guest`. |
+| Field    | Type     | Required | Description                                |
+| -------- | -------- | -------- | ------------------------------------------ |
+| `type`   | `string` | Yes      | Data type: `name`, `color`, or `interests` |
+| `value`  | `string` | Yes      | The value to save (max 200 characters)     |
+| `userId` | `string` | No       | User key. Skips mem0 save for `guest`.     |
 
 ### How Each Type Is Saved
 
-| Type | mem0 Memory Text |
-|------|-----------------|
-| `name` | `Friend's name is {firstName}. They said: "{value}"` |
-| `color` | `Friend's favorite color is {value}` |
-| `interests` | `Friend's interests and hobbies include: {value}` |
+| Type        | mem0 Memory Text                                     |
+| ----------- | ---------------------------------------------------- |
+| `name`      | `Friend's name is {firstName}. They said: "{value}"` |
+| `color`     | `Friend's favorite color is {value}`                 |
+| `interests` | `Friend's interests and hobbies include: {value}`    |
 
 ### Response (200)
 
@@ -592,12 +590,12 @@ Save onboarding data (name, color, or interests) to mem0. Called during the firs
 
 ### Error Responses
 
-| Status | Body | Condition |
-|--------|------|-----------|
-| 400 | `{ "error": "type and value required" }` | Missing `type` or `value` |
-| 400 | `{ "error": "Invalid value" }` | Value is not a string or exceeds 200 chars |
-| 400 | `{ "error": "Invalid type" }` | Type is not `name`, `color`, or `interests` |
-| 500 | `{ "error": "Failed to save" }` | mem0 API failure |
+| Status | Body                                     | Condition                                   |
+| ------ | ---------------------------------------- | ------------------------------------------- |
+| 400    | `{ "error": "type and value required" }` | Missing `type` or `value`                   |
+| 400    | `{ "error": "Invalid value" }`           | Value is not a string or exceeds 200 chars  |
+| 400    | `{ "error": "Invalid type" }`            | Type is not `name`, `color`, or `interests` |
+| 500    | `{ "error": "Failed to save" }`          | mem0 API failure                            |
 
 ### Side Effects
 
@@ -608,9 +606,9 @@ Save onboarding data (name, color, or interests) to mem0. Called during the firs
 
 ## Static File Serving
 
-| Path | Serves | Middleware |
-|------|--------|-----------|
-| `/` | `public/` directory | `express.static` |
+| Path             | Serves                   | Middleware       |
+| ---------------- | ------------------------ | ---------------- |
+| `/`              | `public/` directory      | `express.static` |
 | `/data/images/*` | `data/images/` directory | `express.static` |
 
 ---

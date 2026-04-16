@@ -54,25 +54,25 @@ The `relationship.json` file uses a **keyed per-user format** (version 2). Each 
 
 ## Per-User Stats Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `firstChat` | `string\|null` | ISO date string (YYYY-MM-DD) of first conversation. Set on first welcome interaction or first chat. |
-| `totalChats` | `number` | Lifetime message count. Incremented on every `/api/chat` call. |
-| `lastChatDate` | `string\|null` | ISO date string of the most recent chat. Updated every chat. |
-| `streakDays` | `number` | Consecutive days chatting. Resets to 1 if more than 1 day gap. |
-| `lastStreakDate` | `string\|null` | ISO date string of the last streak calculation. Used for day-difference math. |
-| `milestones` | `string[]` | Array of milestone keys reached (e.g., `"chats-10"`, `"chats-25"`). |
+| Field            | Type           | Description                                                                                         |
+| ---------------- | -------------- | --------------------------------------------------------------------------------------------------- |
+| `firstChat`      | `string\|null` | ISO date string (YYYY-MM-DD) of first conversation. Set on first welcome interaction or first chat. |
+| `totalChats`     | `number`       | Lifetime message count. Incremented on every `/api/chat` call.                                      |
+| `lastChatDate`   | `string\|null` | ISO date string of the most recent chat. Updated every chat.                                        |
+| `streakDays`     | `number`       | Consecutive days chatting. Resets to 1 if more than 1 day gap.                                      |
+| `lastStreakDate` | `string\|null` | ISO date string of the last streak calculation. Used for day-difference math.                       |
+| `milestones`     | `string[]`     | Array of milestone keys reached (e.g., `"chats-10"`, `"chats-25"`).                                 |
 
 ## Milestone Trigger Points
 
-| Milestone | Trigger |
-|-----------|---------|
-| `chats-10` | 10 total conversations |
-| `chats-25` | 25 total conversations |
-| `chats-50` | 50 total conversations |
-| `chats-100` | 100 total conversations |
-| `chats-250` | 250 total conversations |
-| `chats-500` | 500 total conversations |
+| Milestone    | Trigger                  |
+| ------------ | ------------------------ |
+| `chats-10`   | 10 total conversations   |
+| `chats-25`   | 25 total conversations   |
+| `chats-50`   | 50 total conversations   |
+| `chats-100`  | 100 total conversations  |
+| `chats-250`  | 250 total conversations  |
+| `chats-500`  | 500 total conversations  |
 | `chats-1000` | 1000 total conversations |
 
 Milestones are checked after each chat increment. Each milestone fires exactly once — the key is added to the `milestones` array and never duplicated.
@@ -148,9 +148,16 @@ Friendship details:
 This context is appended to the system prompt at line 722 in `server.js`:
 
 ```js
-const systemInstruction = SYSTEM_PROMPT + CHARACTER_CONTEXT + identityContext
-  + crossUserInstruction + relationshipContext + userMemoryContext
-  + agentMemoryContext + crossUserContext + styleInstruction;
+const systemInstruction =
+  SYSTEM_PROMPT +
+  CHARACTER_CONTEXT +
+  identityContext +
+  crossUserInstruction +
+  relationshipContext +
+  userMemoryContext +
+  agentMemoryContext +
+  crossUserContext +
+  styleInstruction;
 ```
 
 ## Frontend Display
@@ -184,9 +191,9 @@ When the system encounters a `relationship.json` without a `_version` key, it au
 
 ### GET /api/relationship
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `userId` | query string | No | User key (e.g., `amelia`, `lonnie`, `guest`). Falls back to legacy data if omitted. |
+| Parameter | Type         | Required | Description                                                                         |
+| --------- | ------------ | -------- | ----------------------------------------------------------------------------------- |
+| `userId`  | query string | No       | User key (e.g., `amelia`, `lonnie`, `guest`). Falls back to legacy data if omitted. |
 
 **Response (200):**
 
