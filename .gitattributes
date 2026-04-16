@@ -1,0 +1,7 @@
+# Exclude dev tooling from release archives (git archive / GitHub zip)
+.claude/            export-ignore
+.husky/             export-ignore
+.prettierrc         export-ignore
+.prettierignore     export-ignore
+.gitattributes      export-ignore
+CLAUDE.md           export-ignore
