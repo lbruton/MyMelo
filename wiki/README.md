@@ -78,7 +78,7 @@ See [Docker Deployment](docker-deployment.md) for full setup instructions.
 | **Wiki**     | MediaWiki API (Hello Kitty Island Adventure, Minecraft) |
 | **Frontend** | Vanilla HTML/CSS/JS (no framework, no build step)       |
 | **Deploy**   | Docker + docker-compose, named volume                   |
-| **PWA**      | Service worker, manifest.json, stale-while-revalidate   |
+| **PWA**      | Service worker, manifest.json, network-first caching    |
 
 ---
 

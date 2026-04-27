@@ -264,7 +264,7 @@ HTTPS is optional. The server checks for `certs/cert.pem` and `certs/key.pem` at
 | Per-character agent track          | Each character has its own `agent_id` in mem0, keeping personalities isolated. The shared user track ensures all characters know the friend equally.        |
 | System prompt rebuilt per request  | Each request gets fresh memory context, relationship stats, and reply style injection. No stale system prompts.                                             |
 | Chat session recreated per request | `ai.models.generateContent()` called each time with full contents array (buffer + current message). No persistent SDK chat session.                         |
-| Conversation buffer in-memory      | `Map<sessionId, {contents, lastAccess}>` with sliding window (max 6 exchanges = 12 items). Pruned every 10 minutes (1hr TTL).                               |
+| Conversation buffer in-memory      | `Map<sessionId, {contents, lastAccess}>` with sliding window (max 6 exchanges = 12 items). Pruned every 10 minutes (1 hr TTL).                              |
 | ES Modules                         | `"type": "module"` in package.json. All imports use `import` syntax.                                                                                        |
 | Images compressed client-side      | Canvas resize to 1024px max width, JPEG 0.8 quality before base64 encoding. Reduces upload payload.                                                         |
 | Brave Search over Google CSE       | Single API key, no engine setup, returns images + videos. Google CSE requires a Programmable Search Engine ID.                                              |

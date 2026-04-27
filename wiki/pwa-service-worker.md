@@ -153,7 +153,7 @@ These 10 resources are cached during the `install` event before the service work
 
 ### Network-First Flow
 
-```
+```text
 Request arrives
   ├── /api/* or /data/*: pass through (no respondWith) → browser fetches normally
   └── Everything else:
@@ -289,7 +289,7 @@ Two independent mechanisms ensure clients always run the latest version:
 
 **Primary path — service worker byte diff:**
 
-```
+```text
 Browser fetches sw.js from network (updateViaCache:'none' prevents HTTP cache hit)
   → Byte-level change detected → new SW enters "installing" state
   → install event: pre-cache new APP_SHELL (versioned URLs)
@@ -302,7 +302,7 @@ Browser fetches sw.js from network (updateViaCache:'none' prevents HTTP cache hi
 
 **Belt-and-suspenders — version gate in `<head>` of `index.html`:**
 
-```
+```text
 Page loads → inline <script> fetches /api/version (network-only, bypasses SW)
   → Compare server version to hardcoded version string in HTML
   → Match: proceed normally
