@@ -4,7 +4,8 @@ certs/
 data/
 .DS_Store
 .mcp.json
-.spec-workflow/
-.claude/
+.specflow/
+.claude/*
+!.claude/project.json
 devops/version.lock
 CLAUDE.md
