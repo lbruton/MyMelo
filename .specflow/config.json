@@ -1,0 +1,8 @@
+{
+  "project": "MyMelo",
+  "docvault": "../DocVault",
+  "issue_prefix": "MELO",
+  "issue_backend": "plane",
+  "plane_workspace": "lbruton",
+  "plane_project_id": "fe617d02-f7fe-4842-b2e9-ada78bf829b6"
+}
