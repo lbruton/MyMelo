@@ -25,9 +25,9 @@ Characters are defined in the `CHARACTERS` registry (`server.js` lines 84-109). 
 
 ```js
 const CHARACTERS = {
-  melody:  { id: 'melody',  name: 'My Melody',   agentId: 'my-melody', getPrompt: () => MELODY_SYSTEM_PROMPT },
-  kuromi:  { id: 'kuromi',  name: 'Kuromi',       agentId: 'kuromi',    getPrompt: () => KUROMI_SYSTEM_PROMPT },
-  retsuko: { id: 'retsuko', name: 'Aggretsuko',   agentId: 'retsuko',   getPrompt: () => RETSUKO_SYSTEM_PROMPT }
+  melody: { id: 'melody', name: 'My Melody', agentId: 'my-melody', getPrompt: () => MELODY_SYSTEM_PROMPT },
+  kuromi: { id: 'kuromi', name: 'Kuromi', agentId: 'kuromi', getPrompt: () => KUROMI_SYSTEM_PROMPT },
+  retsuko: { id: 'retsuko', name: 'Aggretsuko', agentId: 'retsuko', getPrompt: () => RETSUKO_SYSTEM_PROMPT },
 };
 ```
 
@@ -35,10 +35,10 @@ const CHARACTERS = {
 
 ### Prompt Constants
 
-| Constant | Character | Status |
-|---|---|---|
-| `MELODY_SYSTEM_PROMPT` | My Melody | Full production prompt (see sections below) |
-| `KUROMI_SYSTEM_PROMPT` | Kuromi | Placeholder — brief personality sketch; full spec pending (HKF-10) |
+| Constant                | Character            | Status                                                             |
+| ----------------------- | -------------------- | ------------------------------------------------------------------ |
+| `MELODY_SYSTEM_PROMPT`  | My Melody            | Full production prompt (see sections below)                        |
+| `KUROMI_SYSTEM_PROMPT`  | Kuromi               | Placeholder — brief personality sketch; full spec pending (HKF-10) |
 | `RETSUKO_SYSTEM_PROMPT` | Retsuko (Aggretsuko) | Placeholder — brief personality sketch; full spec pending (HKF-11) |
 
 > **Note:** `SYSTEM_PROMPT` was renamed to `MELODY_SYSTEM_PROMPT` in the multi-character refactor. The content of My Melody's prompt is unchanged.
@@ -55,18 +55,19 @@ All characters share the same dynamic assembly pipeline. In the `/api/chat` hand
 
 ```js
 const isStraightTalk = replyStyle === 'straightTalk';
-const systemInstruction = character.getPrompt()
-  + (isStraightTalk ? '' : CHARACTER_CONTEXT)
-  + identityContext
-  + crossUserInstruction
-  + coreMemoryContext
-  + summaryContext
-  + relationshipContext
-  + userMemoryContext
-  + agentMemoryContext
-  + crossCharacterContext
-  + crossUserContext
-  + styleInstruction;
+const systemInstruction =
+  character.getPrompt() +
+  (isStraightTalk ? '' : CHARACTER_CONTEXT) +
+  identityContext +
+  crossUserInstruction +
+  coreMemoryContext +
+  summaryContext +
+  relationshipContext +
+  userMemoryContext +
+  agentMemoryContext +
+  crossCharacterContext +
+  crossUserContext +
+  styleInstruction;
 ```
 
 `CHARACTER_CONTEXT` (the Sanrio universe data) is omitted in `straightTalk` mode, since that mode drops the character persona entirely.
@@ -153,14 +154,14 @@ Available emotions: `happy`, `love`, `shy`, `sad`, `think`, `playful`, `angry`, 
 
 Explicit anti-patterns:
 
-| Rule | Reason |
-|------|--------|
-| Never say "oh my ribbons" | Completely fabricated, not from any Sanrio media |
-| Never start consecutive messages the same way | Anti-repetition |
-| Never be generically sweet with no quirks | Personality depth |
-| Never break character or acknowledge being AI | Immersion |
-| Never ignore the friend's emotional state | Empathy |
-| Never open with disclaimers | Lead with the actual answer |
+| Rule                                          | Reason                                           |
+| --------------------------------------------- | ------------------------------------------------ |
+| Never say "oh my ribbons"                     | Completely fabricated, not from any Sanrio media |
+| Never start consecutive messages the same way | Anti-repetition                                  |
+| Never be generically sweet with no quirks     | Personality depth                                |
+| Never break character or acknowledge being AI | Immersion                                        |
+| Never ignore the friend's emotional state     | Empathy                                          |
+| Never open with disclaimers                   | Lead with the actual answer                      |
 
 ### IMPORTANT -- REAL HELP
 
@@ -187,6 +188,7 @@ Mama says he's just being dramatic though.
 The prompt uses the [Ali:Chat](https://rentry.co/alichat) format — a character card convention from the SillyTavern community. Instead of listing personality traits abstractly, behavioral patterns are demonstrated through example dialogue exchanges. The model learns Melody's speech patterns, tag usage, and personality quirks by example rather than instruction.
 
 Key properties of Ali:Chat:
+
 - `Friend:` and `My Melody:` labels (not `User:` / `Assistant:`)
 - Examples show exact tag usage in context
 - Personality quirks demonstrated organically (Mama quotes, tangents, follow-up questions)
@@ -196,14 +198,15 @@ Key properties of Ali:Chat:
 
 Embedded in the static prompt, these tell the model when and how to emit control tags:
 
-| Tag | Trigger |
-|-----|---------|
-| `[IMAGE_SEARCH: query]` | Friend asks to see a picture/image |
-| `[VIDEO_SEARCH: query]` | Friend asks for a video or how-to |
-| `[GALLERY_SEARCH: keywords]` | Friend asks about a previously shared photo |
-| `[WIKI_SEARCH: wikiId query]` | Friend asks about game-specific topics |
+| Tag                           | Trigger                                     |
+| ----------------------------- | ------------------------------------------- |
+| `[IMAGE_SEARCH: query]`       | Friend asks to see a picture/image          |
+| `[VIDEO_SEARCH: query]`       | Friend asks for a video or how-to           |
+| `[GALLERY_SEARCH: keywords]`  | Friend asks about a previously shared photo |
+| `[WIKI_SEARCH: wikiId query]` | Friend asks about game-specific topics      |
 
 Explicit guardrails:
+
 - Only include tags when the friend explicitly asks for visual content
 - Do not include tags in normal conversation
 - Use Google Search grounding (not IMAGE_SEARCH) for informational queries like finding restaurants
@@ -229,7 +232,7 @@ need a gentle heart~ Let me look that up for you!
 Injected dynamically within the static template string:
 
 ```js
-`Today's date: ${new Date().toISOString().slice(0, 10)}`
+`Today's date: ${new Date().toISOString().slice(0, 10)}`;
 ```
 
 ## Dynamic Components
@@ -242,11 +245,11 @@ Loaded once at startup from `data/sanrio-characters.json`. Contains condensed da
 
 Per-user identity instruction based on the active `userId`:
 
-| userId | Context injected |
-|--------|-----------------|
-| `'guest'` | `"You are talking to a guest friend. Be welcoming but don't assume you know them well."` |
+| userId                       | Context injected                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| `'guest'`                    | `"You are talking to a guest friend. Be welcoming but don't assume you know them well."`       |
 | Known user (e.g. `'amelia'`) | `"You are currently talking to your friend Amelia. Use their name naturally in conversation."` |
-| `undefined` | Empty string (no identity context) |
+| `undefined`                  | Empty string (no identity context)                                                             |
 
 ### crossUserInstruction
 
@@ -322,11 +325,11 @@ Limited to 5 memories. Only one cross-user lookup per message.
 
 Based on the `replyStyle` parameter from the request:
 
-| replyStyle | Instruction |
-|------------|-------------|
-| `'default'` | Empty string (no override) |
-| `'brief'` | `"IMPORTANT: Keep your responses to 1-2 short sentences max. Be concise!"` |
-| `'detailed'` | `"Give thorough, detailed responses with examples when helpful. Feel free to elaborate."` |
+| replyStyle       | Instruction                                                                                           |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| `'default'`      | Empty string (no override)                                                                            |
+| `'brief'`        | `"IMPORTANT: Keep your responses to 1-2 short sentences max. Be concise!"`                            |
+| `'detailed'`     | `"Give thorough, detailed responses with examples when helpful. Feel free to elaborate."`             |
 | `'straightTalk'` | Drop character entirely; respond as a direct, factual assistant. Also suppresses `CHARACTER_CONTEXT`. |
 
 ## Key Design Decisions

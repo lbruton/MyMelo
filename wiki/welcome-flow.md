@@ -117,19 +117,19 @@ Saves each onboarding data point to mem0.
 
 ### Validation
 
-| Rule | Response |
-|------|----------|
-| Missing `type` or `value` | 400 `{ error: "type and value required" }` |
-| `value` not a string or > 200 chars | 400 `{ error: "Invalid value" }` |
-| Unknown `type` | 400 `{ error: "Invalid type" }` |
+| Rule                                | Response                                   |
+| ----------------------------------- | ------------------------------------------ |
+| Missing `type` or `value`           | 400 `{ error: "type and value required" }` |
+| `value` not a string or > 200 chars | 400 `{ error: "Invalid value" }`           |
+| Unknown `type`                      | 400 `{ error: "Invalid type" }`            |
 
 ### mem0 Save Behavior
 
-| Type | Memory Text Saved |
-|------|-------------------|
-| `name` | `Friend's name is {firstName}. They said: "{fullInput}"` |
-| `color` | `Friend's favorite color is {value}` |
-| `interests` | `Friend's interests and hobbies include: {value}` |
+| Type        | Memory Text Saved                                        |
+| ----------- | -------------------------------------------------------- |
+| `name`      | `Friend's name is {firstName}. They said: "{fullInput}"` |
+| `color`     | `Friend's favorite color is {value}`                     |
+| `interests` | `Friend's interests and hobbies include: {value}`        |
 
 **Guest users**: The mem0 save is **skipped** when `userId === 'guest'`. Guest users still complete the welcome flow visually, but nothing is persisted to the user memory track.
 
@@ -152,21 +152,21 @@ On the first `/api/welcome` call for a user, if `firstChat` is null, the relatio
 
 When `melodyWelcomeDone-{userId}` exists in localStorage, the flow fetches `GET /api/welcome-status?userId={userId}` and generates a personalized greeting:
 
-| Condition | Greeting Template |
-|-----------|-------------------|
-| Same day, streak > 2 | "Welcome back, {name}! That's {streak} days in a row~ I'm so happy!" |
-| Same day, streak <= 2 | "Hi again, {name}! I was just having some tea and thinking about you~" |
-| 1 day since last chat | "{name}! You came back! I was just baking almond pound cake and hoping you'd visit~" |
+| Condition                | Greeting Template                                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Same day, streak > 2     | "Welcome back, {name}! That's {streak} days in a row~ I'm so happy!"                                           |
+| Same day, streak <= 2    | "Hi again, {name}! I was just having some tea and thinking about you~"                                         |
+| 1 day since last chat    | "{name}! You came back! I was just baking almond pound cake and hoping you'd visit~"                           |
 | 2-3 days since last chat | "{name}~! It's been {days} days! I missed chatting with you... Mama says absence makes the heart grow fonder!" |
-| 4+ days since last chat | "{name}!! Yaaan~! It's been {days} whole days! I missed you so much... I saved you some tea!" |
+| 4+ days since last chat  | "{name}!! Yaaan~! It's been {days} whole days! I missed you so much... I saved you some tea!"                  |
 
 The greeting replaces the default welcome message text in the chat area.
 
 ### GET /api/welcome-status
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `userId` | query string | No | User key. Falls back to legacy data if omitted. |
+| Parameter | Type         | Required | Description                                     |
+| --------- | ------------ | -------- | ----------------------------------------------- |
+| `userId`  | query string | No       | User key. Falls back to legacy data if omitted. |
 
 **Response — new user:**
 
@@ -195,20 +195,20 @@ The `friendName` is resolved by:
 
 The `COLOR_MAP` object in `app.js` maps color name inputs to hex values applied as the CSS `--accent-highlight` variable:
 
-| Color | Hex | Color | Hex |
-|-------|-----|-------|-----|
-| red | `#E74C3C` | purple | `#9B59B6` |
-| pink / hotpink | `#FF69B4` | violet | `#7C4DFF` |
-| rose | `#FF6B81` | lavender | `#B39DDB` |
-| blue | `#3498DB` | lilac | `#C8A2C8` |
-| navy | `#2C3E8C` | orange | `#FF9800` |
-| skyblue | `#5DADE2` | coral | `#FF7675` |
-| cyan | `#00BCD4` | peach | `#FFAB91` |
-| teal | `#009688` | salmon | `#FA8072` |
-| green | `#27AE60` | yellow | `#F1C40F` |
-| mint | `#00D2A0` | gold | `#FFD700` |
-| lime | `#8BC34A` | black | `#5C4155` |
-| sage | `#8FBC8F` | white | `#FF69B4` |
+| Color          | Hex       | Color    | Hex       |
+| -------------- | --------- | -------- | --------- |
+| red            | `#E74C3C` | purple   | `#9B59B6` |
+| pink / hotpink | `#FF69B4` | violet   | `#7C4DFF` |
+| rose           | `#FF6B81` | lavender | `#B39DDB` |
+| blue           | `#3498DB` | lilac    | `#C8A2C8` |
+| navy           | `#2C3E8C` | orange   | `#FF9800` |
+| skyblue        | `#5DADE2` | coral    | `#FF7675` |
+| cyan           | `#00BCD4` | peach    | `#FFAB91` |
+| teal           | `#009688` | salmon   | `#FA8072` |
+| green          | `#27AE60` | yellow   | `#F1C40F` |
+| mint           | `#00D2A0` | gold     | `#FFD700` |
+| lime           | `#8BC34A` | black    | `#5C4155` |
+| sage           | `#8FBC8F` | white    | `#FF69B4` |
 
 The accent color is persisted to `localStorage.accentColor` and restored on page load.
 

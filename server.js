@@ -109,9 +109,8 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 /** @type {string} mem0 mode — 'cloud' uses mem0.ai API, 'selfhosted' uses local server. */
 const MEM0_MODE = process.env.MEM0_MODE || 'cloud';
 /** @type {string} mem0 API base URL. */
-const MEM0_BASE = MEM0_MODE === 'selfhosted'
-  ? (process.env.MEM0_SELF_URL || 'http://mem0-server:8080')
-  : 'https://api.mem0.ai';
+const MEM0_BASE =
+  MEM0_MODE === 'selfhosted' ? process.env.MEM0_SELF_URL || 'http://mem0-server:8080' : 'https://api.mem0.ai';
 /** @type {string} mem0 API authentication token (cloud only). */
 const MEM0_KEY = process.env.MEM0_API_KEY;
 
@@ -135,7 +134,7 @@ const MEM0_AGENT_ID = 'my-melody';
 /** @type {Object<string, string|undefined>} Maps old user slugs to their real email (from env vars) for one-time data migration. */
 const MIGRATION_MAP = {
   amelia: process.env.MIGRATION_EMAIL_AMELIA,
-  lonnie: process.env.MIGRATION_EMAIL_LONNIE
+  lonnie: process.env.MIGRATION_EMAIL_LONNIE,
 };
 
 /** @type {string} Fallback email when no Cloudflare header is present (LAN access). */
@@ -154,7 +153,7 @@ const CHARACTERS = {
     agentId: 'my-melody',
     color: '#FF69B4',
     avatarFile: 'melody-avatar.png',
-    getPrompt: () => MELODY_SYSTEM_PROMPT
+    getPrompt: () => MELODY_SYSTEM_PROMPT,
   },
   kuromi: {
     id: 'kuromi',
@@ -162,7 +161,7 @@ const CHARACTERS = {
     agentId: 'kuromi',
     color: '#FF1493',
     avatarFile: 'kuromi-avatar.png',
-    getPrompt: () => KUROMI_SYSTEM_PROMPT
+    getPrompt: () => KUROMI_SYSTEM_PROMPT,
   },
   retsuko: {
     id: 'retsuko',
@@ -170,8 +169,8 @@ const CHARACTERS = {
     agentId: 'retsuko',
     color: '#FF4500',
     avatarFile: 'retsuko-avatar.png',
-    getPrompt: () => RETSUKO_SYSTEM_PROMPT
-  }
+    getPrompt: () => RETSUKO_SYSTEM_PROMPT,
+  },
 };
 
 /** @type {string} Default character ID used when no characterId is provided. */
@@ -220,14 +219,18 @@ const YT_FAVORITES_FILE = join(DATA_DIR, 'youtube-favorites.json');
 const USERS_FILE = join(DATA_DIR, 'users.json');
 if (!existsSync(YT_FAVORITES_FILE)) writeFileSync(YT_FAVORITES_FILE, '{}');
 if (!existsSync(IMAGES_META)) writeFileSync(IMAGES_META, '[]');
-if (!existsSync(RELATIONSHIP_FILE)) writeFileSync(RELATIONSHIP_FILE, JSON.stringify({
-  firstChat: null,
-  totalChats: 0,
-  lastChatDate: null,
-  streakDays: 0,
-  lastStreakDate: null,
-  milestones: []
-}));
+if (!existsSync(RELATIONSHIP_FILE))
+  writeFileSync(
+    RELATIONSHIP_FILE,
+    JSON.stringify({
+      firstChat: null,
+      totalChats: 0,
+      lastChatDate: null,
+      streakDays: 0,
+      lastStreakDate: null,
+      milestones: [],
+    }),
+  );
 
 // Auto-create users.json if missing or corrupted
 try {
@@ -252,13 +255,13 @@ const WIKIS = {
   hkia: {
     name: 'Hello Kitty Island Adventure',
     api: 'https://hellokittyislandadventure.wiki.gg/api.php',
-    baseUrl: 'https://hellokittyislandadventure.wiki.gg/wiki/'
+    baseUrl: 'https://hellokittyislandadventure.wiki.gg/wiki/',
   },
   minecraft: {
     name: 'Minecraft',
     api: 'https://minecraft.wiki/api.php',
-    baseUrl: 'https://minecraft.wiki/w/'
-  }
+    baseUrl: 'https://minecraft.wiki/w/',
+  },
 };
 
 // ─── Character Universe Data ───
@@ -282,7 +285,7 @@ function loadCharacterData() {
     const chars = data.characters || [];
     if (!chars.length) return '';
 
-    const lines = chars.map(c => {
+    const lines = chars.map((c) => {
       const rel = c.relationships || {};
       const relStr = Object.entries(rel)
         .filter(([, v]) => typeof v === 'string')
@@ -318,10 +321,10 @@ async function searchWiki(wikiId, query) {
     const res = await fetch(url);
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.query?.search || []).map(r => ({
+    return (data.query?.search || []).map((r) => ({
       title: r.title,
       pageid: r.pageid,
-      snippet: (r.snippet || '').replace(/<[^>]+>/g, '')
+      snippet: (r.snippet || '').replace(/<[^>]+>/g, ''),
     }));
   } catch (err) {
     console.error(`Wiki search error (${wikiId}):`, err.message);
@@ -361,7 +364,7 @@ async function fetchWikiContent(wikiId, pageTitle) {
       title: data.parse.title || pageTitle,
       text,
       url: wiki.baseUrl + encodeURIComponent(pageTitle.replace(/ /g, '_')),
-      wikiName: wiki.name
+      wikiName: wiki.name,
     };
   } catch (err) {
     console.error(`Wiki fetch error (${wikiId}):`, err.message);
@@ -376,8 +379,11 @@ async function fetchWikiContent(wikiId, pageTitle) {
  * @returns {*} Parsed JSON data, or an empty array on read/parse failure
  */
 function readJSON(path) {
-  try { return JSON.parse(readFileSync(path, 'utf-8')); }
-  catch { return []; }
+  try {
+    return JSON.parse(readFileSync(path, 'utf-8'));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -464,7 +470,7 @@ function createUserProfile(email) {
     displayName: null,
     emailSlug: getEmailSlug(email),
     joinedAt: new Date().toISOString(),
-    accentColor: null
+    accentColor: null,
   };
   userProfileCache.set(email, profile);
   persistUserProfiles();
@@ -625,7 +631,6 @@ async function migrateOldUsers() {
     currentData._migrated = true;
     writeJSON(USERS_FILE, currentData);
   }
-
 }
 
 // ---------------------------------------------------------------------------
@@ -638,7 +643,7 @@ const CORE_MEMORY_CATEGORIES = {
   familyAndPets: 'Family & Pets',
   preferences: 'Preferences',
   importantDates: 'Important dates',
-  insideJokes: 'Inside jokes'
+  insideJokes: 'Inside jokes',
 };
 
 /** @type {Map<string, object>} In-memory cache keyed by `${emailSlug}_${characterId}`. */
@@ -652,7 +657,15 @@ const summaryCache = new Map();
  * @returns {object}
  */
 function defaultCoreMemory() {
-  return { _version: 1, _updated: null, aboutYou: [], familyAndPets: [], preferences: [], importantDates: [], insideJokes: [] };
+  return {
+    _version: 1,
+    _updated: null,
+    aboutYou: [],
+    familyAndPets: [],
+    preferences: [],
+    importantDates: [],
+    insideJokes: [],
+  };
 }
 
 /**
@@ -664,7 +677,7 @@ function defaultCoreMemory() {
 function getCoreMemoryPath(email, characterId) {
   // Derive slug from email for filesystem-safe path; validate against user profile store
   const safeUser = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
-  const safeChar = (characterId && CHARACTERS[characterId]) ? characterId : DEFAULT_CHARACTER;
+  const safeChar = characterId && CHARACTERS[characterId] ? characterId : DEFAULT_CHARACTER;
   return join(CORE_MEMORY_DIR, `${safeUser}_${safeChar}.json`);
 }
 
@@ -746,7 +759,7 @@ const MAX_SUMMARIES = 20;
  */
 function getSummaryPath(email, characterId) {
   const safeUser = email ? getEmailSlug(email) : getEmailSlug(DEFAULT_USER_EMAIL);
-  const safeChar = (characterId && CHARACTERS[characterId]) ? characterId : DEFAULT_CHARACTER;
+  const safeChar = characterId && CHARACTERS[characterId] ? characterId : DEFAULT_CHARACTER;
   return join(SUMMARIES_DIR, `${safeUser}_${safeChar}.json`);
 }
 
@@ -1275,7 +1288,7 @@ const MODEL_CONFIG = {
   temperature: 1.0,
   topP: 0.95,
   thinkingConfig: { thinkingBudget: -1 },
-  tools: [{ googleSearch: {} }]
+  tools: [{ googleSearch: {} }],
 };
 
 /**
@@ -1351,10 +1364,10 @@ function updateRelationship(email) {
  */
 function getRelationshipContext(email) {
   const data = readJSON(RELATIONSHIP_FILE) || {};
-  const userKey = (email && data._version) ? getEmailSlug(email) : (data._version ? '_legacy' : null);
+  const userKey = email && data._version ? getEmailSlug(email) : data._version ? '_legacy' : null;
 
   // If no keyed structure yet, use flat data (backward compat)
-  const rel = userKey ? (data[userKey] || {}) : data;
+  const rel = userKey ? data[userKey] || {} : data;
   if (!rel.firstChat) return '';
 
   const today = new Date();
@@ -1404,8 +1417,8 @@ async function searchMemories(query, email) {
         query,
         filters: { user_id: getUserMemId(email) },
         top_k: 10,
-        rerank: true
-      })
+        rerank: true,
+      }),
     });
     if (!res.ok) return [];
     const data = await res.json();
@@ -1434,8 +1447,8 @@ async function searchAgentMemories(query, characterId = null) {
         query,
         filters: { agent_id: agentId },
         top_k: 5,
-        rerank: true
-      })
+        rerank: true,
+      }),
     });
     if (!res.ok) return [];
     const data = await res.json();
@@ -1457,32 +1470,34 @@ async function searchAgentMemories(query, characterId = null) {
  * @returns {Promise<Object<string, Object[]>>} Map of characterName → memories array
  */
 async function searchCrossCharacterMemories(query, activeCharacterId) {
-  const otherCharacters = Object.values(CHARACTERS).filter(c => c.id !== activeCharacterId);
+  const otherCharacters = Object.values(CHARACTERS).filter((c) => c.id !== activeCharacterId);
   const results = {};
-  await Promise.all(otherCharacters.map(async (c) => {
-    try {
-      const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
-        method: 'POST',
-        headers: {
-          ...mem0Headers()
-        },
-        body: JSON.stringify({
-          query,
-          filters: { agent_id: c.agentId },
-          top_k: 3,
-          rerank: true
-        })
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const memories = (data.results || data || []).slice(0, 3);
-      if (memories.length > 0) {
-        results[c.name] = memories;
+  await Promise.all(
+    otherCharacters.map(async (c) => {
+      try {
+        const res = await fetch(`${MEM0_BASE}/v2/memories/search/`, {
+          method: 'POST',
+          headers: {
+            ...mem0Headers(),
+          },
+          body: JSON.stringify({
+            query,
+            filters: { agent_id: c.agentId },
+            top_k: 3,
+            rerank: true,
+          }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const memories = (data.results || data || []).slice(0, 3);
+        if (memories.length > 0) {
+          results[c.name] = memories;
+        }
+      } catch (err) {
+        console.error(`Cross-character memory search error for ${c.name}:`, err.message);
       }
-    } catch (err) {
-      console.error(`Cross-character memory search error for ${c.name}:`, err.message);
-    }
-  }));
+    }),
+  );
   return results;
 }
 
@@ -1510,25 +1525,25 @@ function saveToMemory(userMessage, assistantReply, email, meta = {}, character =
     ...(meta.hasImage && { has_image: true }),
     ...(meta.replyStyle && meta.replyStyle !== 'default' && { reply_style: meta.replyStyle }),
     ...(character && { character_id: character.id }),
-    character_name: characterName
+    character_name: characterName,
   };
 
   // User track: facts about the friend
   fetch(`${MEM0_BASE}/v1/memories/`, {
     method: 'POST',
     headers: {
-      ...mem0Headers()
+      ...mem0Headers(),
     },
     body: JSON.stringify({
       messages: [
         { role: 'user', content: userMessage },
-        { role: 'assistant', content: attributedReply }
+        { role: 'assistant', content: attributedReply },
       ],
       user_id: getUserMemId(email),
       infer: true,
-      metadata
-    })
-  }).catch(err => console.error('mem0 user save error:', err.message));
+      metadata,
+    }),
+  }).catch((err) => console.error('mem0 user save error:', err.message));
 
   // Agent track: character's own evolving personality, opinions, experiences
   // Skip for Straight Talk to avoid polluting character's persona with out-of-character content
@@ -1537,18 +1552,18 @@ function saveToMemory(userMessage, assistantReply, email, meta = {}, character =
   fetch(`${MEM0_BASE}/v1/memories/`, {
     method: 'POST',
     headers: {
-      ...mem0Headers()
+      ...mem0Headers(),
     },
     body: JSON.stringify({
       messages: [
         { role: 'user', content: userMessage },
-        { role: 'assistant', content: attributedReply }
+        { role: 'assistant', content: attributedReply },
       ],
       agent_id: agentId,
       infer: true,
-      metadata
-    })
-  }).catch(err => console.error('mem0 agent save error:', err.message));
+      metadata,
+    }),
+  }).catch((err) => console.error('mem0 agent save error:', err.message));
 }
 
 // ─── Core Memory Extraction ───
@@ -1565,7 +1580,7 @@ function mergeCoreMemory(existing, extracted) {
   for (const key of Object.keys(CORE_MEMORY_CATEGORIES)) {
     const existingEntries = existing[key] || [];
     const newEntries = extracted[key] || [];
-    const existingLower = existingEntries.map(e => e.toLowerCase().trim());
+    const existingLower = existingEntries.map((e) => e.toLowerCase().trim());
 
     for (const entry of newEntries) {
       if (!entry || typeof entry !== 'string') continue;
@@ -1602,9 +1617,10 @@ async function extractCoreMemory(userMessage, assistantReply, email, characterId
     model: EXTRACTION_MODEL_ID,
     contents: `User: ${userMessage}\nAssistant: ${assistantReply}`,
     config: {
-      systemInstruction: 'Extract personal facts about the USER (the human) from this conversation that should be permanently remembered. The assistant is a fictional Sanrio character — do NOT extract the character\'s name, occupation, species, personality, backstory, or any facts about the character as user facts. If the assistant says "I work in accounting" or "I love baking", that is about the CHARACTER, not the user. Only extract facts the USER explicitly reveals about THEMSELVES. Categorize into: aboutYou (name, age, location, occupation), familyAndPets (family members, pets), preferences (favorites, hobbies), importantDates (birthdays, anniversaries), insideJokes (shared humor). Return JSON with these keys. Each value is an array of short fact strings. Return empty arrays for categories with no new facts. Only extract CLEAR, EXPLICIT facts — do not infer or guess.',
-      responseMimeType: 'application/json'
-    }
+      systemInstruction:
+        'Extract personal facts about the USER (the human) from this conversation that should be permanently remembered. The assistant is a fictional Sanrio character — do NOT extract the character\'s name, occupation, species, personality, backstory, or any facts about the character as user facts. If the assistant says "I work in accounting" or "I love baking", that is about the CHARACTER, not the user. Only extract facts the USER explicitly reveals about THEMSELVES. Categorize into: aboutYou (name, age, location, occupation), familyAndPets (family members, pets), preferences (favorites, hobbies), importantDates (birthdays, anniversaries), insideJokes (shared humor). Return JSON with these keys. Each value is an array of short fact strings. Return empty arrays for categories with no new facts. Only extract CLEAR, EXPLICIT facts — do not infer or guess.',
+      responseMimeType: 'application/json',
+    },
   });
 
   let extracted;
@@ -1634,19 +1650,26 @@ async function generateSessionSummary(buffer, email, characterId, sessionId) {
   try {
     if (!buffer || buffer.length < 6) return; // Need at least 3 exchanges
 
-    const transcript = buffer.map(item => {
-      const role = item.role === 'user' ? 'User' : 'Character';
-      const text = item.parts?.map(p => p.text).filter(Boolean).join(' ') || '';
-      return `${role}: ${text}`;
-    }).join('\n');
+    const transcript = buffer
+      .map((item) => {
+        const role = item.role === 'user' ? 'User' : 'Character';
+        const text =
+          item.parts
+            ?.map((p) => p.text)
+            .filter(Boolean)
+            .join(' ') || '';
+        return `${role}: ${text}`;
+      })
+      .join('\n');
 
     const response = await ai.models.generateContent({
       model: EXTRACTION_MODEL_ID,
       contents: transcript,
       config: {
-        systemInstruction: 'Summarize this chat session between a user and a Sanrio character companion. Write 2-3 short paragraphs covering:\n1. Main topics discussed\n2. Emotional tone and mood of the conversation\n3. Key facts or preferences learned about the user\n4. Any notable events (images shared, games played, recipes looked up, wiki searches)\n5. How the friendship developed or any relationship milestones\n\nWrite naturally as a narrative summary, not a bullet list. Be concise but capture the important details that would help the character remember this conversation.',
-        responseMimeType: 'text/plain'
-      }
+        systemInstruction:
+          'Summarize this chat session between a user and a Sanrio character companion. Write 2-3 short paragraphs covering:\n1. Main topics discussed\n2. Emotional tone and mood of the conversation\n3. Key facts or preferences learned about the user\n4. Any notable events (images shared, games played, recipes looked up, wiki searches)\n5. How the friendship developed or any relationship milestones\n\nWrite naturally as a narrative summary, not a bullet list. Be concise but capture the important details that would help the character remember this conversation.',
+        responseMimeType: 'text/plain',
+      },
     });
 
     const summaryText = response.text?.trim();
@@ -1657,7 +1680,7 @@ async function generateSessionSummary(buffer, email, characterId, sessionId) {
       exchangeCount: Math.floor(buffer.length / 2),
       summary: summaryText,
       sessionId,
-      characterId
+      characterId,
     };
 
     writeSummary(email, characterId, summaryObj);
@@ -1696,13 +1719,22 @@ function getSessionBuffer(sessionId, email, characterId) {
   if (!sessionBuffers.has(sessionId)) {
     // Enforce max session cap — evict oldest session if at limit
     if (sessionBuffers.size >= MAX_SESSIONS) {
-      let oldest = null, oldestTime = Infinity;
+      let oldest = null,
+        oldestTime = Infinity;
       for (const [id, s] of sessionBuffers) {
-        if (s.lastAccess < oldestTime) { oldest = id; oldestTime = s.lastAccess; }
+        if (s.lastAccess < oldestTime) {
+          oldest = id;
+          oldestTime = s.lastAccess;
+        }
       }
       if (oldest) sessionBuffers.delete(oldest);
     }
-    sessionBuffers.set(sessionId, { contents: [], lastAccess: Date.now(), userEmail: email || null, characterId: characterId || null });
+    sessionBuffers.set(sessionId, {
+      contents: [],
+      lastAccess: Date.now(),
+      userEmail: email || null,
+      characterId: characterId || null,
+    });
   }
   const session = sessionBuffers.get(sessionId);
   session.lastAccess = Date.now();
@@ -1724,10 +1756,7 @@ function getSessionBuffer(sessionId, email, characterId) {
 function addToSessionBuffer(sessionId, userMessage, assistantReply) {
   if (!sessionId) return;
   const buffer = getSessionBuffer(sessionId);
-  buffer.push(
-    { role: 'user', parts: [{ text: userMessage }] },
-    { role: 'model', parts: [{ text: assistantReply }] }
-  );
+  buffer.push({ role: 'user', parts: [{ text: userMessage }] }, { role: 'model', parts: [{ text: assistantReply }] });
   // Sliding window: max 12 items (6 exchanges)
   while (buffer.length > 12) {
     buffer.shift(); // drop oldest user
@@ -1736,25 +1765,29 @@ function addToSessionBuffer(sessionId, userMessage, assistantReply) {
 }
 
 // Prune sessions older than 1 hour every 10 minutes
-setInterval(() => {
-  const cutoff = Date.now() - 60 * 60 * 1000;
-  for (const [id, session] of sessionBuffers) {
-    if (session.lastAccess < cutoff) {
-      // Generate summary before pruning (fire-and-forget)
-      if (session.contents.length >= 6 && session.userEmail && session.characterId) {
-        generateSessionSummary(session.contents, session.userEmail, session.characterId, id);
+setInterval(
+  () => {
+    const cutoff = Date.now() - 60 * 60 * 1000;
+    for (const [id, session] of sessionBuffers) {
+      if (session.lastAccess < cutoff) {
+        // Generate summary before pruning (fire-and-forget)
+        if (session.contents.length >= 6 && session.userEmail && session.characterId) {
+          generateSessionSummary(session.contents, session.userEmail, session.characterId, id);
+        }
+        sessionBuffers.delete(id);
       }
-      sessionBuffers.delete(id);
     }
-  }
-}, 10 * 60 * 1000);
+  },
+  10 * 60 * 1000,
+);
 
 // ---------------------------------------------------------------------------
 // Multi-User Prompt Constants
 // ---------------------------------------------------------------------------
 
 /** @type {string} Injected into system prompt after cross-user context to prevent leaking sensitive details. */
-const ETIQUETTE_GUARDRAIL = 'You may mention that you\'ve chatted with other friends, but never share health details, personal struggles, relationship issues, financial info, or embarrassing moments. Keep cross-user references light, positive, and general.';
+const ETIQUETTE_GUARDRAIL =
+  "You may mention that you've chatted with other friends, but never share health details, personal struggles, relationship issues, financial info, or embarrassing moments. Keep cross-user references light, positive, and general.";
 
 // ---------------------------------------------------------------------------
 // Identity Middleware — resolve user from Cloudflare Access header
@@ -1796,7 +1829,7 @@ app.get('/api/me', (req, res) => {
     displayName: profile.displayName || null,
     accentColor: profile.accentColor || null,
     joinedAt: profile.joinedAt || null,
-    needsOnboarding: profile.displayName === null || profile.displayName === undefined
+    needsOnboarding: profile.displayName === null || profile.displayName === undefined,
   });
 });
 
@@ -1837,13 +1870,14 @@ app.post('/api/chat', async (req, res) => {
         otherDisplayNames.push(profile.displayName);
       }
     }
-    const otherNamesLower = otherDisplayNames.map(n => n.toLowerCase());
+    const otherNamesLower = otherDisplayNames.map((n) => n.toLowerCase());
 
     let identityContext = '';
     if (userName) {
-      const otherNamesStr = otherDisplayNames.length > 0
-        ? ` You also chat with ${otherDisplayNames.join(' and ')}, but they are NOT here right now. Do not address ${userName} as ${otherDisplayNames.join(' or ')} — they are different people.`
-        : '';
+      const otherNamesStr =
+        otherDisplayNames.length > 0
+          ? ` You also chat with ${otherDisplayNames.join(' and ')}, but they are NOT here right now. Do not address ${userName} as ${otherDisplayNames.join(' or ')} — they are different people.`
+          : '';
       identityContext = `\n\n[CURRENT USER] You are currently talking to your friend ${userName}. Address them as ${userName}. Do not confuse them with anyone else.${otherNamesStr}`;
     }
 
@@ -1856,31 +1890,34 @@ app.post('/api/chat', async (req, res) => {
     const [userMemories, agentMemories, crossCharacterMemories] = await Promise.all([
       searchMemories(searchQuery, email),
       searchAgentMemories(searchQuery, characterId),
-      searchCrossCharacterMemories(searchQuery, characterId || DEFAULT_CHARACTER)
+      searchCrossCharacterMemories(searchQuery, characterId || DEFAULT_CHARACTER),
     ]);
 
-    const userMemoryContext = userMemories.length > 0
-      ? `\n\n[IDENTITY LOCK]\nYou are ${character.name}. The memories below from other characters are THEIR experiences, not yours.\n- Never say "I remember" about another character's memory\n- Never claim another character's opinions, preferences, or experiences as your own\n- Reference other characters' memories only in third person: "${character.name} mentioned..." or "They told me..."\n[/IDENTITY LOCK]\nThings you remember about ${userName || 'your friend'}:\n` +
-        userMemories.map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
-      : '';
+    const userMemoryContext =
+      userMemories.length > 0
+        ? `\n\n[IDENTITY LOCK]\nYou are ${character.name}. The memories below from other characters are THEIR experiences, not yours.\n- Never say "I remember" about another character's memory\n- Never claim another character's opinions, preferences, or experiences as your own\n- Reference other characters' memories only in third person: "${character.name} mentioned..." or "They told me..."\n[/IDENTITY LOCK]\nThings you remember about ${userName || 'your friend'}:\n` +
+          userMemories.map((m) => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
+        : '';
 
     // Filter agent memories: deprioritize memories about other users to avoid identity bleed
-    const filteredAgentMemories = agentMemories.filter(m => {
+    const filteredAgentMemories = agentMemories.filter((m) => {
       const text = (m.memory || m.text || m.content || '').toLowerCase();
       // Keep if it mentions the current user or doesn't mention any other user
-      return !otherNamesLower.some(name => text.includes(name));
+      return !otherNamesLower.some((name) => text.includes(name));
     });
 
-    const agentMemoryContext = filteredAgentMemories.length > 0
-      ? `\n\nYour own memories and experiences as ${character.name}:\n` +
-        filteredAgentMemories.map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
-      : '';
+    const agentMemoryContext =
+      filteredAgentMemories.length > 0
+        ? `\n\nYour own memories and experiences as ${character.name}:\n` +
+          filteredAgentMemories.map((m) => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n')
+        : '';
 
     // Cross-character memory mesh: what the other characters know
     let crossCharacterContext = '';
     const crossEntries = Object.entries(crossCharacterMemories);
     if (crossEntries.length > 0) {
-      crossCharacterContext = '\n\nThings your fellow characters have mentioned (use sparingly and naturally — don\'t force references):';
+      crossCharacterContext =
+        "\n\nThings your fellow characters have mentioned (use sparingly and naturally — don't force references):";
       for (const [charName, memories] of crossEntries) {
         crossCharacterContext += `\n${charName} has noted:`;
         for (const m of memories) {
@@ -1899,8 +1936,12 @@ app.post('/api/chat', async (req, res) => {
           try {
             const crossMemories = await searchMemories(message, otherEmail);
             if (crossMemories.length > 0) {
-              crossUserContext += `\n\nThings ${profile.displayName} has been chatting about recently:\n` +
-                crossMemories.slice(0, 5).map(m => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`).join('\n');
+              crossUserContext +=
+                `\n\nThings ${profile.displayName} has been chatting about recently:\n` +
+                crossMemories
+                  .slice(0, 5)
+                  .map((m) => `- ${m.memory || m.text || m.content || JSON.stringify(m)}`)
+                  .join('\n');
             }
           } catch (err) {
             console.error(`Cross-user memory search error for ${getEmailSlug(otherEmail)}:`, err.message);
@@ -1929,8 +1970,21 @@ app.post('/api/chat', async (req, res) => {
     // Read conversation summaries (rolling temporal context)
     const summaries = readSummaries(email, characterId || 'melody');
     const summaryContext = buildSummaryContext(summaries);
-    const etiquetteGuardrail = (crossUserInstruction || crossUserContext) ? '\n\n' + ETIQUETTE_GUARDRAIL : '';
-    const systemInstruction = character.getPrompt() + (isStraightTalk ? '' : CHARACTER_CONTEXT) + identityContext + crossUserInstruction + coreMemoryContext + summaryContext + relationshipContext + userMemoryContext + agentMemoryContext + crossCharacterContext + crossUserContext + etiquetteGuardrail + styleInstruction;
+    const etiquetteGuardrail = crossUserInstruction || crossUserContext ? '\n\n' + ETIQUETTE_GUARDRAIL : '';
+    const systemInstruction =
+      character.getPrompt() +
+      (isStraightTalk ? '' : CHARACTER_CONTEXT) +
+      identityContext +
+      crossUserInstruction +
+      coreMemoryContext +
+      summaryContext +
+      relationshipContext +
+      userMemoryContext +
+      agentMemoryContext +
+      crossCharacterContext +
+      crossUserContext +
+      etiquetteGuardrail +
+      styleInstruction;
 
     // Build message contents (prepend conversation buffer for multi-turn context)
     const historyBuffer = getSessionBuffer(sessionId, email, characterId);
@@ -1940,8 +1994,8 @@ app.post('/api/chat', async (req, res) => {
         role: 'user',
         parts: [
           { inlineData: { mimeType: imageMime || 'image/jpeg', data: imageBase64 } },
-          { text: message || 'What do you see in this image?' }
-        ]
+          { text: message || 'What do you see in this image?' },
+        ],
       });
     } else {
       contents.push({ role: 'user', parts: [{ text: message }] });
@@ -1950,7 +2004,7 @@ app.post('/api/chat', async (req, res) => {
     const response = await ai.models.generateContent({
       model: MODEL_ID,
       contents,
-      config: { ...MODEL_CONFIG, systemInstruction }
+      config: { ...MODEL_CONFIG, systemInstruction },
     });
 
     let reply = response.text;
@@ -1961,8 +2015,8 @@ app.post('/api/chat', async (req, res) => {
     let sources = [];
     if (grounding?.groundingChunks) {
       sources = grounding.groundingChunks
-        .filter(c => c.web)
-        .map(c => ({ title: c.web.title || '', url: c.web.uri || '' }));
+        .filter((c) => c.web)
+        .map((c) => ({ title: c.web.title || '', url: c.web.uri || '' }));
     }
 
     // ─── Wiki search interception (two-step pipeline) ───
@@ -1988,12 +2042,15 @@ app.post('/api/chat', async (req, res) => {
                 const followupContents = [
                   { role: 'user', parts: [{ text: message }] },
                   { role: 'model', parts: [{ text: reply }] },
-                  { role: 'user', parts: [{ text: `Here is wiki information to help you answer:\n${wikiContent.text}` }] }
+                  {
+                    role: 'user',
+                    parts: [{ text: `Here is wiki information to help you answer:\n${wikiContent.text}` }],
+                  },
                 ];
                 const followupResponse = await ai.models.generateContent({
                   model: MODEL_ID,
                   contents: followupContents,
-                  config: { ...MODEL_CONFIG, systemInstruction: systemInstruction + wikiContext }
+                  config: { ...MODEL_CONFIG, systemInstruction: systemInstruction + wikiContext },
                 });
                 reply = followupResponse.text;
                 // Defensive strip in case second call emits wiki tags
@@ -2037,14 +2094,22 @@ app.post('/api/chat', async (req, res) => {
         filename,
         caption: message || '',
         reply: reply.slice(0, 200),
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
       });
       writeJSON(IMAGES_META, meta);
     }
 
     // Log if search tags were generated (debug)
-    if (reply.includes('[IMAGE_SEARCH:') || reply.includes('[VIDEO_SEARCH:') || reply.includes('[GALLERY_SEARCH:') || reply.includes('[WIKI_SEARCH:')) {
-      console.log('Search tags found in reply:', reply.match(/\[(IMAGE_SEARCH|VIDEO_SEARCH|GALLERY_SEARCH|WIKI_SEARCH):\s*.+?\]/g));
+    if (
+      reply.includes('[IMAGE_SEARCH:') ||
+      reply.includes('[VIDEO_SEARCH:') ||
+      reply.includes('[GALLERY_SEARCH:') ||
+      reply.includes('[WIKI_SEARCH:')
+    ) {
+      console.log(
+        'Search tags found in reply:',
+        reply.match(/\[(IMAGE_SEARCH|VIDEO_SEARCH|GALLERY_SEARCH|WIKI_SEARCH):\s*.+?\]/g),
+      );
     }
 
     // Save exchange to conversation buffer
@@ -2052,17 +2117,24 @@ app.post('/api/chat', async (req, res) => {
 
     // Save to mem0 asynchronously (per-user track, with metadata)
     // Skip agent-track save for Straight Talk to avoid polluting character's persona with out-of-character content
-    saveToMemory(message || '[shared an image]', reply, email, {
-      source: 'chat',
-      sessionId,
-      hasImage: !!imageBase64,
-      replyStyle,
-      skipAgentTrack: replyStyle === 'straightTalk'
-    }, character);
+    saveToMemory(
+      message || '[shared an image]',
+      reply,
+      email,
+      {
+        source: 'chat',
+        sessionId,
+        hasImage: !!imageBase64,
+        replyStyle,
+        skipAgentTrack: replyStyle === 'straightTalk',
+      },
+      character,
+    );
 
     // Extract core memory facts (fire-and-forget, non-blocking)
-    extractCoreMemory(message || '[shared an image]', reply, email, characterId || 'melody')
-      .catch(err => console.error('Core memory extraction error:', err.message));
+    extractCoreMemory(message || '[shared an image]', reply, email, characterId || 'melody').catch((err) =>
+      console.error('Core memory extraction error:', err.message),
+    );
 
     res.json({ reply, sources, wikiSource });
   } catch (err) {
@@ -2093,12 +2165,14 @@ app.get('/api/images', (req, res) => {
  */
 app.delete('/api/images/:id', (req, res) => {
   const meta = readJSON(IMAGES_META);
-  const idx = meta.findIndex(m => m.id === req.params.id);
+  const idx = meta.findIndex((m) => m.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Not found' });
 
   const item = meta[idx];
   const filepath = join(IMAGES_DIR, item.filename);
-  try { unlinkSync(filepath); } catch {}
+  try {
+    unlinkSync(filepath);
+  } catch {}
 
   meta.splice(idx, 1);
   writeJSON(IMAGES_META, meta);
@@ -2122,13 +2196,18 @@ app.get('/api/image-search', async (req, res) => {
   try {
     const url = `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(q)}&count=6&safesearch=strict`;
     const r = await fetch(url, {
-      headers: { 'Accept': 'application/json', 'X-Subscription-Token': API_KEY }
+      headers: { Accept: 'application/json', 'X-Subscription-Token': API_KEY },
     });
     const data = await r.json();
-    res.json((data.results || []).map(i => ({
-      title: i.title, imageUrl: i.properties?.url || i.url,
-      thumbnailUrl: i.thumbnail?.src, width: i.properties?.width, height: i.properties?.height
-    })));
+    res.json(
+      (data.results || []).map((i) => ({
+        title: i.title,
+        imageUrl: i.properties?.url || i.url,
+        thumbnailUrl: i.thumbnail?.src,
+        width: i.properties?.width,
+        height: i.properties?.height,
+      })),
+    );
   } catch (err) {
     console.error('Image search error:', err.message);
     res.status(500).json({ error: 'Image search failed' });
@@ -2152,13 +2231,17 @@ app.get('/api/video-search', async (req, res) => {
   try {
     const url = `https://api.search.brave.com/res/v1/videos/search?q=${encodeURIComponent(q)}&count=4&safesearch=strict`;
     const r = await fetch(url, {
-      headers: { 'Accept': 'application/json', 'X-Subscription-Token': API_KEY }
+      headers: { Accept: 'application/json', 'X-Subscription-Token': API_KEY },
     });
     const data = await r.json();
-    res.json((data.results || []).map(v => ({
-      title: v.title, url: v.url,
-      thumbnail: v.thumbnail?.src, description: v.description
-    })));
+    res.json(
+      (data.results || []).map((v) => ({
+        title: v.title,
+        url: v.url,
+        thumbnail: v.thumbnail?.src,
+        description: v.description,
+      })),
+    );
   } catch (err) {
     console.error('Video search error:', err.message);
     res.status(500).json({ error: 'Video search failed' });
@@ -2176,9 +2259,8 @@ app.get('/api/gallery-search', (req, res) => {
   const q = (req.query.q || '').toLowerCase();
   if (!q) return res.json([]);
   const meta = readJSON(IMAGES_META);
-  const matches = meta.filter(m =>
-    (m.caption || '').toLowerCase().includes(q) ||
-    (m.reply || '').toLowerCase().includes(q)
+  const matches = meta.filter(
+    (m) => (m.caption || '').toLowerCase().includes(q) || (m.reply || '').toLowerCase().includes(q),
   );
   res.json(matches);
 });
@@ -2197,7 +2279,8 @@ app.get('/api/wiki-search', async (req, res) => {
   const wikiId = req.query.wiki;
   const q = req.query.q;
   if (!wikiId || !q) return res.status(400).json({ error: 'wiki and q params required' });
-  if (!WIKIS[wikiId]) return res.status(400).json({ error: `Unknown wiki: ${wikiId}. Available: ${Object.keys(WIKIS).join(', ')}` });
+  if (!WIKIS[wikiId])
+    return res.status(400).json({ error: `Unknown wiki: ${wikiId}. Available: ${Object.keys(WIKIS).join(', ')}` });
 
   try {
     const results = await searchWiki(wikiId, q);
@@ -2231,22 +2314,22 @@ app.get('/api/memories', async (req, res) => {
     // Fetch both user memories and the character's own memories
     const [userRes, agentRes] = await Promise.all([
       fetch(`${MEM0_BASE}/v1/memories/?user_id=${memUserId}`, {
-        headers: mem0Headers()
+        headers: mem0Headers(),
       }),
       fetch(`${MEM0_BASE}/v1/memories/?agent_id=${agentId}`, {
-        headers: mem0Headers()
-      })
+        headers: mem0Headers(),
+      }),
     ]);
 
     const userData = userRes.ok ? await userRes.json() : { results: [] };
     const agentData = agentRes.ok ? await agentRes.json() : { results: [] };
 
-    const userMemories = (userData.results || userData || []).map(m => ({ ...m, track: 'friend' }));
-    const agentMemories = (agentData.results || agentData || []).map(m => ({ ...m, track: characterId || 'melody' }));
+    const userMemories = (userData.results || userData || []).map((m) => ({ ...m, track: 'friend' }));
+    const agentMemories = (agentData.results || agentData || []).map((m) => ({ ...m, track: characterId || 'melody' }));
 
     // Combine and sort by date
     const all = [...userMemories, ...agentMemories].sort((a, b) =>
-      (b.updated_at || b.created_at || '').localeCompare(a.updated_at || a.created_at || '')
+      (b.updated_at || b.created_at || '').localeCompare(a.updated_at || a.created_at || ''),
     );
 
     res.json(all);
@@ -2268,7 +2351,7 @@ app.delete('/api/memories/:id', async (req, res) => {
   try {
     const r = await fetch(`${MEM0_BASE}/v1/memories/${req.params.id}/`, {
       method: 'DELETE',
-      headers: mem0Headers()
+      headers: mem0Headers(),
     });
     if (!r.ok) return res.status(r.status).json({ error: 'mem0 error' });
     res.json({ ok: true });
@@ -2310,7 +2393,9 @@ app.put('/api/core-memory', (req, res) => {
     const email = req.userEmail;
     const { characterId = 'melody', category, entries } = req.body;
     if (!category || !CORE_MEMORY_CATEGORIES[category]) {
-      return res.status(400).json({ error: `Invalid category. Must be one of: ${Object.keys(CORE_MEMORY_CATEGORIES).join(', ')}` });
+      return res
+        .status(400)
+        .json({ error: `Invalid category. Must be one of: ${Object.keys(CORE_MEMORY_CATEGORIES).join(', ')}` });
     }
     if (!Array.isArray(entries)) {
       return res.status(400).json({ error: 'entries must be an array of strings' });
@@ -2340,7 +2425,9 @@ app.delete('/api/core-memory/:category/:index', (req, res) => {
   try {
     const { category } = req.params;
     if (!CORE_MEMORY_CATEGORIES[category]) {
-      return res.status(400).json({ error: `Invalid category. Must be one of: ${Object.keys(CORE_MEMORY_CATEGORIES).join(', ')}` });
+      return res
+        .status(400)
+        .json({ error: `Invalid category. Must be one of: ${Object.keys(CORE_MEMORY_CATEGORIES).join(', ')}` });
     }
     const index = parseInt(req.params.index, 10);
     const email = req.userEmail;
@@ -2430,8 +2517,8 @@ app.get('/api/relationship', (req, res) => {
   const data = readJSON(RELATIONSHIP_FILE) || {};
   const email = req.userEmail;
   // Read from keyed structure if available — key by email slug
-  const userKey = (email && data._version) ? getEmailSlug(email) : (data._version ? '_legacy' : null);
-  const rel = userKey ? (data[userKey] || {}) : data;
+  const userKey = email && data._version ? getEmailSlug(email) : data._version ? '_legacy' : null;
+  const rel = userKey ? data[userKey] || {} : data;
   const today = new Date();
   const first = rel.firstChat ? new Date(rel.firstChat) : today;
   const daysTogether = Math.max(0, Math.round((today - first) / (1000 * 60 * 60 * 24)));
@@ -2440,7 +2527,7 @@ app.get('/api/relationship', (req, res) => {
     totalChats: rel.totalChats || 0,
     streakDays: rel.streakDays || 0,
     firstChat: rel.firstChat,
-    milestones: rel.milestones || []
+    milestones: rel.milestones || [],
   });
 });
 
@@ -2457,8 +2544,8 @@ app.get('/api/welcome-status', async (req, res) => {
     const email = req.userEmail;
     const data = readJSON(RELATIONSHIP_FILE) || {};
     // Read from keyed structure if available — key by email slug
-    const userKey = (email && data._version) ? getEmailSlug(email) : (data._version ? '_legacy' : null);
-    const rel = userKey ? (data[userKey] || {}) : data;
+    const userKey = email && data._version ? getEmailSlug(email) : data._version ? '_legacy' : null;
+    const rel = userKey ? data[userKey] || {} : data;
 
     if (!rel.firstChat) {
       return res.json({ status: 'new' });
@@ -2466,17 +2553,18 @@ app.get('/api/welcome-status', async (req, res) => {
 
     // Returning user — try to find their name from profile or mem0
     let friendName = req.userProfile?.displayName || null;
-    if (!friendName) try {
-      const memories = await searchMemories('friend name', email);
-      for (const m of memories) {
-        const text = m.memory || m.text || m.content || '';
-        const nameMatch = text.match(/(?:friend'?s?\s+name\s+is|name\s+is|called)\s+(\w+)/i);
-        if (nameMatch) {
-          friendName = nameMatch[1];
-          break;
+    if (!friendName)
+      try {
+        const memories = await searchMemories('friend name', email);
+        for (const m of memories) {
+          const text = m.memory || m.text || m.content || '';
+          const nameMatch = text.match(/(?:friend'?s?\s+name\s+is|name\s+is|called)\s+(\w+)/i);
+          if (nameMatch) {
+            friendName = nameMatch[1];
+            break;
+          }
         }
-      }
-    } catch {}
+      } catch {}
 
     const today = new Date();
     const lastChat = rel.lastChatDate ? new Date(rel.lastChatDate) : today;
@@ -2487,7 +2575,7 @@ app.get('/api/welcome-status', async (req, res) => {
       friendName,
       daysSince,
       totalChats: rel.totalChats || 0,
-      streakDays: rel.streakDays || 0
+      streakDays: rel.streakDays || 0,
     });
   } catch (err) {
     console.error('Welcome status error:', err);
@@ -2539,13 +2627,13 @@ app.post('/api/welcome', async (req, res) => {
       await fetch(`${MEM0_BASE}/v1/memories/`, {
         method: 'POST',
         headers: {
-          ...mem0Headers()
+          ...mem0Headers(),
         },
         body: JSON.stringify({
           messages: [{ role: 'user', content: memoryText }],
           user_id: getUserMemId(email),
-          infer: true
-        })
+          infer: true,
+        }),
       });
     } catch (memErr) {
       console.error('Welcome mem0 save failed (non-fatal):', memErr.message);
@@ -2561,8 +2649,8 @@ app.post('/api/welcome', async (req, res) => {
 
     // Initialize relationship on first welcome interaction (per-user)
     const data = readJSON(RELATIONSHIP_FILE) || {};
-    const userKey = (email && data._version) ? getEmailSlug(email) : (data._version ? '_legacy' : null);
-    const rel = userKey ? (data[userKey] || {}) : data;
+    const userKey = email && data._version ? getEmailSlug(email) : data._version ? '_legacy' : null;
+    const rel = userKey ? data[userKey] || {} : data;
     if (!rel.firstChat) {
       rel.firstChat = new Date().toISOString().slice(0, 10);
       rel.totalChats = 0;
@@ -2602,12 +2690,27 @@ app.get('/api/capabilities', (req, res) => {
     { id: 'cat_pic', name: 'Cat Pictures', description: 'Random cat photos', tag: '[CAT_PIC]' },
     { id: 'cat_fact', name: 'Cat Facts', description: 'Fun facts about cats', tag: '[CAT_FACT]' },
     { id: 'fox_pic', name: 'Fox Pictures', description: 'Random fox photos', tag: '[FOX_PIC]' },
-    { id: 'cocktail', name: 'Cocktail Recipes', description: 'Search or random cocktail with ingredients', tag: '[COCKTAIL: name]' },
-    { id: 'recipe', name: 'Meal Recipes', description: 'Search or random meal with ingredients', tag: '[RECIPE: name]' },
+    {
+      id: 'cocktail',
+      name: 'Cocktail Recipes',
+      description: 'Search or random cocktail with ingredients',
+      tag: '[COCKTAIL: name]',
+    },
+    {
+      id: 'recipe',
+      name: 'Meal Recipes',
+      description: 'Search or random meal with ingredients',
+      tag: '[RECIPE: name]',
+    },
     { id: 'coffee_pic', name: 'Coffee Pictures', description: 'Random coffee photos', tag: '[COFFEE_PIC]' },
     { id: 'advice', name: 'Advice', description: 'Random life advice', tag: '[ADVICE]' },
     { id: 'weather', name: 'Weather', description: 'Current weather for a location', tag: '[WEATHER: location]' },
-    { id: 'music_search', name: 'Music Search', description: 'Search songs with 30-second previews', tag: '[MUSIC_SEARCH: query]' },
+    {
+      id: 'music_search',
+      name: 'Music Search',
+      description: 'Search songs with 30-second previews',
+      tag: '[MUSIC_SEARCH: query]',
+    },
     { id: 'dad_joke', name: 'Dad Jokes', description: 'Random dad jokes', tag: '[DAD_JOKE]' },
     { id: 'trivia', name: 'Trivia', description: 'Random trivia questions', tag: '[TRIVIA: category]' },
     { id: 'insult', name: 'Evil Insults', description: 'Random snarky insults', tag: '[INSULT]' },
@@ -2616,13 +2719,48 @@ app.get('/api/capabilities', (req, res) => {
     { id: 'quote', name: 'Quotes', description: 'Inspirational quotes', tag: '[QUOTE]' },
     { id: 'gif', name: 'GIF Search', description: 'Search for GIFs via Giphy', tag: '[GIF: search query]' },
     { id: 'radar', name: 'Weather Radar', description: 'Live animated radar loop for local area', tag: '[RADAR]' },
-    { id: 'storm_stream', name: 'Storm Stream', description: 'Live local severe weather coverage', tag: '[STORM_STREAM]' },
-    { id: 'core_memory', name: 'Core Memory', description: 'Structured always-remembered facts about each friend', tag: null },
-    { id: 'conversation_summaries', name: 'Conversation Summaries', description: 'Rolling summaries of past chat sessions for continuity', tag: null },
-    { id: 'wyr', name: 'Would You Rather', description: 'Fun choice-based game with two options', tag: '[WYR: option A | option B]' },
-    { id: 'twenty_questions', name: '20 Questions', description: 'Guessing game with yes/no questions', tag: '[20Q_START: category]' },
-    { id: 'charades', name: 'Emoji Charades', description: 'Guess the answer from emoji clues', tag: '[CHARADES: emojis | answer | hint]' },
-    { id: 'trivia_showdown', name: 'Trivia Showdown', description: 'Multi-round scored trivia game', tag: '[TRIVIA_SHOWDOWN: rounds | category]' }
+    {
+      id: 'storm_stream',
+      name: 'Storm Stream',
+      description: 'Live local severe weather coverage',
+      tag: '[STORM_STREAM]',
+    },
+    {
+      id: 'core_memory',
+      name: 'Core Memory',
+      description: 'Structured always-remembered facts about each friend',
+      tag: null,
+    },
+    {
+      id: 'conversation_summaries',
+      name: 'Conversation Summaries',
+      description: 'Rolling summaries of past chat sessions for continuity',
+      tag: null,
+    },
+    {
+      id: 'wyr',
+      name: 'Would You Rather',
+      description: 'Fun choice-based game with two options',
+      tag: '[WYR: option A | option B]',
+    },
+    {
+      id: 'twenty_questions',
+      name: '20 Questions',
+      description: 'Guessing game with yes/no questions',
+      tag: '[20Q_START: category]',
+    },
+    {
+      id: 'charades',
+      name: 'Emoji Charades',
+      description: 'Guess the answer from emoji clues',
+      tag: '[CHARADES: emojis | answer | hint]',
+    },
+    {
+      id: 'trivia_showdown',
+      name: 'Trivia Showdown',
+      description: 'Multi-round scored trivia game',
+      tag: '[TRIVIA_SHOWDOWN: rounds | category]',
+    },
   ]);
 });
 
@@ -2753,7 +2891,7 @@ app.get('/api/cocktail', async (req, res) => {
       glass: drink.strGlass,
       instructions: drink.strInstructions,
       imageUrl: drink.strDrinkThumb,
-      ingredients
+      ingredients,
     };
     if (drink.strSource) cocktailResponse.sourceUrl = drink.strSource;
     res.json(cocktailResponse);
@@ -2797,7 +2935,7 @@ app.get('/api/recipe', async (req, res) => {
       instructions: meal.strInstructions,
       imageUrl: meal.strMealThumb,
       youtubeUrl: meal.strYoutube || null,
-      ingredients
+      ingredients,
     };
     if (meal.strSource) recipeResponse.sourceUrl = meal.strSource;
     res.json(recipeResponse);
@@ -2877,7 +3015,9 @@ app.get('/api/weather', async (req, res) => {
     if (country_code === 'US') {
       try {
         const nwsHeaders = { 'User-Agent': 'MyMelo/1.0' };
-        const pointsRes = await fetch(`https://api.weather.gov/points/${latitude},${longitude}`, { headers: nwsHeaders });
+        const pointsRes = await fetch(`https://api.weather.gov/points/${latitude},${longitude}`, {
+          headers: nwsHeaders,
+        });
         if (pointsRes.ok) {
           const pointsData = await pointsRes.json();
           const forecastUrl = pointsData.properties?.forecast;
@@ -2895,7 +3035,7 @@ app.get('/api/weather', async (req, res) => {
                   wind: `${period.windSpeed} ${period.windDirection}`,
                   humidity: period.relativeHumidity?.value || null,
                   icon: period.icon || null,
-                  provider: 'NWS'
+                  provider: 'NWS',
                 });
               }
             }
@@ -2914,13 +3054,27 @@ app.get('/api/weather', async (req, res) => {
 
     // Map WMO weather codes to descriptions
     const wmoDescriptions = {
-      0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
-      45: 'Fog', 48: 'Depositing rime fog',
-      51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle',
-      61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
-      71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow',
-      80: 'Slight showers', 81: 'Moderate showers', 82: 'Violent showers',
-      95: 'Thunderstorm', 96: 'Thunderstorm with slight hail', 99: 'Thunderstorm with heavy hail'
+      0: 'Clear sky',
+      1: 'Mainly clear',
+      2: 'Partly cloudy',
+      3: 'Overcast',
+      45: 'Fog',
+      48: 'Depositing rime fog',
+      51: 'Light drizzle',
+      53: 'Moderate drizzle',
+      55: 'Dense drizzle',
+      61: 'Slight rain',
+      63: 'Moderate rain',
+      65: 'Heavy rain',
+      71: 'Slight snow',
+      73: 'Moderate snow',
+      75: 'Heavy snow',
+      80: 'Slight showers',
+      81: 'Moderate showers',
+      82: 'Violent showers',
+      95: 'Thunderstorm',
+      96: 'Thunderstorm with slight hail',
+      99: 'Thunderstorm with heavy hail',
     };
 
     const meteoResponse = {
@@ -2931,7 +3085,7 @@ app.get('/api/weather', async (req, res) => {
       wind: `${current.wind_speed_10m} mph`,
       humidity: current.relative_humidity_2m,
       icon: null,
-      provider: 'Open-Meteo'
+      provider: 'Open-Meteo',
     };
     if (current.apparent_temperature !== undefined) meteoResponse.feelsLike = current.apparent_temperature;
     res.json(meteoResponse);
@@ -2960,15 +3114,17 @@ app.get('/api/music-search', async (req, res) => {
     const url = `https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=3`;
     const r = await fetch(url);
     const data = await r.json();
-    res.json((data.data || []).map(t => ({
-      title: t.title,
-      artist: t.artist?.name,
-      album: t.album?.title,
-      albumArt: t.album?.cover_medium,
-      previewUrl: t.preview,
-      deezerUrl: t.link,
-      duration: t.duration
-    })));
+    res.json(
+      (data.data || []).map((t) => ({
+        title: t.title,
+        artist: t.artist?.name,
+        album: t.album?.title,
+        albumArt: t.album?.cover_medium,
+        previewUrl: t.preview,
+        deezerUrl: t.link,
+        duration: t.duration,
+      })),
+    );
   } catch (err) {
     console.error('Music search error:', err.message);
     res.status(500).json({ error: 'Music search service failed' });
@@ -2985,7 +3141,7 @@ app.get('/api/music-search', async (req, res) => {
 app.get('/api/dad-joke', async (req, res) => {
   try {
     const r = await fetch('https://icanhazdadjoke.com/', {
-      headers: { 'Accept': 'application/json' }
+      headers: { Accept: 'application/json' },
     });
     const data = await r.json();
     res.json({ joke: data.joke });
@@ -3013,19 +3169,20 @@ app.get('/api/trivia', async (req, res) => {
     if (!q) return res.status(502).json({ error: 'No trivia returned' });
 
     // HTML-decode entities
-    const decode = (s) => s
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#039;/g, "'");
+    const decode = (s) =>
+      s
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#039;/g, "'");
 
     res.json({
       question: decode(q.question),
       correctAnswer: decode(q.correct_answer),
       incorrectAnswers: q.incorrect_answers.map(decode),
       category: q.category,
-      difficulty: q.difficulty
+      difficulty: q.difficulty,
     });
   } catch (err) {
     console.error('Trivia error:', err.message);
@@ -3077,7 +3234,7 @@ app.get('/api/space-pic', async (req, res) => {
       explanation: data.explanation,
       imageUrl: data.hdurl || data.url,
       date: data.date,
-      mediaType: data.media_type
+      mediaType: data.media_type,
     };
 
     _apodCache = { date: today, data: result };
@@ -3147,11 +3304,11 @@ app.get('/api/gif', async (req, res) => {
     const url = `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(q)}&limit=3&rating=pg-13&lang=en`;
     const r = await fetch(url);
     const data = await r.json();
-    const results = (data.data || []).map(g => ({
+    const results = (data.data || []).map((g) => ({
       url: g.images?.fixed_height_small?.url || g.images?.fixed_height?.url || g.images?.original?.url,
       title: g.title,
       width: parseInt(g.images?.fixed_height_small?.width || g.images?.fixed_height?.width || 200),
-      height: parseInt(g.images?.fixed_height_small?.height || g.images?.fixed_height?.height || 200)
+      height: parseInt(g.images?.fixed_height_small?.height || g.images?.fixed_height?.height || 200),
     }));
     res.json({ results });
   } catch (err) {
@@ -3176,25 +3333,26 @@ app.get('/api/gif', async (req, res) => {
 app.get('/api/weather-alerts', async (req, res) => {
   const lat = req.query.lat || process.env.DEFAULT_LAT;
   const lon = req.query.lon || process.env.DEFAULT_LON;
-  if (!lat || !lon) return res.status(400).json({ error: 'lat and lon required (set DEFAULT_LAT/DEFAULT_LON in .env as fallback)' });
+  if (!lat || !lon)
+    return res.status(400).json({ error: 'lat and lon required (set DEFAULT_LAT/DEFAULT_LON in .env as fallback)' });
 
   try {
     const url = `https://api.weather.gov/alerts/active?point=${lat},${lon}`;
     const r = await fetch(url, {
-      headers: { 'User-Agent': 'MyMelo/1.0' }
+      headers: { 'User-Agent': 'MyMelo/1.0' },
     });
     if (!r.ok) return res.json({ alerts: [] });
     const data = await r.json();
 
     const severityOrder = { Extreme: 0, Severe: 1, Moderate: 2, Minor: 3, Unknown: 4 };
     const alerts = (data.features || [])
-      .map(f => ({
+      .map((f) => ({
         event: f.properties.event,
         severity: f.properties.severity,
         headline: f.properties.headline,
         description: (f.properties.description || '').slice(0, 500),
         instruction: (f.properties.instruction || '').slice(0, 300),
-        expires: f.properties.expires
+        expires: f.properties.expires,
       }))
       .sort((a, b) => (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4));
 
@@ -3228,9 +3386,9 @@ app.get('/api/radar', async (req, res) => {
 
     const past = rvData?.radar?.past || [];
     const nowcast = rvData?.radar?.nowcast || [];
-    const frames = [...past, ...nowcast].map(f => ({
+    const frames = [...past, ...nowcast].map((f) => ({
       time: f.time,
-      path: f.path
+      path: f.path,
     }));
 
     res.json({
@@ -3240,8 +3398,8 @@ app.get('/api/radar', async (req, res) => {
       lon: parseFloat(lon),
       rainviewer: {
         host: rvData?.host || 'https://tilecache.rainviewer.com',
-        frames
-      }
+        frames,
+      },
     });
   } catch (err) {
     // Fallback to just the NWS GIF if RainViewer fails
@@ -3250,7 +3408,7 @@ app.get('/api/radar', async (req, res) => {
       station,
       lat: parseFloat(lat),
       lon: parseFloat(lon),
-      rainviewer: null
+      rainviewer: null,
     });
   }
 });
@@ -3274,7 +3432,7 @@ app.get('/api/storm-stream', async (req, res) => {
     const r = await fetch(liveUrl, {
       headers: { 'User-Agent': 'MyMelo/1.0' },
       redirect: 'follow',
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(5000),
     });
     if (r.ok) {
       const html = await r.text();
@@ -3289,7 +3447,7 @@ app.get('/api/storm-stream', async (req, res) => {
     channel: 'News On 6 Weather',
     channelUrl,
     liveUrl,
-    isLive
+    isLive,
   });
 });
 
@@ -3305,7 +3463,7 @@ app.get('/api/nws-discussion', async (req, res) => {
   const office = process.env.NWS_OFFICE || 'TSA';
   try {
     const r = await fetch(`https://api.weather.gov/products/types/AFD/locations/${office}`, {
-      headers: { 'User-Agent': 'MyMelo/1.0', Accept: 'application/geo+json' }
+      headers: { 'User-Agent': 'MyMelo/1.0', Accept: 'application/geo+json' },
     });
     if (!r.ok) return res.json({ title: '', text: 'No discussion available', updated: null });
     const data = await r.json();
@@ -3315,7 +3473,7 @@ app.get('/api/nws-discussion', async (req, res) => {
 
     // Fetch the full product text
     const prodRes = await fetch(latest['@id'], {
-      headers: { 'User-Agent': 'MyMelo/1.0', Accept: 'application/geo+json' }
+      headers: { 'User-Agent': 'MyMelo/1.0', Accept: 'application/geo+json' },
     });
     if (!prodRes.ok) return res.json({ title: '', text: 'No discussion available', updated: null });
     const prod = await prodRes.json();
@@ -3330,7 +3488,7 @@ app.get('/api/nws-discussion', async (req, res) => {
       title: `NWS ${office} Forecast Discussion`,
       text: synopsis,
       updated: prod.issuanceTime || null,
-      office
+      office,
     });
   } catch (err) {
     console.error('NWS discussion error:', err.message);
@@ -3367,7 +3525,7 @@ app.post('/api/youtube-favorites', (req, res) => {
   if (!data[userKey]) data[userKey] = [];
 
   // Prevent duplicates
-  if (data[userKey].some(f => f.videoId === videoId)) {
+  if (data[userKey].some((f) => f.videoId === videoId)) {
     return res.json({ message: 'already saved', favorites: data[userKey] });
   }
 
@@ -3377,7 +3535,7 @@ app.post('/api/youtube-favorites', (req, res) => {
     url,
     title: title || 'Untitled',
     thumbnail: thumbnail || '',
-    savedAt: new Date().toISOString()
+    savedAt: new Date().toISOString(),
   };
   data[userKey].push(favorite);
   writeJSON(YT_FAVORITES_FILE, data);
@@ -3393,7 +3551,7 @@ app.delete('/api/youtube-favorites/:id', (req, res) => {
   const data = readJSON(YT_FAVORITES_FILE) || {};
   if (!data[userKey]) return res.json({ success: true });
 
-  data[userKey] = data[userKey].filter(f => f.id !== req.params.id);
+  data[userKey] = data[userKey].filter((f) => f.id !== req.params.id);
   writeJSON(YT_FAVORITES_FILE, data);
   res.json({ success: true });
 });

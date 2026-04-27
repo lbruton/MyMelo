@@ -18,7 +18,7 @@ Defined in `server.js` at line 72:
 const KNOWN_USERS = {
   amelia: { name: 'Amelia', mem0Id: 'melody-friend-amelia' },
   lonnie: { name: 'Lonnie', mem0Id: 'melody-friend-lonnie' },
-  guest:  { name: 'Guest',  mem0Id: 'melody-friend-guest' }
+  guest: { name: 'Guest', mem0Id: 'melody-friend-guest' },
 };
 ```
 
@@ -28,11 +28,11 @@ Defined in `public/app.js` at line 48 (display names only):
 const USER_NAMES = { amelia: 'Amelia', lonnie: 'Lonnie', guest: 'Guest' };
 ```
 
-| User Key | Display Name | mem0 User ID | Notes |
-|----------|--------------|--------------|-------|
-| `amelia` | Amelia | `melody-friend-amelia` | Full memory persistence |
-| `lonnie` | Lonnie | `melody-friend-lonnie` | Full memory persistence |
-| `guest` | Guest | `melody-friend-guest` | No user-track mem0 saves |
+| User Key | Display Name | mem0 User ID           | Notes                    |
+| -------- | ------------ | ---------------------- | ------------------------ |
+| `amelia` | Amelia       | `melody-friend-amelia` | Full memory persistence  |
+| `lonnie` | Lonnie       | `melody-friend-lonnie` | Full memory persistence  |
+| `guest`  | Guest        | `melody-friend-guest`  | No user-track mem0 saves |
 
 ## User Picker Overlay
 
@@ -111,15 +111,15 @@ The user key resolves through `updateRelationship(userId)` and `getRelationshipC
 
 ## Guest User Behavior
 
-| Feature | Guest Behavior |
-|---------|---------------|
-| Chat | Works normally — sends messages and receives replies |
-| mem0 user track | **Skipped** — `saveToMemory()` does not save to user track when `userId === 'guest'` |
-| mem0 agent track | **Saved** — Melody's personality still evolves from guest conversations |
-| Welcome flow | Runs normally but mem0 saves are skipped for each step |
-| Relationship stats | Tracked in `relationship.json` under the `guest` key |
-| Cross-user memory | **Excluded** — guest conversations are never shared with other users |
-| Identity context | System prompt includes: "You are talking to a guest friend. Be welcoming but don't assume you know them well." |
+| Feature            | Guest Behavior                                                                                                 |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Chat               | Works normally — sends messages and receives replies                                                           |
+| mem0 user track    | **Skipped** — `saveToMemory()` does not save to user track when `userId === 'guest'`                           |
+| mem0 agent track   | **Saved** — Melody's personality still evolves from guest conversations                                        |
+| Welcome flow       | Runs normally but mem0 saves are skipped for each step                                                         |
+| Relationship stats | Tracked in `relationship.json` under the `guest` key                                                           |
+| Cross-user memory  | **Excluded** — guest conversations are never shared with other users                                           |
+| Identity context   | System prompt includes: "You are talking to a guest friend. Be welcoming but don't assume you know them well." |
 
 ## Cross-User Memory Access
 
@@ -151,12 +151,12 @@ Only one cross-user lookup is performed per message (breaks after first match).
 
 ## localStorage Persistence
 
-| Key | Value | Purpose |
-|-----|-------|---------|
-| `melodyActiveUser` | `"amelia"` / `"lonnie"` / `"guest"` | Currently selected user identity |
-| `melodyWelcomeDone-amelia` | `"true"` | Amelia completed the welcome flow |
-| `melodyWelcomeDone-lonnie` | `"true"` | Lonnie completed the welcome flow |
-| `melodyWelcomeDone-guest` | `"true"` | Guest completed the welcome flow |
+| Key                        | Value                               | Purpose                           |
+| -------------------------- | ----------------------------------- | --------------------------------- |
+| `melodyActiveUser`         | `"amelia"` / `"lonnie"` / `"guest"` | Currently selected user identity  |
+| `melodyWelcomeDone-amelia` | `"true"`                            | Amelia completed the welcome flow |
+| `melodyWelcomeDone-lonnie` | `"true"`                            | Lonnie completed the welcome flow |
+| `melodyWelcomeDone-guest`  | `"true"`                            | Guest completed the welcome flow  |
 
 ## Header Label Update
 
@@ -176,13 +176,13 @@ This is updated on:
 
 All API requests that support per-user behavior accept a `userId` parameter:
 
-| Endpoint | Parameter Type | Usage |
-|----------|---------------|-------|
-| `POST /api/chat` | body: `userId` | Determines mem0 track, relationship stats, identity context |
-| `POST /api/welcome` | body: `userId` | Determines which mem0 track to save onboarding data to |
-| `GET /api/memories` | query: `userId` | Fetches memories for the correct user track |
-| `GET /api/relationship` | query: `userId` | Returns stats for the correct user |
-| `GET /api/welcome-status` | query: `userId` | Checks returning status for the correct user |
+| Endpoint                  | Parameter Type  | Usage                                                       |
+| ------------------------- | --------------- | ----------------------------------------------------------- |
+| `POST /api/chat`          | body: `userId`  | Determines mem0 track, relationship stats, identity context |
+| `POST /api/welcome`       | body: `userId`  | Determines which mem0 track to save onboarding data to      |
+| `GET /api/memories`       | query: `userId` | Fetches memories for the correct user track                 |
+| `GET /api/relationship`   | query: `userId` | Returns stats for the correct user                          |
+| `GET /api/welcome-status` | query: `userId` | Checks returning status for the correct user                |
 
 The client sends `activeUser` in every request:
 

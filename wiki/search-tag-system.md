@@ -12,13 +12,13 @@ My Melody Chat uses a tag-based system to trigger media actions from within LLM 
 
 ## Tag Reference
 
-| Tag | Format | Processing | Trigger |
-|-----|--------|-----------|---------|
-| `IMAGE_SEARCH` | `[IMAGE_SEARCH: query]` | Client-side | User asks to *see* a picture/image |
-| `VIDEO_SEARCH` | `[VIDEO_SEARCH: query]` | Client-side | User asks for a video or how-to |
-| `GALLERY_SEARCH` | `[GALLERY_SEARCH: keywords]` | Client-side | User asks about a previously shared photo |
-| `WIKI_SEARCH` | `[WIKI_SEARCH: wiki_id query]` | Server-side | User asks about game-specific content |
-| `REACTION` | `[REACTION: emotion]` | Client-side | Melody wants to express emotion visually |
+| Tag              | Format                         | Processing  | Trigger                                   |
+| ---------------- | ------------------------------ | ----------- | ----------------------------------------- |
+| `IMAGE_SEARCH`   | `[IMAGE_SEARCH: query]`        | Client-side | User asks to _see_ a picture/image        |
+| `VIDEO_SEARCH`   | `[VIDEO_SEARCH: query]`        | Client-side | User asks for a video or how-to           |
+| `GALLERY_SEARCH` | `[GALLERY_SEARCH: keywords]`   | Client-side | User asks about a previously shared photo |
+| `WIKI_SEARCH`    | `[WIKI_SEARCH: wiki_id query]` | Server-side | User asks about game-specific content     |
+| `REACTION`       | `[REACTION: emotion]`          | Client-side | Melody wants to express emotion visually  |
 
 ## Processing Model
 
@@ -64,10 +64,10 @@ All patterns are in `public/app.js` inside `processReply()`:
 
 ```js
 // Detection (capture groups extract the query/emotion)
-const imageSearchMatch  = text.match(/\[IMAGE_SEARCH:\s*(.+?)\]/);
-const videoSearchMatch  = text.match(/\[VIDEO_SEARCH:\s*(.+?)\]/);
+const imageSearchMatch = text.match(/\[IMAGE_SEARCH:\s*(.+?)\]/);
+const videoSearchMatch = text.match(/\[VIDEO_SEARCH:\s*(.+?)\]/);
 const gallerySearchMatch = text.match(/\[GALLERY_SEARCH:\s*(.+?)\]/);
-const reactionMatch     = text.match(/\[REACTION:\s*(\w+)\]/);
+const reactionMatch = text.match(/\[REACTION:\s*(\w+)\]/);
 ```
 
 Server-side wiki detection in `server.js`:
@@ -114,7 +114,7 @@ The model emits `[IMAGE_SEARCH: query]` when the user explicitly asks to **see**
 An `<img>` element with class `search-result-img` appended to the message bubble. Clicking opens the lightbox. Images that fail to load are silently removed via an `error` event handler.
 
 ```js
-const valid = results.filter(r => r.imageUrl);
+const valid = results.filter((r) => r.imageUrl);
 if (valid.length) {
   const pick = valid[Math.floor(Math.random() * Math.min(valid.length, 4))];
   searchImageUrl = pick.imageUrl;
@@ -137,6 +137,7 @@ The model emits `[VIDEO_SEARCH: query]` when the user asks for a video, tutorial
 ### Rendered Output
 
 A clickable `<a>` element with class `video-result` containing:
+
 - Thumbnail image (`<img class="video-thumbnail">`) if available
 - Title text (`<span class="video-title">`)
 - Opens in a new tab (`target="_blank"`)
@@ -245,10 +246,16 @@ The prompt also includes example dialogues showing correct tag usage (Ali:Chat f
 The server logs detected tags when present in the final reply:
 
 ```js
-if (reply.includes('[IMAGE_SEARCH:') || reply.includes('[VIDEO_SEARCH:') ||
-    reply.includes('[GALLERY_SEARCH:') || reply.includes('[WIKI_SEARCH:')) {
-  console.log('Search tags found in reply:',
-    reply.match(/\[(IMAGE_SEARCH|VIDEO_SEARCH|GALLERY_SEARCH|WIKI_SEARCH):\s*.+?\]/g));
+if (
+  reply.includes('[IMAGE_SEARCH:') ||
+  reply.includes('[VIDEO_SEARCH:') ||
+  reply.includes('[GALLERY_SEARCH:') ||
+  reply.includes('[WIKI_SEARCH:')
+) {
+  console.log(
+    'Search tags found in reply:',
+    reply.match(/\[(IMAGE_SEARCH|VIDEO_SEARCH|GALLERY_SEARCH|WIKI_SEARCH):\s*.+?\]/g),
+  );
 }
 ```
 

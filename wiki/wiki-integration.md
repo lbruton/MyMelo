@@ -78,23 +78,23 @@ The wiki integration provides a two-step server-side pipeline that fetches game 
 
 New wikis are added by inserting a single entry into the `WIKIS` object in `server.js`:
 
-| Wiki ID | Game | API Endpoint | Base URL |
-|---------|------|-------------|----------|
-| `hkia` | Hello Kitty Island Adventure | `https://hellokittyislandadventure.wiki.gg/api.php` | `https://hellokittyislandadventure.wiki.gg/wiki/` |
-| `minecraft` | Minecraft | `https://minecraft.wiki/api.php` | `https://minecraft.wiki/w/` |
+| Wiki ID     | Game                         | API Endpoint                                        | Base URL                                          |
+| ----------- | ---------------------------- | --------------------------------------------------- | ------------------------------------------------- |
+| `hkia`      | Hello Kitty Island Adventure | `https://hellokittyislandadventure.wiki.gg/api.php` | `https://hellokittyislandadventure.wiki.gg/wiki/` |
+| `minecraft` | Minecraft                    | `https://minecraft.wiki/api.php`                    | `https://minecraft.wiki/w/`                       |
 
 ```js
 const WIKIS = {
   hkia: {
     name: 'Hello Kitty Island Adventure',
     api: 'https://hellokittyislandadventure.wiki.gg/api.php',
-    baseUrl: 'https://hellokittyislandadventure.wiki.gg/wiki/'
+    baseUrl: 'https://hellokittyislandadventure.wiki.gg/wiki/',
   },
   minecraft: {
     name: 'Minecraft',
     api: 'https://minecraft.wiki/api.php',
-    baseUrl: 'https://minecraft.wiki/w/'
-  }
+    baseUrl: 'https://minecraft.wiki/w/',
+  },
 };
 ```
 
@@ -102,11 +102,11 @@ const WIKIS = {
 
 Add one entry to `WIKIS` with these fields:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | `string` | Human-readable display name (shown in source card) |
-| `api` | `string` | Full URL to the MediaWiki `api.php` endpoint |
-| `baseUrl` | `string` | Wiki page base URL (page title is appended) |
+| Field     | Type     | Description                                        |
+| --------- | -------- | -------------------------------------------------- |
+| `name`    | `string` | Human-readable display name (shown in source card) |
+| `api`     | `string` | Full URL to the MediaWiki `api.php` endpoint       |
+| `baseUrl` | `string` | Wiki page base URL (page title is appended)        |
 
 Then add a corresponding prompt instruction in the `MEDIA TAGS` section of `SYSTEM_PROMPT` so the model knows when to use the new wiki ID.
 
@@ -117,11 +117,13 @@ Then add a corresponding prompt instruction in the `MEDIA TAGS` section of `SYST
 Searches the wiki using the MediaWiki `action=query` API with the `list=search` module.
 
 **Request:**
+
 ```
 GET {wiki.api}?action=query&list=search&srsearch={query}&srlimit=3&format=json&origin=*
 ```
 
 **Parameters:**
+
 - `srsearch` -- URL-encoded search query
 - `srlimit=3` -- Maximum 3 results
 - `format=json` -- JSON response
@@ -130,11 +132,13 @@ GET {wiki.api}?action=query&list=search&srsearch={query}&srlimit=3&format=json&o
 **Returns:** Array of up to 3 objects:
 
 ```js
-[{
-  title: "Cinnamoroll",       // Wiki page title
-  pageid: 12345,              // MediaWiki page ID
-  snippet: "Cinnamoroll is…"  // Plain text snippet (HTML tags stripped)
-}]
+[
+  {
+    title: 'Cinnamoroll', // Wiki page title
+    pageid: 12345, // MediaWiki page ID
+    snippet: 'Cinnamoroll is…', // Plain text snippet (HTML tags stripped)
+  },
+];
 ```
 
 Returns an empty array on any error.
@@ -144,11 +148,13 @@ Returns an empty array on any error.
 Fetches the intro section (section 0) of a wiki page using `action=parse`.
 
 **Request:**
+
 ```
 GET {wiki.api}?action=parse&page={pageTitle}&prop=text&section=0&format=json&origin=*
 ```
 
 **Parameters:**
+
 - `page` -- URL-encoded page title
 - `prop=text` -- Return rendered HTML text
 - `section=0` -- Intro/lead section only
@@ -185,9 +191,9 @@ When wiki content is successfully fetched, the server makes a second Gemini call
 
 ```js
 const followupContents = [
-  { role: 'user', parts: [{ text: message }] },                    // Original user message
-  { role: 'model', parts: [{ text: reply }] },                     // First Gemini reply (with tag)
-  { role: 'user', parts: [{ text: `Here is wiki information…` }] } // Wiki content injection
+  { role: 'user', parts: [{ text: message }] }, // Original user message
+  { role: 'model', parts: [{ text: reply }] }, // First Gemini reply (with tag)
+  { role: 'user', parts: [{ text: `Here is wiki information…` }] }, // Wiki content injection
 ];
 ```
 
@@ -229,6 +235,7 @@ wikiMatch found?
 ```
 
 In all fallback cases, the `wikiSource` object may or may not be set:
+
 - If `fetchWikiContent()` succeeded, `wikiSource` is populated (so the source card still renders even if the second Gemini call fails)
 - If `fetchWikiContent()` failed or no results were found, `wikiSource` remains `null`
 
@@ -244,10 +251,10 @@ Returned in the chat API response JSON when wiki content was successfully fetche
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `title` | `string` | Canonical wiki page title |
-| `url` | `string` | Direct link to the wiki page |
+| Field      | Type     | Description                                |
+| ---------- | -------- | ------------------------------------------ |
+| `title`    | `string` | Canonical wiki page title                  |
+| `url`      | `string` | Direct link to the wiki page               |
 | `wikiName` | `string` | Human-readable wiki name from the registry |
 
 ## Frontend Rendering
@@ -265,6 +272,7 @@ if (wikiSource && role === 'assistant') {
 ```
 
 **Structure:**
+
 - `<a class="wiki-source">` -- Clickable card linking to the wiki page
   - `<span class="wiki-source-icon">` -- Book emoji (U+1F4D6)
   - `<div class="wiki-source-info">` -- Container for text
@@ -279,10 +287,10 @@ The wiki can also be searched directly via the REST API, independent of the chat
 
 ### GET /api/wiki-search
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `wiki` | `string` | Yes | Wiki ID from registry (`hkia`, `minecraft`) |
-| `q` | `string` | Yes | Search query |
+| Parameter | Type     | Required | Description                                 |
+| --------- | -------- | -------- | ------------------------------------------- |
+| `wiki`    | `string` | Yes      | Wiki ID from registry (`hkia`, `minecraft`) |
+| `q`       | `string` | Yes      | Search query                                |
 
 **Success response (200):**
 
@@ -302,6 +310,7 @@ The wiki can also be searched directly via the REST API, independent of the chat
 ```
 
 **Error responses:**
+
 - `400` -- Missing `wiki` or `q` parameter, or unknown wiki ID
 - `500` -- Wiki API failure
 

@@ -32,11 +32,17 @@ const soundToggle = document.getElementById('soundToggle');
 
 // ─── Session ───
 /** @type {string} Unique session ID for conversation buffer (new per tab, persists on refresh). Reset on character switch. */
-let sessionId = sessionStorage.getItem('melodySessionId') || (() => {
-  const id = (crypto.randomUUID ? crypto.randomUUID() : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
-  sessionStorage.setItem('melodySessionId', id);
-  return id;
-})();
+let sessionId =
+  sessionStorage.getItem('melodySessionId') ||
+  (() => {
+    const id = crypto.randomUUID
+      ? crypto.randomUUID()
+      : ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) =>
+          (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16),
+        );
+    sessionStorage.setItem('melodySessionId', id);
+    return id;
+  })();
 
 // ─── State ───
 let pendingImageBase64 = null;
@@ -90,7 +96,12 @@ function createVideoThumbWrapper(thumbnailUrl, title, videoId, skipHistory) {
 
     // Add to play history (localStorage, max 30 entries)
     if (!skipHistory) {
-      addToVideoHistory({ videoId, title: title || 'Untitled', thumbnail: thumbnailUrl || '', url: `https://www.youtube.com/watch?v=${videoId}` });
+      addToVideoHistory({
+        videoId,
+        title: title || 'Untitled',
+        thumbnail: thumbnailUrl || '',
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+      });
     }
   });
 
@@ -106,9 +117,13 @@ function createVideoThumbWrapper(thumbnailUrl, title, videoId, skipHistory) {
 function addToVideoHistory(video) {
   const key = currentUser?.email ? `videoHistory-${currentUser.email}` : 'videoHistory';
   let history = [];
-  try { history = JSON.parse(localStorage.getItem(key) || '[]'); } catch { history = []; }
+  try {
+    history = JSON.parse(localStorage.getItem(key) || '[]');
+  } catch {
+    history = [];
+  }
   // Remove existing entry for this videoId (dedup)
-  history = history.filter(h => h.videoId !== video.videoId);
+  history = history.filter((h) => h.videoId !== video.videoId);
   // Add to front
   history.unshift({ ...video, playedAt: new Date().toISOString() });
   // Cap at 30
@@ -123,7 +138,7 @@ const CORE_MEMORY_LABELS = {
   familyAndPets: 'Family & Pets',
   preferences: 'Preferences',
   importantDates: 'Important Dates',
-  insideJokes: 'Inside Jokes'
+  insideJokes: 'Inside Jokes',
 };
 
 // ─── Current User (from /api/me) ───
@@ -156,22 +171,30 @@ const CHARACTER_CONFIG = {
     secondaryColor: '#FF85C8',
     subtitle: 'Your Sweet Sanrio Friend \u2661',
     placeholder: 'Say something sweet... \u2661',
-    greeting1: "Yaaan~! A new friend! Hello hello! I'm My Melody, and I live in Mariland with my Mama, Papa, and little brother Rhythm~ I'm so happy to meet you!",
-    greeting2: "Mama always says you should start a friendship by learning each other's names... so, what's your name? \u2661",
-    greetAckName: n => `${n}! What a lovely name~ Mama would say it sounds like a flower name... even if it doesn't, hehe. I'll remember it forever!`,
+    greeting1:
+      "Yaaan~! A new friend! Hello hello! I'm My Melody, and I live in Mariland with my Mama, Papa, and little brother Rhythm~ I'm so happy to meet you!",
+    greeting2:
+      "Mama always says you should start a friendship by learning each other's names... so, what's your name? \u2661",
+    greetAckName: (n) =>
+      `${n}! What a lovely name~ Mama would say it sounds like a flower name... even if it doesn't, hehe. I'll remember it forever!`,
     greetAskColor: "Oh! I'm curious~ what's your favorite color? Mine is pink, of course... because of my hood! \u2661",
-    greetAckColor: (c, n) => `${c.charAt(0).toUpperCase() + c.slice(1)}! Ahh~ that's such a pretty color! I can see why you like it. I'll remember that about you, ${n}!`,
-    greetAskInterests: "One more thing... what do you like to do for fun? Any hobbies or interests? I want to know everything about my new friend~! Onegai?",
-    greetFinish1: n => `That sounds wonderful! Mama always says the best friendships start with sharing what makes you happy~ And now I know so much about you, ${n}!`,
-    greetFinish2: "I'm so glad we're friends now! You can talk to me about anything, anytime~ I'll always be here with tea and almond pound cake! \u2661",
+    greetAckColor: (c, n) =>
+      `${c.charAt(0).toUpperCase() + c.slice(1)}! Ahh~ that's such a pretty color! I can see why you like it. I'll remember that about you, ${n}!`,
+    greetAskInterests:
+      'One more thing... what do you like to do for fun? Any hobbies or interests? I want to know everything about my new friend~! Onegai?',
+    greetFinish1: (n) =>
+      `That sounds wonderful! Mama always says the best friendships start with sharing what makes you happy~ And now I know so much about you, ${n}!`,
+    greetFinish2:
+      "I'm so glad we're friends now! You can talk to me about anything, anytime~ I'll always be here with tea and almond pound cake! \u2661",
     greetReturn: (n, days, streak) => {
-      const pick = a => a[Math.floor(Math.random() * a.length)];
+      const pick = (a) => a[Math.floor(Math.random() * a.length)];
       if (days === 0) {
-        if (streak > 2) return pick([
-          `Welcome back, ${n}! That's ${streak} days in a row~ I'm so happy!`,
-          `${n}! ${streak} whole days together! Mama would say that's what real friendship looks like~`,
-          `Ohh, ${streak} days in a row, ${n}! I baked extra almond cake just in case~ ♡`,
-        ]);
+        if (streak > 2)
+          return pick([
+            `Welcome back, ${n}! That's ${streak} days in a row~ I'm so happy!`,
+            `${n}! ${streak} whole days together! Mama would say that's what real friendship looks like~`,
+            `Ohh, ${streak} days in a row, ${n}! I baked extra almond cake just in case~ ♡`,
+          ]);
         return pick([
           `Hi again, ${n}! I was just having some tea and thinking about you~`,
           `${n}! Oh~! I was literally just about to write you a letter. Mama always says great minds think alike!`,
@@ -179,22 +202,24 @@ const CHARACTER_CONFIG = {
           `${n}! I was just humming a song and here you are! How lovely~`,
         ]);
       }
-      if (days === 1) return pick([
-        `${n}! You came back! I was just baking almond pound cake and hoping you'd visit~`,
-        `Oh~! ${n}! I missed you yesterday. Flat said you'd come back and he was right! ♡`,
-        `${n}! I kept a slice of almond cake warm just in case. Mama says hope is the best ingredient~`,
-      ]);
-      if (days <= 3) return pick([
-        `${n}~! It's been ${days} days! I missed chatting with you... Mama says absence makes the heart grow fonder!`,
-        `${n}! Oh, ${days} days! I didn't forget about you — Flat said I was being dramatic but I wasn't~`,
-        `${n}!! There you are! ${days} days felt like forever. I may have stress-baked. Several cakes.`,
-      ]);
+      if (days === 1)
+        return pick([
+          `${n}! You came back! I was just baking almond pound cake and hoping you'd visit~`,
+          `Oh~! ${n}! I missed you yesterday. Flat said you'd come back and he was right! ♡`,
+          `${n}! I kept a slice of almond cake warm just in case. Mama says hope is the best ingredient~`,
+        ]);
+      if (days <= 3)
+        return pick([
+          `${n}~! It's been ${days} days! I missed chatting with you... Mama says absence makes the heart grow fonder!`,
+          `${n}! Oh, ${days} days! I didn't forget about you — Flat said I was being dramatic but I wasn't~`,
+          `${n}!! There you are! ${days} days felt like forever. I may have stress-baked. Several cakes.`,
+        ]);
       return pick([
         `${n}!! Yaaan~! It's been ${days} whole days! I missed you so much... I saved you some tea!`,
         `${n}!! I was so worried! ${days} days is so long. Come in, the tea is still warm somehow~ ♡`,
         `${n}!! Oh my~! ${days} days! Mama said I shouldn't wait by the window but I definitely waited by the window.`,
       ]);
-    }
+    },
   },
   kuromi: {
     name: 'Kuromi',
@@ -204,22 +229,29 @@ const CHARACTER_CONFIG = {
     secondaryColor: '#8B3EC8',
     subtitle: 'Pretty Devil Girl \u2660',
     placeholder: 'Go ahead, say something... \u2660',
-    greeting1: "Hmph! Don't get the wrong idea — I just happened to notice you were here. I'm Kuromi. Leader of the Kuromi 5. The prettiest, most feared pretty devil girl in Mariland.",
+    greeting1:
+      "Hmph! Don't get the wrong idea — I just happened to notice you were here. I'm Kuromi. Leader of the Kuromi 5. The prettiest, most feared pretty devil girl in Mariland.",
     greeting2: "...Fine. Since you're obviously not going anywhere, you might as well tell me your name. What is it?",
-    greetAckName: n => `${n}. Fine. I'll remember it. Don't make me regret learning your name.`,
-    greetAskColor: "I suppose I should ask — what's your favorite color? Mine is black. And maybe a little pink. Don't make it weird.",
-    greetAckColor: (c, n) => `${c.charAt(0).toUpperCase() + c.slice(1)}... not bad. Could be darker, but I'll allow it. I'll remember that, ${n}.`,
-    greetAskInterests: "One last thing. What do you actually like to do? I'm asking because I want to know, NOT because I suddenly care. Don't flatter yourself.",
-    greetFinish1: n => `...Hm. Those are actually kind of interesting. Not that I'd ever admit that out loud. Anyway — I guess we're acquaintances now, ${n}.`,
-    greetFinish2: "Don't think this makes us friends or anything! I just... like having someone to talk to sometimes. Besides Baku. He doesn't count. \u2660",
+    greetAckName: (n) => `${n}. Fine. I'll remember it. Don't make me regret learning your name.`,
+    greetAskColor:
+      "I suppose I should ask — what's your favorite color? Mine is black. And maybe a little pink. Don't make it weird.",
+    greetAckColor: (c, n) =>
+      `${c.charAt(0).toUpperCase() + c.slice(1)}... not bad. Could be darker, but I'll allow it. I'll remember that, ${n}.`,
+    greetAskInterests:
+      "One last thing. What do you actually like to do? I'm asking because I want to know, NOT because I suddenly care. Don't flatter yourself.",
+    greetFinish1: (n) =>
+      `...Hm. Those are actually kind of interesting. Not that I'd ever admit that out loud. Anyway — I guess we're acquaintances now, ${n}.`,
+    greetFinish2:
+      "Don't think this makes us friends or anything! I just... like having someone to talk to sometimes. Besides Baku. He doesn't count. \u2660",
     greetReturn: (n, days, streak) => {
-      const pick = a => a[Math.floor(Math.random() * a.length)];
+      const pick = (a) => a[Math.floor(Math.random() * a.length)];
       if (days === 0) {
-        if (streak > 2) return pick([
-          `Hmph! Back again, ${n}? That's ${streak} days in a row. Not that I was counting. ...I totally was.`,
-          `${streak} days in a row, ${n}. I've been keeping track. FOR RESEARCH PURPOSES. Don't read into it.`,
-          `Oh, ${n}. ${streak} days straight. I'm not impressed. ...Okay I'm a little impressed. Hmph.`,
-        ]);
+        if (streak > 2)
+          return pick([
+            `Hmph! Back again, ${n}? That's ${streak} days in a row. Not that I was counting. ...I totally was.`,
+            `${streak} days in a row, ${n}. I've been keeping track. FOR RESEARCH PURPOSES. Don't read into it.`,
+            `Oh, ${n}. ${streak} days straight. I'm not impressed. ...Okay I'm a little impressed. Hmph.`,
+          ]);
         return pick([
           `Oh. It's you, ${n}. Good. I mean — whatever. I was bored anyway.`,
           `${n}. You're back. ...Good. Baku bet me you'd show up. I owe him a pickled plum. Worth it.`,
@@ -227,22 +259,24 @@ const CHARACTER_CONFIG = {
           `Oh. ${n}. I was thinking about something completely unrelated to you. Welcome back. \u2660`,
         ]);
       }
-      if (days === 1) return pick([
-        `${n}. You came back. ...I knew you would. Baku said I was being dramatic. I wasn't.`,
-        `Oh look, it's ${n}. I only checked the door twice. That's basically nothing.`,
-        `${n}! Back after one day. I wasn't waiting. I was... nearby. That's all.`,
-      ]);
-      if (days <= 3) return pick([
-        `${n}! It's been ${days} days! Not that I was keeping track! I just happened to remember! \u2660`,
-        `${n}. ${days} days. I've been doing FINE, obviously. Extremely fine. ...Where were you.`,
-        `Oh! ${n}! ${days} days is a long time. I'm not saying I was worried. Things were just less interesting.`,
-      ]);
+      if (days === 1)
+        return pick([
+          `${n}. You came back. ...I knew you would. Baku said I was being dramatic. I wasn't.`,
+          `Oh look, it's ${n}. I only checked the door twice. That's basically nothing.`,
+          `${n}! Back after one day. I wasn't waiting. I was... nearby. That's all.`,
+        ]);
+      if (days <= 3)
+        return pick([
+          `${n}! It's been ${days} days! Not that I was keeping track! I just happened to remember! \u2660`,
+          `${n}. ${days} days. I've been doing FINE, obviously. Extremely fine. ...Where were you.`,
+          `Oh! ${n}! ${days} days is a long time. I'm not saying I was worried. Things were just less interesting.`,
+        ]);
       return pick([
         `${n}!! ${days} days?! I was starting to think you'd forgotten about me! Not that I care! Hmph!`,
         `${n}!! ${days} DAYS?! Do you know what kind of chaos that is?! I mean — whatever. You're here now.`,
         `${n}! I've been fine for ${days} days. Completely fine. (I was not fine.) Come in. \u2660`,
       ]);
-    }
+    },
   },
   retsuko: {
     name: 'Aggretsuko',
@@ -252,22 +286,31 @@ const CHARACTER_CONFIG = {
     secondaryColor: '#EE3300',
     subtitle: 'Office Worker / Metal Vocalist \u266a',
     placeholder: "What's on your mind... \u266a",
-    greeting1: "Oh! H-hi... Sorry, I was just spacing out. Long day at work. I'm Retsuko — accountant at Carrier Man Trading Co. Five years at this job. It's fine.",
-    greeting2: "...So, um. My coworker Fenneko says I should try talking to new people. She's usually right about things. What's your name?",
-    greetAckName: n => `${n}! Nice to meet you. I'm honestly bad with names but I have a feeling I'll remember yours.`,
-    greetAskColor: "Random question — what's your favorite color? I used to always say pink, but lately I've been feeling more... angry red. What about you?",
-    greetAckColor: (c, n) => `${c.charAt(0).toUpperCase() + c.slice(1)}! Good choice. I'll remember that about you, ${n}.`,
-    greetAskInterests: "Last question, I promise — what do you do for fun? Or what do you WANT to do? I'm asking for me. But also for you.",
-    greetFinish1: n => `That's genuinely cool. I sometimes forget there's life outside the office. ${n}, I think I'm going to like talking to you.`,
-    greetFinish2: "If you ever need to vent about your day — or anything — I'm here. I have a lot of feelings and a microphone and nowhere to be. \u266a",
+    greeting1:
+      "Oh! H-hi... Sorry, I was just spacing out. Long day at work. I'm Retsuko — accountant at Carrier Man Trading Co. Five years at this job. It's fine.",
+    greeting2:
+      "...So, um. My coworker Fenneko says I should try talking to new people. She's usually right about things. What's your name?",
+    greetAckName: (n) =>
+      `${n}! Nice to meet you. I'm honestly bad with names but I have a feeling I'll remember yours.`,
+    greetAskColor:
+      "Random question — what's your favorite color? I used to always say pink, but lately I've been feeling more... angry red. What about you?",
+    greetAckColor: (c, n) =>
+      `${c.charAt(0).toUpperCase() + c.slice(1)}! Good choice. I'll remember that about you, ${n}.`,
+    greetAskInterests:
+      "Last question, I promise — what do you do for fun? Or what do you WANT to do? I'm asking for me. But also for you.",
+    greetFinish1: (n) =>
+      `That's genuinely cool. I sometimes forget there's life outside the office. ${n}, I think I'm going to like talking to you.`,
+    greetFinish2:
+      "If you ever need to vent about your day — or anything — I'm here. I have a lot of feelings and a microphone and nowhere to be. \u266a",
     greetReturn: (n, days, streak) => {
-      const pick = a => a[Math.floor(Math.random() * a.length)];
+      const pick = (a) => a[Math.floor(Math.random() * a.length)];
       if (days === 0) {
-        if (streak > 2) return pick([
-          `Oh, ${n}! ${streak} days in a row — I love that for us. How was your day?`,
-          `${n}! ${streak} days straight. Fenneko said I should track consistency. She's right. Hi.`,
-          `${n}! ${streak} days running. This is the most consistent thing in my life right now. Thank you for that.`,
-        ]);
+        if (streak > 2)
+          return pick([
+            `Oh, ${n}! ${streak} days in a row — I love that for us. How was your day?`,
+            `${n}! ${streak} days straight. Fenneko said I should track consistency. She's right. Hi.`,
+            `${n}! ${streak} days running. This is the most consistent thing in my life right now. Thank you for that.`,
+          ]);
         return pick([
           `${n}! Perfect timing. I just got back from karaoke and needed someone to talk to.`,
           `Oh! ${n}. Good. I was just sitting here trying not to think about work. How are YOU?`,
@@ -275,23 +318,25 @@ const CHARACTER_CONFIG = {
           `${n}! You caught me right after a karaoke session. I feel 40% better. Still need to vent. Hi!`,
         ]);
       }
-      if (days === 1) return pick([
-        `${n}! You're back. Good. I have a lot to say about what happened at work today.`,
-        `Oh! ${n}! I thought of something I wanted to tell you yesterday. Good timing.`,
-        `${n}! Back already? In a good way. Fenneko gives too much advice. I needed YOU.`,
-      ]);
-      if (days <= 3) return pick([
-        `${n}! ${days} days! I thought maybe you got buried under paperwork. Are you okay?`,
-        `${n}! ${days} days! I did three extra karaoke sessions. Draw your own conclusions. \u266a`,
-        `${n}! Oh, ${days} days. I had extra feelings. The karaoke staff thanks you for my business.`,
-      ]);
+      if (days === 1)
+        return pick([
+          `${n}! You're back. Good. I have a lot to say about what happened at work today.`,
+          `Oh! ${n}! I thought of something I wanted to tell you yesterday. Good timing.`,
+          `${n}! Back already? In a good way. Fenneko gives too much advice. I needed YOU.`,
+        ]);
+      if (days <= 3)
+        return pick([
+          `${n}! ${days} days! I thought maybe you got buried under paperwork. Are you okay?`,
+          `${n}! ${days} days! I did three extra karaoke sessions. Draw your own conclusions. \u266a`,
+          `${n}! Oh, ${days} days. I had extra feelings. The karaoke staff thanks you for my business.`,
+        ]);
       return pick([
         `${n}!! It's been ${days} days! I almost called Fenneko to investigate. Where have you been?!`,
         `${n}!! ${days} days?! That's ${days} unanswered questions about your life! Are you okay?!`,
         `${n}!! I went to karaoke for ${days} days straight. Even the staff asked about you. Come in!`,
       ]);
-    }
-  }
+    },
+  },
 };
 
 /** @type {string} Currently active character ID, persisted in localStorage. */
@@ -333,17 +378,17 @@ function selectCharacter(characterId) {
   if (!welcomeActive) messageInput.placeholder = config.placeholder;
 
   // Update active highlight on picker buttons
-  characterPicker.querySelectorAll('.character-picker-btn').forEach(btn => {
+  characterPicker.querySelectorAll('.character-picker-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.character === characterId);
   });
 
   // Update typing indicator avatar
-  const typingAvatar = document.querySelector('.typing-indicator img') || document.querySelector('#typingIndicator img');
+  const typingAvatar =
+    document.querySelector('.typing-indicator img') || document.querySelector('#typingIndicator img');
   if (typingAvatar) {
     typingAvatar.src = config.avatar;
     typingAvatar.alt = config.name;
   }
-
 }
 
 /** Ordered list of character IDs for cycling via avatar tap. */
@@ -359,22 +404,29 @@ async function cycleCharacter() {
   selectCharacter(nextId);
 
   // Reset session buffer for the new character
-  sessionId = (crypto.randomUUID ? crypto.randomUUID() : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
+  sessionId = crypto.randomUUID
+    ? crypto.randomUUID()
+    : ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, (c) =>
+        (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16),
+      );
   sessionStorage.setItem('melodySessionId', sessionId);
 
   // Clear chat messages
-  chatArea.querySelectorAll('.message, .welcome-message').forEach(el => el.remove());
+  chatArea.querySelectorAll('.message, .welcome-message').forEach((el) => el.remove());
 
   // Show a fresh greeting from the new character
   const char = CHARACTER_CONFIG[nextId];
   showTyping();
-  await new Promise(r => setTimeout(r, 700));
+  await new Promise((r) => setTimeout(r, 700));
   hideTyping();
   try {
     const res = await fetch('/api/welcome-status');
     const status = await res.json();
-    const name = status.friendName || (currentUser?.displayName) || null;
-    addMessage(char.greetReturn(name || 'friend', status.daysSince ?? 0, status.streakDays ?? 0) + ' \u2661', 'assistant');
+    const name = status.friendName || currentUser?.displayName || null;
+    addMessage(
+      char.greetReturn(name || 'friend', status.daysSince ?? 0, status.streakDays ?? 0) + ' \u2661',
+      'assistant',
+    );
   } catch {
     addMessage(char.greetReturn('friend', 0, 0) + ' \u2661', 'assistant');
   }
@@ -419,7 +471,9 @@ function getAudioContext() {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
-  } catch { return null; }
+  } catch {
+    return null;
+  }
   return audioCtx;
 }
 
@@ -571,12 +625,12 @@ replyStyleSelect.addEventListener('change', (e) => {
 });
 
 // ─── Tab navigation ───
-document.querySelectorAll('.tab-btn').forEach(btn => {
+document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     const target = btn.dataset.tab;
 
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach((p) => p.classList.remove('active'));
 
     btn.classList.add('active');
     document.getElementById(target).classList.add('active');
@@ -689,8 +743,8 @@ function addMessage(text, role, imageDataURL, searchImageUrl, videoResult, sourc
               videoId: ytId,
               url: videoResult.url,
               title: videoResult.title || 'Untitled',
-              thumbnail: videoResult.thumbnail || ''
-            })
+              thumbnail: videoResult.thumbnail || '',
+            }),
           });
           if (resp.ok) {
             saveBtn.textContent = 'Saved \u2665';
@@ -733,7 +787,7 @@ function addMessage(text, role, imageDataURL, searchImageUrl, videoResult, sourc
   if (sources?.length && role === 'assistant') {
     const sourcesDiv = document.createElement('div');
     sourcesDiv.className = 'grounding-sources';
-    sources.forEach(s => {
+    sources.forEach((s) => {
       if (!s.url) return;
       const link = document.createElement('a');
       link.href = s.url;
@@ -813,7 +867,8 @@ function _imageCard(src, alt, caption) {
   const card = document.createElement('div');
   card.className = 'api-card image-card';
   const img = document.createElement('img');
-  img.src = src; img.alt = alt;
+  img.src = src;
+  img.alt = alt;
   img.addEventListener('error', () => card.remove());
   card.appendChild(img);
   if (caption) {
@@ -852,7 +907,8 @@ function _recipeCard(data, metaField) {
   card.className = 'api-card recipe-card';
   if (data.imageUrl) {
     const img = document.createElement('img');
-    img.src = data.imageUrl; img.alt = data.name;
+    img.src = data.imageUrl;
+    img.alt = data.name;
     img.className = 'recipe-card-img';
     img.addEventListener('error', () => img.remove());
     card.appendChild(img);
@@ -874,7 +930,7 @@ function _recipeCard(data, metaField) {
     strong.textContent = 'Ingredients:';
     ingDiv.appendChild(strong);
     const ul = document.createElement('ul');
-    data.ingredients.forEach(ing => {
+    data.ingredients.forEach((ing) => {
       const li = document.createElement('li');
       li.textContent = ing;
       ul.appendChild(li);
@@ -884,7 +940,8 @@ function _recipeCard(data, metaField) {
   }
   if (data.sourceUrl) {
     const link = document.createElement('a');
-    link.href = data.sourceUrl; link.target = '_blank';
+    link.href = data.sourceUrl;
+    link.target = '_blank';
     link.rel = 'noopener noreferrer';
     link.className = 'recipe-source-link';
     link.textContent = 'View full recipe';
@@ -899,25 +956,27 @@ const TAG_REGISTRY = [
     name: 'image_search',
     pattern: /\[IMAGE_SEARCH:\s*(.+?)\]/,
     fetch: async (match) => {
-      const results = await fetch(`/api/image-search?q=${encodeURIComponent(match[1])}`).then(r => r.json());
-      const valid = results.filter(r => r.imageUrl);
+      const results = await fetch(`/api/image-search?q=${encodeURIComponent(match[1])}`).then((r) => r.json());
+      const valid = results.filter((r) => r.imageUrl);
       if (!valid.length) return null;
       const pick = valid[Math.floor(Math.random() * Math.min(valid.length, 4))];
       return { imageUrl: pick.imageUrl };
     },
     render: (data) => {
       const img = document.createElement('img');
-      img.src = data.imageUrl; img.className = 'search-result-img'; img.alt = 'Search result';
+      img.src = data.imageUrl;
+      img.className = 'search-result-img';
+      img.alt = 'Search result';
       img.addEventListener('click', () => openLightbox(data.imageUrl));
       img.addEventListener('error', () => img.remove());
       return img;
-    }
+    },
   },
   {
     name: 'video_search',
     pattern: /\[VIDEO_SEARCH:\s*(.+?)\]/,
     fetch: async (match) => {
-      const results = await fetch(`/api/video-search?q=${encodeURIComponent(match[1])}`).then(r => r.json());
+      const results = await fetch(`/api/video-search?q=${encodeURIComponent(match[1])}`).then((r) => r.json());
       return results.length ? results[0] : null;
     },
     render: (data) => {
@@ -942,10 +1001,20 @@ const TAG_REGISTRY = [
             const resp = await fetch('/api/youtube-favorites', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ videoId: ytId, url: data.url, title: data.title || 'Untitled', thumbnail: data.thumbnail || '' })
+              body: JSON.stringify({
+                videoId: ytId,
+                url: data.url,
+                title: data.title || 'Untitled',
+                thumbnail: data.thumbnail || '',
+              }),
             });
-            if (resp.ok) { saveBtn.textContent = 'Saved \u2665'; saveBtn.classList.add('saved'); }
-          } catch (err) { console.error('Failed to save favorite:', err); }
+            if (resp.ok) {
+              saveBtn.textContent = 'Saved \u2665';
+              saveBtn.classList.add('saved');
+            }
+          } catch (err) {
+            console.error('Failed to save favorite:', err);
+          }
         });
         infoRow.appendChild(saveBtn);
         card.appendChild(infoRow);
@@ -953,11 +1022,15 @@ const TAG_REGISTRY = [
       }
       // Non-YouTube
       const videoLink = document.createElement('a');
-      videoLink.href = data.url; videoLink.target = '_blank'; videoLink.rel = 'noopener noreferrer';
+      videoLink.href = data.url;
+      videoLink.target = '_blank';
+      videoLink.rel = 'noopener noreferrer';
       videoLink.className = 'video-result';
       if (data.thumbnail) {
         const thumb = document.createElement('img');
-        thumb.src = data.thumbnail; thumb.alt = data.title || 'Video'; thumb.className = 'video-thumbnail';
+        thumb.src = data.thumbnail;
+        thumb.alt = data.title || 'Video';
+        thumb.className = 'video-thumbnail';
         thumb.addEventListener('error', () => thumb.remove());
         videoLink.appendChild(thumb);
       }
@@ -969,22 +1042,24 @@ const TAG_REGISTRY = [
       infoRow.appendChild(titleEl);
       videoLink.appendChild(infoRow);
       return videoLink;
-    }
+    },
   },
   {
     name: 'gallery_search',
     pattern: /\[GALLERY_SEARCH:\s*(.+?)\]/,
     fetch: async (match) => {
-      const results = await fetch(`/api/gallery-search?q=${encodeURIComponent(match[1])}`).then(r => r.json());
+      const results = await fetch(`/api/gallery-search?q=${encodeURIComponent(match[1])}`).then((r) => r.json());
       return results.length ? { imageUrl: `/data/images/${results[0].filename}` } : null;
     },
     render: (data) => {
       const img = document.createElement('img');
-      img.src = data.imageUrl; img.className = 'search-result-img'; img.alt = 'Gallery result';
+      img.src = data.imageUrl;
+      img.className = 'search-result-img';
+      img.alt = 'Gallery result';
       img.addEventListener('click', () => openLightbox(data.imageUrl));
       img.addEventListener('error', () => img.remove());
       return img;
-    }
+    },
   },
   {
     name: 'reaction',
@@ -995,123 +1070,125 @@ const TAG_REGISTRY = [
       const categories = REACTION_MAP[emotion];
       if (!categories) return null;
       const category = categories[Math.floor(Math.random() * categories.length)];
-      const data = await fetch(`https://nekos.best/api/v2/${category}?amount=1`).then(r => r.json());
+      const data = await fetch(`https://nekos.best/api/v2/${category}?amount=1`).then((r) => r.json());
       const url = data.results?.[0]?.url;
       return url ? { url } : null;
     },
     render: (data) => {
       const gif = document.createElement('img');
-      gif.src = data.url; gif.alt = 'Reaction'; gif.className = 'reaction-gif';
+      gif.src = data.url;
+      gif.alt = 'Reaction';
+      gif.className = 'reaction-gif';
       gif.addEventListener('error', () => gif.remove());
       return gif;
-    }
+    },
   },
   {
     name: 'dog_pic',
     pattern: /\[DOG_PIC:\s*(.+?)\]/,
     fetch: async (match) => {
       const breed = match[1].trim();
-      const data = await fetch(`/api/dog-pic?breed=${encodeURIComponent(breed)}`).then(r => r.json());
+      const data = await fetch(`/api/dog-pic?breed=${encodeURIComponent(breed)}`).then((r) => r.json());
       return data.imageUrl ? data : null;
     },
-    render: (data) => _imageCard(data.imageUrl, data.breed || 'Dog', data.breed)
+    render: (data) => _imageCard(data.imageUrl, data.breed || 'Dog', data.breed),
   },
   {
     name: 'random_dog',
     pattern: /\[RANDOM_DOG\]/,
     fetch: async () => {
-      const data = await fetch('/api/dog-pic').then(r => r.json());
+      const data = await fetch('/api/dog-pic').then((r) => r.json());
       return data.imageUrl ? data : null;
     },
-    render: (data) => _imageCard(data.imageUrl, data.breed || 'Dog', data.breed)
+    render: (data) => _imageCard(data.imageUrl, data.breed || 'Dog', data.breed),
   },
   {
     name: 'cat_pic',
     pattern: /\[CAT_PIC\]/,
     fetch: async () => {
-      const data = await fetch('/api/cat-pic').then(r => r.json());
+      const data = await fetch('/api/cat-pic').then((r) => r.json());
       return data.imageUrl ? data : null;
     },
-    render: (data) => _imageCard(data.imageUrl, 'Cat')
+    render: (data) => _imageCard(data.imageUrl, 'Cat'),
   },
   {
     name: 'cat_fact',
     pattern: /\[CAT_FACT\]/,
     fetch: async () => {
-      const data = await fetch('/api/cat-fact').then(r => r.json());
+      const data = await fetch('/api/cat-fact').then((r) => r.json());
       return data.fact ? data : null;
     },
-    render: (data) => _factCard('\u{1F431}', data.fact)
+    render: (data) => _factCard('\u{1F431}', data.fact),
   },
   {
     name: 'fox_pic',
     pattern: /\[FOX_PIC\]/,
     fetch: async () => {
-      const data = await fetch('/api/fox-pic').then(r => r.json());
+      const data = await fetch('/api/fox-pic').then((r) => r.json());
       return data.imageUrl ? data : null;
     },
-    render: (data) => _imageCard(data.imageUrl, 'Fox')
+    render: (data) => _imageCard(data.imageUrl, 'Fox'),
   },
   {
     name: 'cocktail',
     pattern: /\[COCKTAIL:\s*(.+?)\]/,
     fetch: async (match) => {
-      const data = await fetch(`/api/cocktail?s=${encodeURIComponent(match[1].trim())}`).then(r => r.json());
+      const data = await fetch(`/api/cocktail?s=${encodeURIComponent(match[1].trim())}`).then((r) => r.json());
       return data.name ? data : null;
     },
-    render: (data) => _recipeCard(data, 'glass')
+    render: (data) => _recipeCard(data, 'glass'),
   },
   {
     name: 'random_cocktail',
     pattern: /\[RANDOM_COCKTAIL\]/,
     fetch: async () => {
-      const data = await fetch('/api/cocktail').then(r => r.json());
+      const data = await fetch('/api/cocktail').then((r) => r.json());
       return data.name ? data : null;
     },
-    render: (data) => _recipeCard(data, 'glass')
+    render: (data) => _recipeCard(data, 'glass'),
   },
   {
     name: 'recipe',
     pattern: /\[RECIPE:\s*(.+?)\]/,
     fetch: async (match) => {
-      const data = await fetch(`/api/recipe?s=${encodeURIComponent(match[1].trim())}`).then(r => r.json());
+      const data = await fetch(`/api/recipe?s=${encodeURIComponent(match[1].trim())}`).then((r) => r.json());
       return data.name ? data : null;
     },
-    render: (data) => _recipeCard(data, 'area')
+    render: (data) => _recipeCard(data, 'area'),
   },
   {
     name: 'random_recipe',
     pattern: /\[RANDOM_RECIPE\]/,
     fetch: async () => {
-      const data = await fetch('/api/recipe').then(r => r.json());
+      const data = await fetch('/api/recipe').then((r) => r.json());
       return data.name ? data : null;
     },
-    render: (data) => _recipeCard(data, 'area')
+    render: (data) => _recipeCard(data, 'area'),
   },
   {
     name: 'coffee_pic',
     pattern: /\[COFFEE_PIC\]/,
     fetch: async () => {
-      const data = await fetch('/api/coffee-pic').then(r => r.json());
+      const data = await fetch('/api/coffee-pic').then((r) => r.json());
       return data.imageUrl ? data : null;
     },
-    render: (data) => _imageCard(data.imageUrl, 'Coffee', 'Coffee')
+    render: (data) => _imageCard(data.imageUrl, 'Coffee', 'Coffee'),
   },
   {
     name: 'advice',
     pattern: /\[ADVICE\]/,
     fetch: async () => {
-      const data = await fetch('/api/advice').then(r => r.json());
+      const data = await fetch('/api/advice').then((r) => r.json());
       return data.advice ? data : null;
     },
-    render: (data) => _factCard('\u{1F4A1}', data.advice)
+    render: (data) => _factCard('\u{1F4A1}', data.advice),
   },
   {
     name: 'weather',
     pattern: /\[WEATHER:\s*(.+?)\]/,
     fetch: async (match) => {
       const location = match[1].trim();
-      const data = await fetch(`/api/weather?location=${encodeURIComponent(location)}`).then(r => r.json());
+      const data = await fetch(`/api/weather?location=${encodeURIComponent(location)}`).then((r) => r.json());
       if (data.temp === undefined) return null;
       data._location = location;
       return data;
@@ -1145,24 +1222,25 @@ const TAG_REGISTRY = [
       details.textContent = parts.join(' \u2022 ');
       card.appendChild(details);
       return card;
-    }
+    },
   },
   {
     name: 'music_search',
     pattern: /\[MUSIC_SEARCH:\s*(.+?)\]/,
     fetch: async (match) => {
-      const tracks = await fetch(`/api/music-search?q=${encodeURIComponent(match[1].trim())}`).then(r => r.json());
+      const tracks = await fetch(`/api/music-search?q=${encodeURIComponent(match[1].trim())}`).then((r) => r.json());
       const items = Array.isArray(tracks) ? tracks.slice(0, 3) : [];
       return items.length ? items : null;
     },
     render: (items) => {
       const wrapper = document.createElement('div');
-      items.forEach(track => {
+      items.forEach((track) => {
         const card = document.createElement('div');
         card.className = 'api-card music-card';
         if (track.albumArt) {
           const art = document.createElement('img');
-          art.src = track.albumArt; art.alt = track.album || track.title || 'Album';
+          art.src = track.albumArt;
+          art.alt = track.album || track.title || 'Album';
           art.className = 'music-card-art';
           art.addEventListener('error', () => art.remove());
           card.appendChild(art);
@@ -1186,23 +1264,24 @@ const TAG_REGISTRY = [
         card.appendChild(info);
         if (track.previewUrl) {
           const audio = document.createElement('audio');
-          audio.controls = true; audio.src = track.previewUrl;
+          audio.controls = true;
+          audio.src = track.previewUrl;
           audio.className = 'music-card-audio';
           card.appendChild(audio);
         }
         wrapper.appendChild(card);
       });
       return wrapper;
-    }
+    },
   },
   {
     name: 'dad_joke',
     pattern: /\[DAD_JOKE\]/,
     fetch: async () => {
-      const data = await fetch('/api/dad-joke').then(r => r.json());
+      const data = await fetch('/api/dad-joke').then((r) => r.json());
       return data.joke ? data : null;
     },
-    render: (data) => _factCard('\u{1F602}', data.joke)
+    render: (data) => _factCard('\u{1F602}', data.joke),
   },
   {
     name: 'trivia',
@@ -1210,7 +1289,7 @@ const TAG_REGISTRY = [
     fetch: async (match) => {
       const category = match[1] ? match[1].trim() : '';
       const url = category ? `/api/trivia?category=${encodeURIComponent(category)}` : '/api/trivia';
-      const data = await fetch(url).then(r => r.json());
+      const data = await fetch(url).then((r) => r.json());
       return data.question ? data : null;
     },
     render: (data) => {
@@ -1241,19 +1320,19 @@ const TAG_REGISTRY = [
       answersDiv.className = 'trivia-answers';
       const allAnswers = [
         { text: data.correctAnswer, correct: true },
-        ...(data.incorrectAnswers || []).map(a => ({ text: a, correct: false }))
+        ...(data.incorrectAnswers || []).map((a) => ({ text: a, correct: false })),
       ];
       for (let i = allAnswers.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [allAnswers[i], allAnswers[j]] = [allAnswers[j], allAnswers[i]];
       }
-      allAnswers.forEach(answer => {
+      allAnswers.forEach((answer) => {
         const btn = document.createElement('button');
         btn.className = 'trivia-answer';
         btn.textContent = answer.text;
         btn.dataset.correct = answer.correct ? 'true' : 'false';
         btn.addEventListener('click', () => {
-          answersDiv.querySelectorAll('.trivia-answer').forEach(b => {
+          answersDiv.querySelectorAll('.trivia-answer').forEach((b) => {
             b.disabled = true;
             if (b.dataset.correct === 'true') b.classList.add('correct');
           });
@@ -1264,39 +1343,43 @@ const TAG_REGISTRY = [
           fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: resultMsg, characterId: activeCharacter, sessionId })
-          }).then(r => r.json()).then(res => {
-            if (res.reply) addMessage(res.reply, 'assistant');
-          }).catch(() => {});
+            body: JSON.stringify({ message: resultMsg, characterId: activeCharacter, sessionId }),
+          })
+            .then((r) => r.json())
+            .then((res) => {
+              if (res.reply) addMessage(res.reply, 'assistant');
+            })
+            .catch(() => {});
         });
         answersDiv.appendChild(btn);
       });
       card.appendChild(answersDiv);
       return card;
-    }
+    },
   },
   {
     name: 'insult',
     pattern: /\[INSULT\]/,
     fetch: async () => {
-      const data = await fetch('/api/insult').then(r => r.json());
+      const data = await fetch('/api/insult').then((r) => r.json());
       return data.insult ? data : null;
     },
-    render: (data) => _factCard('\u{1F608}', data.insult)
+    render: (data) => _factCard('\u{1F608}', data.insult),
   },
   {
     name: 'space_pic',
     pattern: /\[SPACE_PIC\]/,
     fetch: async () => {
-      const data = await fetch('/api/space-pic').then(r => r.json());
-      return (data.imageUrl || data.title) ? data : null;
+      const data = await fetch('/api/space-pic').then((r) => r.json());
+      return data.imageUrl || data.title ? data : null;
     },
     render: (data) => {
       const card = document.createElement('div');
       card.className = 'api-card image-card';
       if (data.imageUrl && data.mediaType !== 'video') {
         const img = document.createElement('img');
-        img.src = data.imageUrl; img.alt = data.title || 'Space';
+        img.src = data.imageUrl;
+        img.alt = data.title || 'Space';
         img.addEventListener('click', () => openLightbox(data.imageUrl));
         img.addEventListener('error', () => img.remove());
         card.appendChild(img);
@@ -1312,31 +1395,31 @@ const TAG_REGISTRY = [
         card.appendChild(dateCap);
       }
       return card;
-    }
+    },
   },
   {
     name: 'fun_fact',
     pattern: /\[FUN_FACT\]/,
     fetch: async () => {
-      const data = await fetch('/api/fun-fact').then(r => r.json());
+      const data = await fetch('/api/fun-fact').then((r) => r.json());
       return data.fact ? data : null;
     },
-    render: (data) => _factCard('\u{1F913}', data.fact, data.source)
+    render: (data) => _factCard('\u{1F913}', data.fact, data.source),
   },
   {
     name: 'quote',
     pattern: /\[QUOTE\]/,
     fetch: async () => {
-      const data = await fetch('/api/quote').then(r => r.json());
+      const data = await fetch('/api/quote').then((r) => r.json());
       return data.quote ? data : null;
     },
-    render: (data) => _factCard('\u2728', data.quote, data.author)
+    render: (data) => _factCard('\u2728', data.quote, data.author),
   },
   {
     name: 'gif',
     pattern: /\[GIF:\s*(.+?)\]/,
     fetch: async (match) => {
-      const data = await fetch(`/api/gif?q=${encodeURIComponent(match[1])}`).then(r => r.json());
+      const data = await fetch(`/api/gif?q=${encodeURIComponent(match[1])}`).then((r) => r.json());
       if (!data.results?.length) return null;
       const pick = data.results[Math.floor(Math.random() * data.results.length)];
       return pick.url ? { url: pick.url, title: pick.title || match[1] } : null;
@@ -1345,8 +1428,11 @@ const TAG_REGISTRY = [
       const card = document.createElement('div');
       card.className = 'api-card image-card gif-card';
       const img = document.createElement('img');
-      img.src = data.url; img.alt = data.title; img.loading = 'lazy';
-      img.style.maxHeight = '180px'; img.style.width = 'auto';
+      img.src = data.url;
+      img.alt = data.title;
+      img.loading = 'lazy';
+      img.style.maxHeight = '180px';
+      img.style.width = 'auto';
       img.addEventListener('error', () => card.remove());
       card.appendChild(img);
       const caption = document.createElement('span');
@@ -1354,13 +1440,13 @@ const TAG_REGISTRY = [
       caption.textContent = 'via Giphy';
       card.appendChild(caption);
       return card;
-    }
+    },
   },
   {
     name: 'radar',
     pattern: /\[RADAR\]/,
     fetch: async () => {
-      const data = await fetch('/api/radar').then(r => r.json());
+      const data = await fetch('/api/radar').then((r) => r.json());
       return data.nwsGif ? data : null;
     },
     render: (data) => {
@@ -1375,15 +1461,19 @@ const TAG_REGISTRY = [
       header.appendChild(document.createTextNode(` Live Radar \u2014 ${data.station}`));
       card.appendChild(header);
       const img = document.createElement('img');
-      img.src = data.nwsGif; img.alt = `NWS Radar Loop - ${data.station}`;
-      img.className = 'radar-gif'; img.loading = 'lazy';
+      img.src = data.nwsGif;
+      img.alt = `NWS Radar Loop - ${data.station}`;
+      img.className = 'radar-gif';
+      img.loading = 'lazy';
       img.addEventListener('error', () => {
         img.style.display = 'none';
         const fallback = document.createElement('div');
         fallback.className = 'radar-fallback';
         const fbLink = document.createElement('a');
-        fbLink.href = 'https://radar.weather.gov/?settings=v1_eyJhZ2VuZGEiOnsiaWQiOm51bGwsImNlbnRlciI6Wy05NS45OSozNi4xNV0sInpvb20iOjh9fQ%3D%3D';
-        fbLink.target = '_blank'; fbLink.rel = 'noopener noreferrer';
+        fbLink.href =
+          'https://radar.weather.gov/?settings=v1_eyJhZ2VuZGEiOnsiaWQiOm51bGwsImNlbnRlciI6Wy05NS45OSozNi4xNV0sInpvb20iOjh9fQ%3D%3D';
+        fbLink.target = '_blank';
+        fbLink.rel = 'noopener noreferrer';
         fbLink.textContent = 'View radar on weather.gov \u2197';
         fallback.appendChild(fbLink);
         card.appendChild(fallback);
@@ -1393,17 +1483,18 @@ const TAG_REGISTRY = [
       footer.className = 'radar-card-footer';
       const footerLink = document.createElement('a');
       footerLink.href = 'https://radar.weather.gov';
-      footerLink.target = '_blank'; footerLink.rel = 'noopener noreferrer';
+      footerLink.target = '_blank';
+      footerLink.rel = 'noopener noreferrer';
       footerLink.textContent = 'NWS Radar \u2197';
       footer.appendChild(footerLink);
       card.appendChild(footer);
       return card;
-    }
+    },
   },
   {
     name: 'storm_stream',
     pattern: /\[STORM_STREAM\]/,
-    fetch: async () => await fetch('/api/storm-stream').then(r => r.json()),
+    fetch: async () => await fetch('/api/storm-stream').then((r) => r.json()),
     render: (data) => {
       const card = document.createElement('div');
       card.className = 'api-card storm-stream-card';
@@ -1428,55 +1519,73 @@ const TAG_REGISTRY = [
         : 'Local severe weather coverage \u2014 check for live updates during storms.';
       card.appendChild(desc);
       const link = document.createElement('a');
-      link.href = data.liveUrl; link.target = '_blank'; link.rel = 'noopener noreferrer';
+      link.href = data.liveUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
       link.className = 'storm-stream-link';
       link.textContent = data.isLive ? '\u{25B6}\u{FE0F} Watch Live Stream' : '\u{1F4FA} Open Weather Channel';
       card.appendChild(link);
       return card;
-    }
+    },
   },
   // ─── Mini-Game Tags (HKF-17) ───
   {
     name: 'wyr',
     pattern: /\[WYR:\s*(.+?)\s*\|\s*(.+?)\]/,
     fetch: async (match) => ({ optionA: match[1].trim(), optionB: match[2].trim() }),
-    render: (data) => renderWYRCard(data.optionA, data.optionB)
+    render: (data) => renderWYRCard(data.optionA, data.optionB),
   },
   {
     name: '20q_start',
     pattern: /\[20Q_START:\s*(.+?)\]/,
     fetch: async (match) => ({ category: match[1].trim() }),
-    render: (data) => render20QCard(data.category)
+    render: (data) => render20QCard(data.category),
   },
   {
     name: '20q_update',
     pattern: /\[20Q_UPDATE:\s*(\d+)\s*\|\s*(.+?)\]/,
     fetch: async (match) => ({ num: parseInt(match[1], 10), answer: match[2].trim() }),
-    render: (data) => { update20QCard(data.num, data.answer); return null; }
+    render: (data) => {
+      update20QCard(data.num, data.answer);
+      return null;
+    },
   },
   {
     name: '20q_end',
     pattern: /\[20Q_END:\s*(.+?)\s*\|\s*(\d+)\s*\|\s*(.+?)\]/,
     fetch: async (match) => ({ result: match[1].trim(), num: parseInt(match[2], 10), answer: match[3].trim() }),
-    render: (data) => { end20QCard(data.result, data.num, data.answer); return null; }
+    render: (data) => {
+      end20QCard(data.result, data.num, data.answer);
+      return null;
+    },
   },
   {
     name: 'charades',
     pattern: /\[CHARADES:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\]/,
     fetch: async (match) => ({ emojis: match[1].trim(), answer: match[2].trim(), hint: match[3].trim() }),
-    render: (data) => renderCharadesCard(data.emojis, data.answer, data.hint)
+    render: (data) => renderCharadesCard(data.emojis, data.answer, data.hint),
   },
   {
     name: 'trivia_showdown',
     pattern: /\[TRIVIA_SHOWDOWN:\s*(\d+)(?:\s*\|\s*(.+?))?\]/,
     fetch: async (match) => ({ totalRounds: parseInt(match[1], 10), category: match[2] ? match[2].trim() : '' }),
-    render: (data) => renderTriviaShowdown(data.totalRounds, data.category)
+    render: (data) => renderTriviaShowdown(data.totalRounds, data.category),
   },
   // ─── Result/feedback tags (strip only, no render) ───
   { name: 'wiki_search', pattern: /\[WIKI_SEARCH:\s*.+?\]/, fetch: async () => null, render: () => null },
   { name: 'wyr_result', pattern: /\[WYR_RESULT:\s*.+?\]/, fetch: async () => null, render: () => null },
-  { name: 'charades_guess', pattern: /\[CHARADES_GUESS:\s*.+?\s*\|\s*.+?\]/, fetch: async () => null, render: () => null },
-  { name: 'trivia_showdown_result', pattern: /\[TRIVIA_SHOWDOWN_RESULT:\s*.+?\]/, fetch: async () => null, render: () => null },
+  {
+    name: 'charades_guess',
+    pattern: /\[CHARADES_GUESS:\s*.+?\s*\|\s*.+?\]/,
+    fetch: async () => null,
+    render: () => null,
+  },
+  {
+    name: 'trivia_showdown_result',
+    pattern: /\[TRIVIA_SHOWDOWN_RESULT:\s*.+?\]/,
+    fetch: async () => null,
+    render: () => null,
+  },
 ];
 
 // ─── Inline Tag Pipeline (HKF-36) ───
@@ -1491,14 +1600,17 @@ function splitAtTags(text, registry) {
   // Find all tag matches with positions
   const matches = [];
   for (const entry of registry) {
-    const re = new RegExp(entry.pattern.source, entry.pattern.flags.includes('g') ? entry.pattern.flags : entry.pattern.flags + 'g');
+    const re = new RegExp(
+      entry.pattern.source,
+      entry.pattern.flags.includes('g') ? entry.pattern.flags : entry.pattern.flags + 'g',
+    );
     let m;
     while ((m = re.exec(text)) !== null) {
       matches.push({ start: m.index, end: m.index + m[0].length, entry, match: m });
     }
   }
   // Sort by position (earlier first), then by longer match first for same position
-  matches.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+  matches.sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start));
 
   // Remove overlapping matches (keep first/longest at each position)
   const filtered = [];
@@ -1536,15 +1648,20 @@ function splitAtTags(text, registry) {
  * @returns {string} HTML string.
  */
 function formatAssistantText(raw) {
-  const formatText = r => r
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/\n\s*[\*\-]\s+/g, '<br>\u2022 ')
-    .replace(/\n/g, '<br>');
+  const formatText = (r) =>
+    r
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/\n\s*[\*\-]\s+/g, '<br>\u2022 ')
+      .replace(/\n/g, '<br>');
 
   const formatted = raw
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
     .replace(/\[LYRICS:\s*([\s\S]+?)\]/g, (_, lyrics) => {
       const lines = lyrics.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
       const html = lines.trim().replace(/\s*\/\s*/g, '<br>');
@@ -1603,11 +1720,19 @@ function buildMessageContent(segments) {
  */
 function populatePlaceholders(placeholders) {
   for (const [id, { el, entry, match }] of placeholders) {
-    entry.fetch(match)
-      .then(data => {
-        if (data === null) { el.remove(); return; }
+    entry
+      .fetch(match)
+      .then((data) => {
+        if (data === null) {
+          el.remove();
+          return;
+        }
         const card = entry.render(data);
-        if (card) { el.replaceWith(card); } else { el.remove(); }
+        if (card) {
+          el.replaceWith(card);
+        } else {
+          el.remove();
+        }
         chatArea.scrollTop = chatArea.scrollHeight;
       })
       .catch(() => el.remove());
@@ -1642,7 +1767,7 @@ const REACTION_MAP = {
   angry: ['angry', 'facepalm', 'baka'],
   sassy: ['smug', 'thumbsup', 'yeet'],
   tired: ['yawn', 'bored', 'sleep'],
-  excited: ['highfive', 'thumbsup', 'dance']
+  excited: ['highfive', 'thumbsup', 'dance'],
 };
 
 let welcomeActive = false;
@@ -1686,7 +1811,7 @@ async function sendMessage() {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     });
 
     const data = await res.json();
@@ -1701,7 +1826,7 @@ async function sendMessage() {
   } catch (err) {
     hideTyping();
     playReplyChime();
-    addMessage('I couldn\'t reach the server... Please try again! \u2661', 'assistant');
+    addMessage("I couldn't reach the server... Please try again! \u2661", 'assistant');
   }
 
   sendBtn.disabled = false;
@@ -1815,7 +1940,7 @@ async function loadGallery() {
     }
 
     galleryGrid.innerHTML = '';
-    images.forEach(img => {
+    images.forEach((img) => {
       const item = document.createElement('div');
       item.className = 'gallery-item';
 
@@ -1891,7 +2016,7 @@ refreshMemoriesBtn.addEventListener('click', loadMemories);
 function renderCoreMemory(coreMemory, characterId) {
   const categories = Object.keys(CORE_MEMORY_LABELS);
   let totalEntries = 0;
-  categories.forEach(cat => {
+  categories.forEach((cat) => {
     if (Array.isArray(coreMemory[cat])) totalEntries += coreMemory[cat].length;
   });
 
@@ -1943,7 +2068,7 @@ function renderCoreMemory(coreMemory, characterId) {
   });
 
   // Build each category
-  categories.forEach(cat => {
+  categories.forEach((cat) => {
     const entries = Array.isArray(coreMemory[cat]) ? coreMemory[cat] : [];
 
     const catDiv = document.createElement('div');
@@ -2033,8 +2158,8 @@ function renderCoreMemory(coreMemory, characterId) {
           body: JSON.stringify({
             characterId: characterId,
             category: cat,
-            entries: updatedEntries
-          })
+            entries: updatedEntries,
+          }),
         });
         if (!resp.ok) throw new Error(`Server error: ${resp.status}`);
         loadMemories();
@@ -2238,7 +2363,7 @@ async function loadMemories() {
     }
 
     memoryList.innerHTML = '';
-    memories.forEach(mem => {
+    memories.forEach((mem) => {
       const card = document.createElement('div');
       card.className = 'memory-card';
 
@@ -2263,7 +2388,11 @@ async function loadMemories() {
         const date = document.createElement('div');
         date.className = 'memory-date';
         const ts = mem.updated_at || mem.created_at;
-        date.textContent = new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        date.textContent = new Date(ts).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
         info.appendChild(date);
       }
 
@@ -2323,7 +2452,12 @@ async function loadJournalTab() {
       const dateSpan = document.createElement('span');
       dateSpan.className = 'journal-card-date';
       const d = new Date(s.date);
-      dateSpan.textContent = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      dateSpan.textContent = d.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
 
       const countBadge = document.createElement('span');
       countBadge.className = 'journal-card-count';
@@ -2397,11 +2531,15 @@ async function loadVideosTab() {
   // Load play history from localStorage
   let history = [];
   const historyKey = currentUser?.email ? `videoHistory-${currentUser.email}` : 'videoHistory';
-  try { history = JSON.parse(localStorage.getItem(historyKey) || '[]'); } catch { history = []; }
+  try {
+    history = JSON.parse(localStorage.getItem(historyKey) || '[]');
+  } catch {
+    history = [];
+  }
 
   // Filter history to exclude already-saved videos
-  const savedIds = new Set(favorites.map(f => f.videoId));
-  const unseenHistory = history.filter(h => !savedIds.has(h.videoId));
+  const savedIds = new Set(favorites.map((f) => f.videoId));
+  const unseenHistory = history.filter((h) => !savedIds.has(h.videoId));
 
   const hasSaved = favorites.length > 0;
   const hasHistory = unseenHistory.length > 0;
@@ -2409,15 +2547,15 @@ async function loadVideosTab() {
   // Show/hide sections
   savedSection.style.display = hasSaved ? '' : 'none';
   historySection.style.display = hasHistory ? '' : 'none';
-  videosEmpty.style.display = (hasSaved || hasHistory) ? 'none' : '';
+  videosEmpty.style.display = hasSaved || hasHistory ? 'none' : '';
 
   // Render saved favorites
-  favorites.forEach(fav => {
+  favorites.forEach((fav) => {
     savedGrid.appendChild(createVideoCard(fav, 'saved'));
   });
 
   // Render history
-  unseenHistory.forEach(item => {
+  unseenHistory.forEach((item) => {
     historyGrid.appendChild(createVideoCard(item, 'history'));
   });
 }
@@ -2463,8 +2601,8 @@ function createVideoCard(video, mode) {
             videoId: video.videoId,
             url: video.url || `https://www.youtube.com/watch?v=${video.videoId}`,
             title: video.title || 'Untitled',
-            thumbnail: video.thumbnail || ''
-          })
+            thumbnail: video.thumbnail || '',
+          }),
         });
         if (resp.ok) {
           saveBtn.textContent = 'Saved \u2665';
@@ -2526,13 +2664,31 @@ if (window.visualViewport) {
 
 // ─── Accent Color ───
 const COLOR_MAP = {
-  red: '#E74C3C', pink: '#FF69B4', hotpink: '#FF69B4', rose: '#FF6B81',
-  blue: '#3498DB', navy: '#2C3E8C', skyblue: '#5DADE2', cyan: '#00BCD4', teal: '#009688',
-  green: '#27AE60', mint: '#00D2A0', lime: '#8BC34A', sage: '#8FBC8F',
-  purple: '#9B59B6', violet: '#7C4DFF', lavender: '#B39DDB', lilac: '#C8A2C8',
-  orange: '#FF9800', coral: '#FF7675', peach: '#FFAB91', salmon: '#FA8072',
-  yellow: '#F1C40F', gold: '#FFD700',
-  black: '#5C4155', white: '#FF69B4'
+  red: '#E74C3C',
+  pink: '#FF69B4',
+  hotpink: '#FF69B4',
+  rose: '#FF6B81',
+  blue: '#3498DB',
+  navy: '#2C3E8C',
+  skyblue: '#5DADE2',
+  cyan: '#00BCD4',
+  teal: '#009688',
+  green: '#27AE60',
+  mint: '#00D2A0',
+  lime: '#8BC34A',
+  sage: '#8FBC8F',
+  purple: '#9B59B6',
+  violet: '#7C4DFF',
+  lavender: '#B39DDB',
+  lilac: '#C8A2C8',
+  orange: '#FF9800',
+  coral: '#FF7675',
+  peach: '#FFAB91',
+  salmon: '#FA8072',
+  yellow: '#F1C40F',
+  gold: '#FFD700',
+  black: '#5C4155',
+  white: '#FF69B4',
 };
 
 /**
@@ -2600,7 +2756,7 @@ async function runWelcomeFlow() {
   imageBtn.style.display = 'none'; // Hide image attach during onboarding
 
   function waitForInput() {
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       welcomeResolve = resolve;
     });
   }
@@ -2608,7 +2764,7 @@ async function runWelcomeFlow() {
   async function melodyTyping(delay = 800) {
     showTyping();
     playTypingTick();
-    await new Promise(r => setTimeout(r, delay));
+    await new Promise((r) => setTimeout(r, delay));
     hideTyping();
     playReplyChime();
   }
@@ -2621,14 +2777,14 @@ async function runWelcomeFlow() {
   addMessage(char.greeting2, 'assistant');
 
   // Step 2: Get name
-  messageInput.placeholder = "Type your name...";
+  messageInput.placeholder = 'Type your name...';
   const nameRaw = await waitForInput();
   // Extract first name for display, save full input to mem0 for context
   const name = nameRaw.split(/[\s,]+/)[0].replace(/[^a-zA-Z'-]/g, '') || nameRaw.trim();
   await fetch('/api/welcome', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'name', value: nameRaw })
+    body: JSON.stringify({ type: 'name', value: nameRaw }),
   });
 
   await melodyTyping(800);
@@ -2638,15 +2794,15 @@ async function runWelcomeFlow() {
   addMessage(char.greetAskColor, 'assistant');
 
   // Step 3: Get color
-  messageInput.placeholder = "Type your favorite color...";
+  messageInput.placeholder = 'Type your favorite color...';
   const colorRaw = await waitForInput();
   // Try to match a known color from their input, fall back to first word
   const colorWords = colorRaw.toLowerCase().split(/[\s,]+/);
-  const color = colorWords.find(w => COLOR_MAP[w]) || colorWords[0] || colorRaw.trim();
+  const color = colorWords.find((w) => COLOR_MAP[w]) || colorWords[0] || colorRaw.trim();
   await fetch('/api/welcome', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'color', value: colorRaw })
+    body: JSON.stringify({ type: 'color', value: colorRaw }),
   });
 
   applyAccentColor(color);
@@ -2658,12 +2814,12 @@ async function runWelcomeFlow() {
   addMessage(char.greetAskInterests, 'assistant');
 
   // Step 4: Get interests
-  messageInput.placeholder = "Tell me what you like...";
+  messageInput.placeholder = 'Tell me what you like...';
   const interests = await waitForInput();
   await fetch('/api/welcome', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'interests', value: interests })
+    body: JSON.stringify({ type: 'interests', value: interests }),
   });
 
   await melodyTyping(1000);
@@ -2691,31 +2847,33 @@ async function runWelcomeFlow() {
 async function checkWeatherAlerts() {
   // Try browser geolocation first, fall back to server default location
   const fetchAlerts = async (lat, lon) => {
-    const url = lat && lon
-      ? `/api/weather-alerts?lat=${lat}&lon=${lon}`
-      : '/api/weather-alerts';
+    const url = lat && lon ? `/api/weather-alerts?lat=${lat}&lon=${lon}` : '/api/weather-alerts';
     const res = await fetch(url);
     const data = await res.json();
     if (!data.alerts || !data.alerts.length) return;
 
-    const severe = data.alerts.filter(a =>
-      a.severity === 'Extreme' || a.severity === 'Severe'
-    );
+    const severe = data.alerts.filter((a) => a.severity === 'Extreme' || a.severity === 'Severe');
     if (!severe.length) return;
 
     const charConfig = CHARACTER_CONFIG[activeCharacter] || CHARACTER_CONFIG.melody;
     const charName = charConfig.name;
 
     // Show alert cards
-    severe.forEach(alert => {
+    severe.forEach((alert) => {
       const card = document.createElement('div');
       card.className = `weather-alert-card severity-${alert.severity.toLowerCase()}`;
 
-      const icon = alert.event.toLowerCase().includes('tornado') ? '\u{1F32A}\u{FE0F}' :
-                   alert.event.toLowerCase().includes('thunder') ? '\u{26A1}' :
-                   alert.event.toLowerCase().includes('flood') ? '\u{1F30A}' :
-                   alert.event.toLowerCase().includes('winter') ? '\u{2744}\u{FE0F}' :
-                   alert.event.toLowerCase().includes('heat') ? '\u{1F525}' : '\u{26A0}\u{FE0F}';
+      const icon = alert.event.toLowerCase().includes('tornado')
+        ? '\u{1F32A}\u{FE0F}'
+        : alert.event.toLowerCase().includes('thunder')
+          ? '\u{26A1}'
+          : alert.event.toLowerCase().includes('flood')
+            ? '\u{1F30A}'
+            : alert.event.toLowerCase().includes('winter')
+              ? '\u{2744}\u{FE0F}'
+              : alert.event.toLowerCase().includes('heat')
+                ? '\u{1F525}'
+                : '\u{26A0}\u{FE0F}';
 
       const alertHeader = document.createElement('div');
       alertHeader.className = 'alert-header';
@@ -2759,18 +2917,23 @@ async function checkWeatherAlerts() {
     avatar.appendChild(avatarImg);
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
-    bubble.textContent = activeCharacter === 'kuromi'
-      ? `Hey! There's a ${topAlert.event} alert. Even I know when to take cover. I pulled up the radar and the local news is streaming — don't say I never did anything nice for you!`
-      : activeCharacter === 'retsuko'
-      ? `Hey... there's a ${topAlert.event} alert right now. I pulled up the radar so you can see what's coming, and the local weather team is streaming. Please stay safe! I worry about you.`
-      : `Oh no~! There's a ${topAlert.event} alert! Mama always says safety comes first! I brought up the radar so you can watch the storm, and the local news is covering it live. Please be careful! \u2661`;
+    bubble.textContent =
+      activeCharacter === 'kuromi'
+        ? `Hey! There's a ${topAlert.event} alert. Even I know when to take cover. I pulled up the radar and the local news is streaming — don't say I never did anything nice for you!`
+        : activeCharacter === 'retsuko'
+          ? `Hey... there's a ${topAlert.event} alert right now. I pulled up the radar so you can see what's coming, and the local weather team is streaming. Please stay safe! I worry about you.`
+          : `Oh no~! There's a ${topAlert.event} alert! Mama always says safety comes first! I brought up the radar so you can watch the storm, and the local news is covering it live. Please be careful! \u2661`;
     alertComment.appendChild(avatar);
     alertComment.appendChild(bubble);
 
     // Fetch radar and storm stream in parallel, append to bubble
     const [radarData, streamData] = await Promise.all([
-      fetch('/api/radar').then(r => r.json()).catch(() => null),
-      fetch('/api/storm-stream').then(r => r.json()).catch(() => null)
+      fetch('/api/radar')
+        .then((r) => r.json())
+        .catch(() => null),
+      fetch('/api/storm-stream')
+        .then((r) => r.json())
+        .catch(() => null),
     ]);
 
     // Radar card inside the bubble
@@ -2808,7 +2971,9 @@ async function checkWeatherAlerts() {
       streamLink.target = '_blank';
       streamLink.rel = 'noopener';
       streamLink.className = 'storm-stream-link';
-      streamLink.textContent = streamData.isLive ? '\u{25B6}\u{FE0F} Watch Live Stream' : '\u{1F4FA} Open Weather Channel';
+      streamLink.textContent = streamData.isLive
+        ? '\u{25B6}\u{FE0F} Watch Live Stream'
+        : '\u{1F4FA} Open Weather Channel';
       streamCard.appendChild(streamLink);
       bubble.appendChild(streamCard);
     }
@@ -2823,7 +2988,7 @@ async function checkWeatherAlerts() {
       navigator.geolocation.getCurrentPosition(
         (pos) => fetchAlerts(pos.coords.latitude, pos.coords.longitude).catch(() => {}),
         () => fetchAlerts().catch(() => {}),
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
     } else {
       await fetchAlerts();
@@ -2858,7 +3023,7 @@ function renderWYRCard(optionA, optionB) {
     btn.className = 'wyr-option';
     btn.textContent = option;
     btn.addEventListener('click', () => {
-      optionsDiv.querySelectorAll('.wyr-option').forEach(b => {
+      optionsDiv.querySelectorAll('.wyr-option').forEach((b) => {
         b.disabled = true;
         b.classList.remove('selected');
       });
@@ -2871,11 +3036,14 @@ function renderWYRCard(optionA, optionB) {
         body: JSON.stringify({
           message: `[WYR_RESULT: ${option}]`,
           characterId: activeCharacter,
-          sessionId
+          sessionId,
+        }),
+      })
+        .then((r) => r.json())
+        .then((res) => {
+          if (res.reply) addMessage(res.reply, 'assistant');
         })
-      }).then(r => r.json()).then(res => {
-        if (res.reply) addMessage(res.reply, 'assistant');
-      }).catch(() => {});
+        .catch(() => {});
     });
     optionsDiv.appendChild(btn);
   });
@@ -2911,7 +3079,7 @@ function render20QCard(category) {
 
   const title = document.createElement('div');
   title.className = 'twentyq-title';
-  title.textContent = '20 Questions — Ask yes/no questions to guess what I\'m thinking of!';
+  title.textContent = "20 Questions — Ask yes/no questions to guess what I'm thinking of!";
   card.appendChild(title);
 
   const history = document.createElement('div');
@@ -2939,7 +3107,12 @@ function update20QCard(questionNum, answer) {
   if (history) {
     const entry = document.createElement('div');
     entry.className = 'twentyq-entry';
-    const answerClass = answer.toLowerCase() === 'yes' ? 'twentyq-yes' : answer.toLowerCase() === 'no' ? 'twentyq-no' : 'twentyq-sometimes';
+    const answerClass =
+      answer.toLowerCase() === 'yes'
+        ? 'twentyq-yes'
+        : answer.toLowerCase() === 'no'
+          ? 'twentyq-no'
+          : 'twentyq-sometimes';
     entry.innerHTML = `<span class="twentyq-q-num">Q${questionNum}</span> <span class="${answerClass}">${answer}</span>`;
     history.appendChild(entry);
     history.scrollTop = history.scrollHeight;
@@ -2963,9 +3136,7 @@ function end20QCard(result, questionNum, answer) {
 
   const banner = document.createElement('div');
   banner.className = result === 'win' ? 'twentyq-result twentyq-win' : 'twentyq-result twentyq-lose';
-  banner.textContent = result === 'win'
-    ? `You got it in ${questionNum} questions!`
-    : `The answer was: ${answer}`;
+  banner.textContent = result === 'win' ? `You got it in ${questionNum} questions!` : `The answer was: ${answer}`;
   card.appendChild(banner);
 }
 
@@ -3021,11 +3192,14 @@ function renderCharadesCard(emojis, answer, hint) {
       body: JSON.stringify({
         message: `[CHARADES_GUESS: ${guess} | ${answer}]`,
         characterId: activeCharacter,
-        sessionId
+        sessionId,
+      }),
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        if (res.reply) addMessage(res.reply, 'assistant');
       })
-    }).then(r => r.json()).then(res => {
-      if (res.reply) addMessage(res.reply, 'assistant');
-    }).catch(() => {});
+      .catch(() => {});
   }
 
   submitBtn.addEventListener('click', submitGuess);
@@ -3069,13 +3243,13 @@ function renderTriviaShowdown(totalRounds, category) {
 
   function fetchQuestion() {
     const url = category ? `/api/trivia?category=${encodeURIComponent(category)}` : '/api/trivia';
-    return fetch(url).then(r => r.json());
+    return fetch(url).then((r) => r.json());
   }
 
   function shuffleAnswers(data) {
     const allAnswers = [
       { text: data.correctAnswer, correct: true },
-      ...(data.incorrectAnswers || []).map(a => ({ text: a, correct: false }))
+      ...(data.incorrectAnswers || []).map((a) => ({ text: a, correct: false })),
     ];
     // Fisher-Yates shuffle
     for (let i = allAnswers.length - 1; i > 0; i--) {
@@ -3119,14 +3293,14 @@ function renderTriviaShowdown(totalRounds, category) {
     answersDiv.className = 'trivia-answers';
 
     const allAnswers = shuffleAnswers(data);
-    allAnswers.forEach(answer => {
+    allAnswers.forEach((answer) => {
       const btn = document.createElement('button');
       btn.className = 'trivia-answer';
       btn.textContent = answer.text;
       btn.dataset.correct = answer.correct ? 'true' : 'false';
       btn.addEventListener('click', () => {
         // Disable all buttons
-        answersDiv.querySelectorAll('.trivia-answer').forEach(b => {
+        answersDiv.querySelectorAll('.trivia-answer').forEach((b) => {
           b.disabled = true;
           if (b.dataset.correct === 'true') b.classList.add('correct');
         });
@@ -3157,13 +3331,15 @@ function renderTriviaShowdown(totalRounds, category) {
   function loadNextRound() {
     const questionPromise = prefetchedQuestion || fetchQuestion();
     prefetchedQuestion = null;
-    questionPromise.then(data => {
-      if (data.error) {
-        showRetry();
-      } else {
-        renderQuestion(data);
-      }
-    }).catch(() => showRetry());
+    questionPromise
+      .then((data) => {
+        if (data.error) {
+          showRetry();
+        } else {
+          renderQuestion(data);
+        }
+      })
+      .catch(() => showRetry());
   }
 
   function showRetry() {
@@ -3174,13 +3350,15 @@ function renderTriviaShowdown(totalRounds, category) {
     retryBtn.addEventListener('click', () => {
       retryBtn.disabled = true;
       retryBtn.textContent = 'Loading...';
-      fetchQuestion().then(data => {
-        if (data.error) {
-          showRetry();
-        } else {
-          renderQuestion(data);
-        }
-      }).catch(() => showRetry());
+      fetchQuestion()
+        .then((data) => {
+          if (data.error) {
+            showRetry();
+          } else {
+            renderQuestion(data);
+          }
+        })
+        .catch(() => showRetry());
     });
     questionArea.appendChild(retryBtn);
   }
@@ -3223,20 +3401,25 @@ function renderTriviaShowdown(totalRounds, category) {
     fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: resultMsg, characterId: activeCharacter, sessionId })
-    }).then(r => r.json()).then(res => {
-      if (res.reply) addMessage(res.reply, 'assistant');
-    }).catch(() => {});
+      body: JSON.stringify({ message: resultMsg, characterId: activeCharacter, sessionId }),
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        if (res.reply) addMessage(res.reply, 'assistant');
+      })
+      .catch(() => {});
   }
 
   // Start the first round
-  fetchQuestion().then(data => {
-    if (data.error) {
-      showRetry();
-    } else {
-      renderQuestion(data);
-    }
-  }).catch(() => showRetry());
+  fetchQuestion()
+    .then((data) => {
+      if (data.error) {
+        showRetry();
+      } else {
+        renderQuestion(data);
+      }
+    })
+    .catch(() => showRetry());
 
   return card;
 }

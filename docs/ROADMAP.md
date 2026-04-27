@@ -245,6 +245,7 @@ Replace direct Google Gemini SDK with a provider abstraction layer that supports
 multiple LLM backends through a single interface.
 
 **Why OpenRouter first:**
+
 - Single API key gives access to Gemini, OpenAI, Anthropic, Meta, Mistral, and
   open-source models
 - Built-in usage monitoring and per-model cost tracking
@@ -253,11 +254,13 @@ multiple LLM backends through a single interface.
 - We already have $100 in OpenRouter credits for non-Google models
 
 **Provider targets (in order):**
+
 1. **OpenRouter** — broadest coverage, easiest swap (OpenAI SDK compatible)
 2. **Direct OpenAI** — for users with OpenAI keys
 3. **Direct Gemini** — keep existing path as an option
 
 **Implementation scope:**
+
 - Thin adapter layer normalizing message format, image/vision encoding, system
   prompt injection, and JSON mode across providers
 - Provider config in env vars (`LLM_PROVIDER=openrouter|openai|gemini`,
@@ -269,12 +272,14 @@ multiple LLM backends through a single interface.
 - Per-model cost display from OpenRouter's pricing API
 
 **BYOK (Bring Your Own Key) — future:**
+
 - Settings UI for users to enter their own API keys
 - Keys stored locally (localStorage or encrypted server-side per user)
 - Provider auto-detection from key format
 - Rate limiting and key validation
 
 **Technical notes:**
+
 - 4 `generateContent()` call sites to convert (main chat, wiki followup, core
   memory extraction, session summary)
 - Google's `{ role, parts: [{ text }] }` → OpenAI's `{ role, content }`
@@ -289,37 +294,37 @@ multiple LLM backends through a single interface.
 
 ### Currently Integrated
 
-| API | Tag | Auth | Status |
-|-----|-----|------|--------|
-| Giphy | `[GIF: query]` | API key | Active |
-| Brave Search (images) | `[IMAGE_SEARCH: query]` | API key | Active |
-| Brave Search (videos) | `[VIDEO_SEARCH: query]` | API key | Active |
-| NWS + Open-Meteo | `[WEATHER: location]` | None | Active |
-| TheMealDB | `[RECIPE: name]` / `[RANDOM_RECIPE]` | None | Active |
-| TheCocktailDB | `[COCKTAIL: name]` / `[RANDOM_COCKTAIL]` | None | Active |
-| Deezer | `[MUSIC_SEARCH: query]` | None | Active |
-| Dog CEO | `[DOG_PIC: breed]` / `[RANDOM_DOG]` | None | Active |
-| The Cat API | `[CAT_PIC]` | None | Active |
-| Cat Facts | `[CAT_FACT]` | None | Active |
-| RandomFox | `[FOX_PIC]` | None | Active |
-| Coffee Pic | `[COFFEE_PIC]` | None | Active |
-| Advice Slip | `[ADVICE]` | None | Active |
-| icanhazdadjoke | `[DAD_JOKE]` | None | Active |
-| Open Trivia DB | `[TRIVIA]` | None | Active |
-| Evil Insult | `[INSULT]` | None | Active |
-| NASA APOD | `[SPACE_PIC]` | None | Active |
-| uselessfacts | `[FUN_FACT]` | None | Active |
-| Quotable | `[QUOTE]` | None | Active |
-| nekos.best | `[REACTION: emotion]` | None | Active |
-| MediaWiki (HKIA/MC) | `[WIKI_SEARCH: id query]` | None | Active |
+| API                   | Tag                                      | Auth    | Status |
+| --------------------- | ---------------------------------------- | ------- | ------ |
+| Giphy                 | `[GIF: query]`                           | API key | Active |
+| Brave Search (images) | `[IMAGE_SEARCH: query]`                  | API key | Active |
+| Brave Search (videos) | `[VIDEO_SEARCH: query]`                  | API key | Active |
+| NWS + Open-Meteo      | `[WEATHER: location]`                    | None    | Active |
+| TheMealDB             | `[RECIPE: name]` / `[RANDOM_RECIPE]`     | None    | Active |
+| TheCocktailDB         | `[COCKTAIL: name]` / `[RANDOM_COCKTAIL]` | None    | Active |
+| Deezer                | `[MUSIC_SEARCH: query]`                  | None    | Active |
+| Dog CEO               | `[DOG_PIC: breed]` / `[RANDOM_DOG]`      | None    | Active |
+| The Cat API           | `[CAT_PIC]`                              | None    | Active |
+| Cat Facts             | `[CAT_FACT]`                             | None    | Active |
+| RandomFox             | `[FOX_PIC]`                              | None    | Active |
+| Coffee Pic            | `[COFFEE_PIC]`                           | None    | Active |
+| Advice Slip           | `[ADVICE]`                               | None    | Active |
+| icanhazdadjoke        | `[DAD_JOKE]`                             | None    | Active |
+| Open Trivia DB        | `[TRIVIA]`                               | None    | Active |
+| Evil Insult           | `[INSULT]`                               | None    | Active |
+| NASA APOD             | `[SPACE_PIC]`                            | None    | Active |
+| uselessfacts          | `[FUN_FACT]`                             | None    | Active |
+| Quotable              | `[QUOTE]`                                | None    | Active |
+| nekos.best            | `[REACTION: emotion]`                    | None    | Active |
+| MediaWiki (HKIA/MC)   | `[WIKI_SEARCH: id query]`                | None    | Active |
 
 ### Planned (Phase 2)
 
-| API | Tag | Auth | Notes |
-|-----|-----|------|-------|
-| Bored API | `[ACTIVITY]` | None | Activity suggestions |
-| Free Dictionary | `[DEFINE: word]` | None | Definitions + pronunciation |
-| On This Day | `[HISTORY]` | None | Historical events |
-| PokeAPI | `[POKEMON: name]` | None | Pokemon data |
-| DuckDuckGo IA | `[LOOKUP: query]` | None | Quick factual answers |
-| Horoscope API | `[HOROSCOPE: sign]` | None | Daily horoscope |
+| API             | Tag                 | Auth | Notes                       |
+| --------------- | ------------------- | ---- | --------------------------- |
+| Bored API       | `[ACTIVITY]`        | None | Activity suggestions        |
+| Free Dictionary | `[DEFINE: word]`    | None | Definitions + pronunciation |
+| On This Day     | `[HISTORY]`         | None | Historical events           |
+| PokeAPI         | `[POKEMON: name]`   | None | Pokemon data                |
+| DuckDuckGo IA   | `[LOOKUP: query]`   | None | Quick factual answers       |
+| Horoscope API   | `[HOROSCOPE: sign]` | None | Daily horoscope             |
