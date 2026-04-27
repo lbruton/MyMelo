@@ -1,6 +1,6 @@
 # PWA & Service Worker
 
-> **Last verified:** 2026-03-06
+> **Last verified:** 2026-04-27
 > **Source files:** `public/sw.js`, `public/manifest.json`, `public/index.html` (registration), `public/app.js` (install prompt)
 > **Known gaps:** None
 
@@ -75,17 +75,39 @@ The `<link rel="icon">` and `<link rel="apple-touch-icon">` in `index.html` both
 
 ## Service Worker Registration
 
-Registration is done inline in `index.html`, not in `app.js`:
+Registration is done inline at the bottom of `index.html`, not in `app.js`:
 
 ```html
 <script>
+  // Service Worker registration — updateViaCache:'none' forces network fetch of sw.js
+  // on every navigation so cache version bumps propagate immediately
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker
+      .register('/sw.js', { updateViaCache: 'none' })
+      .then((reg) => {
+        // Check for updates on every page load
+        reg.update().catch(() => {});
+        // When a new SW is waiting, tell it to activate immediately
+        reg.addEventListener('updatefound', () => {
+          const newSW = reg.installing;
+          if (newSW) {
+            newSW.addEventListener('statechange', () => {
+              if (newSW.state === 'activated') {
+                window.location.reload();
+              }
+            });
+          }
+        });
+      })
+      .catch(() => {});
   }
 </script>
 ```
 
 - Feature-detected via `'serviceWorker' in navigator`
+- Registered with `{ updateViaCache: 'none' }` — the browser always fetches `sw.js` from the network, never the HTTP cache, so any byte-level change triggers SW installation immediately
+- `reg.update()` is called on every page load to poll for SW updates even between navigations
+- When a new SW activates, the page reloads automatically to pick up fresh assets
 - Registration errors are silently caught (non-critical for app function)
 - The service worker file is served from the root (`/sw.js`)
 
@@ -96,10 +118,11 @@ File: `public/sw.js`
 ### Cache Name
 
 ```js
-const CACHE_NAME = 'melody-v2.6.0';
+const VERSION = '3.12.0';
+const CACHE_NAME = `melody-v${VERSION}`;
 ```
 
-Format: `melody-vMAJOR.MINOR.PATCH`. Bump this value on every deploy to invalidate stale assets.
+Format: `` `melody-v${VERSION}` `` — the cache name is derived from the same `VERSION` constant used for the app shell URLs. Currently resolves to `melody-v3.12.0`. Bumping `VERSION` on every deploy automatically changes the cache name, which causes the activate event to delete all old caches.
 
 ### App Shell (Pre-cached on Install)
 
@@ -107,8 +130,8 @@ Format: `melody-vMAJOR.MINOR.PATCH`. Bump this value on every deploy to invalida
 const APP_SHELL = [
   '/',
   '/index.html',
-  '/style.css',
-  '/app.js',
+  `/style.css?v=${VERSION}`,
+  `/app.js?v=${VERSION}`,
   '/manifest.json',
   '/images/melody-avatar.png',
   '/images/kuromi-avatar.png',
@@ -118,56 +141,54 @@ const APP_SHELL = [
 ];
 ```
 
-These 10 resources are cached during the `install` event before the service worker activates. The Kuromi and Retsuko character avatars were added in v2.6.0 alongside multi-character support.
+These 10 resources are cached during the `install` event before the service worker activates. The `?v=` query params on `style.css` and `app.js` match the `?v=` params used in the `<link>` and `<script>` tags in `index.html`, which bust Chrome's HTTP disk cache independently of the service worker. The Kuromi and Retsuko character avatars were added in v2.6.0 alongside multi-character support.
 
 ### Strategy by Route Type
 
-| Route Pattern   | Strategy               | Rationale                                            |
-| --------------- | ---------------------- | ---------------------------------------------------- |
-| `/api/*`        | Network-only           | API responses must be fresh (chat, memories, search) |
-| `/data/*`       | Network-only           | User-uploaded images must be current                 |
-| Everything else | Stale-while-revalidate | Serve cached immediately, update in background       |
+| Route Pattern   | Strategy                                  | Rationale                                                          |
+| --------------- | ----------------------------------------- | ------------------------------------------------------------------ |
+| `/api/*`        | Network-only                              | API responses must be fresh; version gate depends on this          |
+| `/data/*`       | Network-only                              | User-uploaded images must be current                               |
+| Everything else | Network-first (cache as offline fallback) | Guaranteed freshness on every load; cache only serves when offline |
 
-### Stale-While-Revalidate Flow
+### Network-First Flow
 
 ```
 Request arrives
-  ├── Check cache for match
-  │   ├── HIT: return cached response immediately
-  │   │         └── Background: fetch from network → update cache
-  │   └── MISS: await network fetch → cache response → return
-  └── Network fails + cache exists: return stale cached copy
+  ├── /api/* or /data/*: pass through (no respondWith) → browser fetches normally
+  └── Everything else:
+      ├── Attempt network fetch
+      │   ├── SUCCESS: update cache with fresh response → return response
+      │   └── FAIL (offline): return cached copy if available
+      └── No cached copy available offline: request fails
 ```
 
 ```js
+// Fetch: network-first for everything. Cache is offline-only fallback.
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // Network-only: skip respondWith entirely, let browser handle
+  // Network-only for API calls and user data (no caching ever)
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/data/')) {
     return;
   }
 
-  // Stale-while-revalidate for everything else
+  // Network-first for all static assets — cache is offline fallback only
   e.respondWith(
-    caches.open(CACHE_NAME).then((cache) =>
-      cache.match(e.request).then((cached) => {
-        const fetchPromise = fetch(e.request)
-          .then((response) => {
-            if (response.ok) {
-              cache.put(e.request, response.clone());
-            }
-            return response;
-          })
-          .catch(() => cached);
-        return cached || fetchPromise;
-      }),
-    ),
+    fetch(e.request)
+      .then((response) => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(e.request)),
   );
 });
 ```
 
-Key detail for network-only routes: the handler calls `return` without invoking `e.respondWith()`, which causes the browser to perform a normal network fetch as if no service worker existed.
+Key detail for network-only routes: the handler calls `return` without invoking `e.respondWith()`, which causes the browser to perform a normal network fetch as if no service worker existed. This is what allows the `<head>` version gate to reliably reach `/api/version` even while the service worker is active.
 
 ## Install Lifecycle
 
@@ -189,10 +210,20 @@ activate → enumerate cache keys → delete any key !== CACHE_NAME → clients.
 
 ### Cache Invalidation on Deploy
 
-1. Bump `CACHE_NAME` in `sw.js` (e.g., `melody-v2.5.1` to `melody-v2.6.0`)
+Every deploy requires bumping the version string in exactly three places:
+
+| File                | Location                    | Example                                                             |
+| ------------------- | --------------------------- | ------------------------------------------------------------------- |
+| `server.js`         | `APP_VERSION` constant      | `const APP_VERSION = '3.12.0';`                                     |
+| `public/sw.js`      | `VERSION` constant          | `const VERSION = '3.12.0';`                                         |
+| `public/index.html` | Version gate + `?v=` params | `d.version !== '3.12.0'` + `app.js?v=3.12.0` + `style.css?v=3.12.0` |
+
+What happens after deploy:
+
+1. Bump `VERSION` in `sw.js` (e.g., `3.11.0` → `3.12.0`) — this changes `CACHE_NAME` to `melody-v3.12.0`
 2. Deploy updated `sw.js`
-3. Browser detects byte-level change in service worker file
-4. New service worker installs, pre-caches new app shell
+3. Browser detects byte-level change in service worker file (enforced by `updateViaCache: 'none'`)
+4. New service worker installs, pre-caches new app shell with versioned URLs
 5. `skipWaiting()` activates it immediately
 6. Activate event deletes all old caches (keys that do not match new `CACHE_NAME`)
 7. `clients.claim()` takes over existing tabs
@@ -244,27 +275,41 @@ With the service worker active:
 
 | Resource                         | Offline Behavior                                                        |
 | -------------------------------- | ----------------------------------------------------------------------- |
-| App shell (HTML, CSS, JS, icons) | Served from cache -- app loads fully                                    |
+| App shell (HTML, CSS, JS, icons) | Served from cache (network-first fell back to cache) — app loads fully  |
 | Chat API (`/api/chat`)           | Fails -- error message shown in chat ("I couldn't reach the server...") |
 | Memory/gallery APIs              | Fails -- empty state message shown                                      |
 | Image search/video search        | Fails silently -- no media appended to message                          |
-| Previously cached static assets  | Served from stale cache                                                 |
+| Previously cached static assets  | Served from cache (offline fallback only; never served when online)     |
 
 The app shell loads offline, but all interactive features (chat, memories, gallery) require a network connection because API routes use network-only strategy.
 
 ## Update Flow
 
+Two independent mechanisms ensure clients always run the latest version:
+
+**Primary path — service worker byte diff:**
+
 ```
-Browser detects updated sw.js (byte-level diff)
-  → New SW enters "installing" state
-  → install event: pre-cache new APP_SHELL
-  → skipWaiting(): skip waiting, activate immediately
-  → activate event: delete old caches (key !== CACHE_NAME)
+Browser fetches sw.js from network (updateViaCache:'none' prevents HTTP cache hit)
+  → Byte-level change detected → new SW enters "installing" state
+  → install event: pre-cache new APP_SHELL (versioned URLs)
+  → skipWaiting(): activate immediately without waiting for tabs to close
+  → activate event: delete all old caches (key !== new CACHE_NAME)
   → clients.claim(): take over all open tabs
-  → Next fetch: stale-while-revalidate serves new cached assets
+  → updatefound handler in index.html: reloads the page when new SW activates
+  → Next fetch: network-first fetches all assets fresh from server
 ```
 
-Users do not need to close tabs or refresh. The combination of `skipWaiting()` and `clients.claim()` ensures the update takes effect immediately. New cached assets will be served on subsequent navigations or fetch requests.
+**Belt-and-suspenders — version gate in `<head>` of `index.html`:**
+
+```
+Page loads → inline <script> fetches /api/version (network-only, bypasses SW)
+  → Compare server version to hardcoded version string in HTML
+  → Match: proceed normally
+  → Mismatch: unregister all SWs → delete all caches → redirect with ?_cb= param
+```
+
+The version gate handles edge cases where the SW byte-diff path didn't fire (e.g., the user's browser had the old `index.html` cached at the HTTP layer before `updateViaCache:'none'` was adopted). Between the two mechanisms, every client self-updates within one page load — no user action required.
 
 ---
 
